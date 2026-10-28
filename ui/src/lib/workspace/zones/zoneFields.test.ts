@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { CalcZone } from '$lib/types/project';
 import { distanceOf, distancePartial, flipPartial, gridSummary, distanceLabel, isLegacyPlane, spacingText } from './zoneFields';
+import { zoneSurface } from '$lib/utils/surfaces';
 
 const plane = (extra: Partial<CalcZone> = {}): CalcZone => ({ id: 'z', type: 'plane', ...extra });
 
@@ -27,6 +28,17 @@ describe('distance from the surface', () => {
     expect(distancePartial(z, 'wall:2', 2.7, 0.6)).toEqual({ normal_offset: 0.6 });
   });
 
+  it('a legacy ceiling plane (no stored surface) stays on the ceiling after Below ceiling and Flip', () => {
+    const z = plane({ height: 2.7, direction: -1 });
+    expect(zoneSurface(z, 2.7)).toBe('ceiling');
+    const moved = { ...z, ...distancePartial(z, 'ceiling', 2.7, 0.5) };
+    expect(moved.height).toBeCloseTo(2.2, 9);
+    expect(zoneSurface(moved, 2.7)).toBe('ceiling');
+    const flipped = { ...z, ...flipPartial(z, 'ceiling') };
+    expect(flipped.direction).toBe(1);
+    expect(zoneSurface(flipped, 2.7)).toBe('ceiling');
+  });
+
   it('labels the distance by surface', () => {
     expect(distanceLabel('floor')).toBe('Height');
     expect(distanceLabel('ceiling')).toBe('Below ceiling');
@@ -36,11 +48,15 @@ describe('distance from the surface', () => {
 
 describe('flip', () => {
   it('on the floor or ceiling negates direction', () => {
-    expect(flipPartial(plane({ direction: 1 }), 'floor')).toEqual({ direction: -1 });
-    expect(flipPartial(plane({ direction: -1 }), 'ceiling')).toEqual({ direction: 1 });
+    expect(flipPartial(plane({ surface: 'floor', direction: 1 }), 'floor')).toEqual({ direction: -1 });
+    expect(flipPartial(plane({ surface: 'ceiling', direction: -1 }), 'ceiling')).toEqual({ direction: 1 });
     // Unset direction: a floor plane faces up, a ceiling plane down
-    expect(flipPartial(plane(), 'floor')).toEqual({ direction: -1 });
-    expect(flipPartial(plane(), 'ceiling')).toEqual({ direction: 1 });
+    expect(flipPartial(plane({ surface: 'floor' }), 'floor')).toEqual({ direction: -1 });
+    expect(flipPartial(plane({ surface: 'ceiling' }), 'ceiling')).toEqual({ direction: 1 });
+  });
+
+  it('a plane with no stored surface keeps the one it is on', () => {
+    expect(flipPartial(plane(), 'floor')).toEqual({ direction: -1, surface: 'floor' });
   });
 
   it('on a wall toggles flip', () => {

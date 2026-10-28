@@ -522,9 +522,12 @@ function lampToSessionLamp(lamp: LampInstance | Omit<LampInstance, 'id'>): Sessi
   };
 }
 
-/** The `wall` block for a zone lying on a wall; undefined for any other zone. */
-function wallBlockOf(zone: Pick<CalcZone, 'surface' | 'normal_offset' | 'flip'>, outline: [number, number][] | undefined) {
-  const index = zone.surface ? wallIndex(zone.surface) : null;
+/** Edits that put an orphaned wall plane back on a surface (see updateZone). */
+const ORPHAN_REBIND_KEYS: (keyof CalcZone)[] = ['surface', 'fit_room', 'height', 'direction', 'vertices', 'x1', 'x2', 'y1', 'y2'];
+
+/** The `wall` block for a zone lying on a wall; undefined for any other zone, and for one whose wall is gone. */
+function wallBlockOf(zone: Pick<CalcZone, 'surface' | 'normal_offset' | 'flip' | 'wall_orphan'>, outline: [number, number][] | undefined) {
+  const index = zone.surface && !zone.wall_orphan ? wallIndex(zone.surface) : null;
   if (index == null || !outline) return undefined;
   return { wall_id: wallIdForIndex(outline, index), normal_offset: zone.normal_offset ?? 0, flip: zone.flip ?? false };
 }
@@ -1820,8 +1823,9 @@ function createProjectStore() {
       if (roomPartial.shape !== undefined || roomPartial.vertices !== undefined) {
         const updated = new Set(zoneDiff.updates.map((u) => u.id));
         for (const z of userZones(target.zones)) {
-          if (z.surface && wallIndex(z.surface) != null && !updated.has(z.id) && now.zones.some((n) => n.id === z.id)) {
-            this.updateZone(z.id, { surface: z.surface });
+          if (z.surface && !z.wall_orphan && wallIndex(z.surface) != null && !updated.has(z.id) && now.zones.some((n) => n.id === z.id)) {
+            // A whole-wall plane is sent the whole wall, not the backend's old outline
+            this.updateZone(z.id, z.fit_room || !z.wall_vertices ? { surface: z.surface, wall_vertices: undefined } : { surface: z.surface });
           }
         }
       }
@@ -2812,11 +2816,10 @@ function createProjectStore() {
         const result = await nudgeIntoBounds();
         this.applyNudgedLamps(result.lamps);
         for (const zone of result.zones) {
-          const wall = zone.type === 'plane' ? wallFieldsOf(zone as never, roomVertices(get({ subscribe }).room)) : {};
-          if (wall.surface) {
-            // A wall plane: vertices are (along, up), and the legacy bounds mean nothing
-            this.updateZoneFromBackend(zone.id, wall);
-          } else if (zone.type === 'plane') {
+          // A wall plane is never nudged: a drawn outline that no longer fits stays as drawn, flagged
+          const current = get({ subscribe }).zones.find((z) => z.id === zone.id);
+          if ((zone as { wall?: unknown }).wall || (current?.surface && wallIndex(current.surface) != null)) continue;
+          if (zone.type === 'plane') {
             this.updateZoneFromBackend(zone.id, {
               x1: zone.x1 ?? undefined, x2: zone.x2 ?? undefined,
               y1: zone.y1 ?? undefined, y2: zone.y2 ?? undefined,
@@ -3273,6 +3276,18 @@ function createProjectStore() {
 
     updateZone(id: string, partial: Partial<CalcZone>) {
       const before = get({ subscribe }).zones.find((z) => z.id === id);
+      // A plane whose wall is gone shows on Floor. Choosing a surface, Fit, Draw or a
+      // floor geometry edit puts it back on one (the floor unless a surface is chosen);
+      // its wall-only fields are kept and not sent until then.
+      if (before?.wall_orphan && !('wall_orphan' in partial) && ORPHAN_REBIND_KEYS.some((k) => k in partial)) {
+        const sameWall = partial.surface !== undefined && partial.surface === before.surface;
+        partial = {
+          wall_orphan: undefined,
+          ...('surface' in partial ? {} : { surface: 'floor' as const }),
+          ...(sameWall ? { wall_vertices: before.wall_vertices } : {}),
+          ...partial,
+        };
+      }
       // A plane leaving its wall (or moving to another) drops that wall's outline, so an
       // undo diff carries it back; leaving for floor or ceiling drops the offset and flip too
       const fromWall = before?.surface ? wallIndex(before.surface) : null;

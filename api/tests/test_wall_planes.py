@@ -186,6 +186,8 @@ def test_outline_outside_wall_is_accepted(client, session_headers):
             "vertices": [[1, 1], [3, 1], [3, 3.5], [1, 3.5]]})
     assert resp.status_code == 200, resp.text
     assert "warn" not in resp.text.lower()
+    # The outline is kept as drawn, outside or not
+    assert _pts(_zone(client, session_headers, "zone-1")["vertices"]) == [(1, 1), (1, 3.5), (3, 1), (3, 3.5)]
 
 
 def test_patch_wall_ignores_legacy_fields(client, session_headers):
@@ -260,3 +262,31 @@ def test_unknown_wall_id_is_rejected(client, session_headers):
     resp = client.post(f"{API}/session/zones", headers=session_headers,
                        json={"id": "zone-2", "type": "plane", "wall": {"wall_id": "ceiling"}})
     assert resp.status_code == 422
+
+
+def test_whole_wall_plane_follows_room_resize_with_null_vertices(client, session_headers):
+    _init(client, session_headers)
+    _add(client, session_headers, {"id": "zone-1", "type": "plane", "wall": {"wall_id": "south"},
+                                   "vertices": None, "num_x": 4, "num_y": 4})
+    resp = client.patch(f"{API}/session/room", headers=session_headers, json={"x": 8.0, "z": 4.0})
+    assert resp.status_code == 200, resp.text
+    resp = client.patch(f"{API}/session/zones/zone-1", headers=session_headers,
+                        json={"wall": {"wall_id": "south", "normal_offset": 0, "flip": False}, "vertices": None})
+    assert resp.status_code == 200, resp.text
+    z = _zone(client, session_headers, "zone-1")
+    assert z["wall"]["wall_id"] == "south"
+    assert z["vertices"] is None  # the whole new 8 x 4 wall
+
+
+def test_nudge_leaves_wall_plane_outline(client, session_headers):
+    _init(client, session_headers)
+    region = [[2.5, 0.5], [3.8, 0.5], [3.8, 2], [2.5, 2]]
+    _add(client, session_headers, {"id": "zone-1", "type": "plane", "wall": {"wall_id": "south"},
+                                   "vertices": region, "num_x": 4, "num_y": 4})
+    client.patch(f"{API}/session/room", headers=session_headers, json={"x": 3.0})
+    resp = client.post(f"{API}/session/nudge-into-bounds", headers=session_headers)
+    assert resp.status_code == 200, resp.text
+    assert all(z["id"] != "zone-1" for z in resp.json()["zones"])
+    z = _zone(client, session_headers, "zone-1")
+    assert z["wall"]["wall_id"] == "south"
+    assert _pts(z["vertices"]) == _pts(region)

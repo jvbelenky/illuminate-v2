@@ -30,18 +30,24 @@ export function distanceOf(zone: CalcZone, surface: Surface, roomZ: number): num
   return zone.height ?? 0;
 }
 
+/**
+ * A plane with no stored surface has one derived from its height and direction,
+ * which an edit of either would change: it gets the one it is on.
+ */
+const keepSurface = (zone: CalcZone, surface: Surface): Partial<CalcZone> => (zone.surface ? {} : { surface });
+
 /** The fields that put the plane `v` from its surface. A wall plane never writes height. */
-export function distancePartial(_zone: CalcZone, surface: Surface, roomZ: number, v: number): Partial<CalcZone> {
+export function distancePartial(zone: CalcZone, surface: Surface, roomZ: number, v: number): Partial<CalcZone> {
   if (onWall(surface)) return { normal_offset: v };
-  if (surface === 'ceiling') return { height: r6(roomZ - v) };
-  return { height: v };
+  if (surface === 'ceiling') return { height: r6(roomZ - v), ...keepSurface(zone, surface) };
+  return { height: v, ...keepSurface(zone, surface) };
 }
 
 /** Turn the plane's normal round. */
 export function flipPartial(zone: CalcZone, surface: Surface): Partial<CalcZone> {
   if (onWall(surface)) return { flip: !zone.flip };
   const current = zone.direction ?? (surface === 'ceiling' ? -1 : 1);
-  return { direction: -current };
+  return { direction: -current, ...keepSurface(zone, surface) };
 }
 
 const count = (n: number | undefined) => (n == null ? '–' : String(n));

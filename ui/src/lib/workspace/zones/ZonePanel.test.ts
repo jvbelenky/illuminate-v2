@@ -22,6 +22,9 @@ vi.mock('$lib/stores/lampLibrary', async () => {
 });
 
 import { project } from '$lib/stores/project';
+import { pickMode, pickResult } from '$lib/stores/pickMode';
+import { get } from 'svelte/store';
+import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
 
 const room = { ...defaultRoom(), x: 6, y: 4, z: 2.7, precision: 2 };
 
@@ -213,5 +216,66 @@ describe('ZonePanel', () => {
     const { spy } = renderPanel(floorPlane);
     await fireEvent.change(screen.getByLabelText('Calculation'), { target: { value: 'eye_worst_case' } });
     expect(spy.mock.calls.at(-1)![1]).toMatchObject({ calc_mode: 'eye_worst_case', fov_vert: 80, fov_horiz: 120 });
+  });
+
+  it('flags an exposure time of zero', async () => {
+    const { container } = renderPanel({ ...floorPlane, dose: true, hours: 0, minutes: 0, seconds: 0 });
+    await fireEvent.click(fold('Display'));
+    expect(container.querySelector('.time-inputs.invalid')).toBeTruthy();
+  });
+
+  it('does not flag a valid exposure time', async () => {
+    const { container } = renderPanel({ ...floorPlane, dose: true, hours: 0, minutes: 15, seconds: 0 });
+    await fireEvent.click(fold('Display'));
+    expect(container.querySelector('.time-inputs')).toBeTruthy();
+    expect(container.querySelector('.time-inputs.invalid')).toBeNull();
+  });
+
+  it('a volume with too many points has Numeric disabled, and a stored Numeric falls back to Iso', async () => {
+    const big = { ...volume, num_x: 11, num_y: 11, num_z: 11, display_mode: 'numeric' as const };
+    expect(11 * 11 * 11).toBeGreaterThan(MAX_NUMERIC_VOLUME_POINTS);
+    const { spy } = renderPanel(big);
+    expect(spy).toHaveBeenCalledWith('zone-4', { display_mode: 'heatmap' });
+    await fireEvent.click(fold('Display'));
+    const numeric = within(screen.getByRole('group', { name: 'Display mode' })).getByRole('button', { name: 'Numeric' }) as HTMLButtonElement;
+    expect(numeric.disabled).toBe(true);
+  });
+});
+
+describe('ZonePanel picks', () => {
+  afterEach(() => {
+    pickMode.set(null);
+    pickResult.set(null);
+  });
+
+  it('a pick running when the panel closes is cancelled', () => {
+    const { unmount } = renderPanel(point);
+    pickMode.set({ type: 'point_position' });
+    unmount();
+    expect(get(pickMode)).toBeNull();
+  });
+
+  it("closing the panel leaves a lamp's pick alone", () => {
+    const { unmount } = renderPanel(point);
+    pickMode.set({ type: 'lamp_position' });
+    unmount();
+    expect(get(pickMode)).toEqual({ type: 'lamp_position' });
+  });
+
+  it('a pick started for one zone is cancelled when the panel shows another', async () => {
+    const { rerender, spy } = renderPanel(point);
+    pickMode.set({ type: 'point_position' });
+    await rerender({ zone: { ...point, id: 'zone-6' }, room, isStandard: false, controller: fakeController() });
+    expect(get(pickMode)).toBeNull();
+    // A late result is not written onto the new zone either way: nothing is running
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("a pick result for another kind of zone is ignored", () => {
+    const { spy } = renderPanel(point);
+    pickResult.set({ type: 'target', value: [1, 2, 3] });
+    expect(spy).not.toHaveBeenCalled();
+    pickResult.set({ type: 'point_position', value: [1, 2, 1.5] });
+    expect(spy).toHaveBeenLastCalledWith('zone-5', { x: 1, y: 2, z: 1.5 });
   });
 });

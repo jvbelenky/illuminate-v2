@@ -72,12 +72,44 @@ describe('followSurfaces', () => {
     expect(strandedWallPlane(z, rect(6, 4, 3))).toBe(false);
   });
 
-  it('deleted wall -> stranded, surface unchanged', () => {
+  it('deleted wall -> orphaned, surface unchanged', () => {
     const prev = poly([[0, 0], [6, 0], [6, 4], [2, 6]]);
     const next = poly([[0, 0], [6, 0], [0, 4]]);
     const z = plane({ surface: 'wall:3' });
     const out = followSurfaces([z], prev, next, TOL);
-    expect(out.every((o) => o.partial.surface === undefined || o.partial.surface === 'wall:3')).toBe(true);
-    expect(strandedWallPlane(z, next)).toBe(true);
+    expect(out).toEqual([{ id: 'a', partial: { wall_orphan: true } }]);
+    expect(strandedWallPlane({ ...z, wall_orphan: true }, next)).toBe(true);
+  });
+
+  it('a deleted corner whose wall number survives orphans the plane instead of re-binding it', () => {
+    const prev = poly([[0, 0], [6, 0], [6, 3], [3, 5], [0, 3]]);
+    const next = poly([[0, 0], [6, 0], [6, 3], [0, 3]]);
+    // wall:2 was (6,3)->(3,5); wall:2 of the new outline is (6,3)->(0,3), another wall
+    const z = plane({ surface: 'wall:2', wall_vertices: [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5]] });
+    const out = followSurfaces([z], prev, next, TOL);
+    expect(out).toEqual([{ id: 'a', partial: { wall_orphan: true } }]);
+    const orphan = { ...z, ...out[0].partial };
+    expect(strandedWallPlane(orphan, next)).toBe(true);
+    // An orphan no longer follows the room
+    expect(followSurfaces([orphan], next, rect(8, 4, 3), TOL)).toEqual([]);
+  });
+
+  it('rect -> L preset: each wall plane keeps its own wall line', () => {
+    const prev = rect(6, 4, 3);
+    const next = poly([[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]]);
+    const zones = [0, 1, 2, 3].map((i) => plane({ id: `w${i}`, surface: `wall:${i}` as const }));
+    const out = Object.fromEntries(followSurfaces(zones, prev, next, TOL).map((o) => [o.id, o.partial]));
+    expect(out.w0.surface).toBe('wall:0'); // south, unchanged
+    expect(out.w1.surface).toBe('wall:1'); // east, now (6,0)->(6,2)
+    expect(out.w2.surface).toBe('wall:4'); // north, its surviving half (3,4)->(0,4)
+    expect(out.w3.surface).toBe('wall:5'); // west
+    expect(Object.values(out).every((p) => !p.wall_orphan)).toBe(true);
+  });
+
+  it('a whole-wall plane always sends the whole wall, so the backend drops its old outline', () => {
+    const out = followSurfaces([plane({ surface: 'wall:0', normal_offset: 0 })], rect(4, 6, 3), rect(8, 6, 4), TOL);
+    expect(out).toHaveLength(1);
+    expect(out[0].partial).toHaveProperty('wall_vertices', undefined);
+    expect(out[0].partial.surface).toBe('wall:0');
   });
 });

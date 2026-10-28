@@ -26,6 +26,22 @@ Each line says what was decided, why, and what it costs if the call was wrong.
 - `ZonePanel` takes an extra `controller: PlanController` prop, used by Draw / Fit and the surface labels (R2). Cost: prop plumbing.
 - The stale-3D gap (`dimensionsMatch` ignoring surface, normal_offset, flip and wall_vertices) is fixed in this round, because the zone editor now exposes offset and flip. Cost: none.
 
+## Fixed in the final review
+
+- Whole-wall planes follow the room in the backend: `followSurfaces` and the undo resend send `wall_vertices` present and undefined (sync: `vertices: null`) for a fit or outline-less wall plane.
+- A plane whose wall is gone is marked `wall_orphan` (frontend-only, carried with the zone): drawn on no wall, opens on Floor, flagged in the audit, never sent a `wall`. Choosing a surface, Fit, Draw or a floor geometry edit re-binds it (to the floor unless a surface is chosen). Walls are matched by line and overlap (`matchWall`), so rect -> L keeps the north plane on its surviving half.
+- Nudge-into-bounds skips wall planes in the API and the UI ignores any nudged wall plane; the outline-outside test asserts the outline survives.
+- The plot window draws a wall plane with Along / Up axes, mirrored as seen from inside, rows by `flip` (`wallPlotAxes`, `planeGrid(..., mirrorU)`).
+- Delete and Ctrl+D act on a plane selected on its wall in Zones (arrows stay off).
+- `distancePartial` / `flipPartial` pin the current surface on a plane with none stored.
+- ZonePanel cancels a zone pick on destroy and on a zone change, and ignores a result for another zone type; a pick is cancelled when 3D stops being the main view.
+- A drawn floor plane starts at eye height (1.8 m in the project's units).
+- Exposure-time and numeric-volume tests ported to `ZonePanel.test.ts`; CHANGELOG 3D-click wording.
+
+**Rulings**
+- Orphan re-binding by a floor geometry edit (Height, Flip, Fit, Draw) puts the plane on the floor through a recreate; its old wall-only fields are not sent. Cost if wrong: the edit could instead be refused until a surface is chosen.
+- An orphaned plane is not drawn in 3D (the frontend has no geometry for it). Cost: a row with no 3D shape until re-bound.
+
 ## Deferred items
 
 **API**
@@ -34,13 +50,13 @@ Each line says what was decided, why, and what it costs if the call was wrong.
 - `CalcPlane.from_wall_region` does not lower-case the wall id as `from_face` does.
 - `wall_planes.py:321` raises KeyError on `faces[frame.wall_id]` rather than using `.get`.
 - `_covers_wall` lacks a near-full-region test; the nudge `wall` field is untested.
-- PATCH with an unknown wall id (400) is untested; the outline-outside test does not assert the outline survives.
+- PATCH with an unknown wall id (400) is untested.
 
 **Room and zone sync**
 - Leave-wall recreate trusts the caller for flat geometry; a legacy XZ plane keeps `ref_surface` 'xz' (only undo reaches it, as there is no UI to move a plane between surfaces).
 - A queued legacy zone-update ahead of a leave-wall type change can 400 once (the recreate repairs it).
 - `wallFieldsOf` drops vertices silently on an unknown wall id; add a console.warn.
-- A corner inserted mid-wall re-attaches the plane to the first half, so a whole-wall plane shrinks silently.
+- A corner inserted mid-wall re-attaches the plane to the larger part of its wall, so a whole-wall plane shrinks silently.
 - `audit.ts:100` guard and cast exist only for old test inputs.
 
 **Standard zones and hidden items**
@@ -63,8 +79,6 @@ Each line says what was decided, why, and what it costs if the call was wrong.
 - A structure move has no clamp of top to room height; far lamps are draggable (no opacity gate).
 - Wall-canvas snapping is off-grid in along.
 - Copying a wall plane stacks it on top of the original.
-- Delete and Ctrl+D are inert on a wall in Zones.
-- A drawn floor plane lands at height 0, Add at 1.8.
 - `planeWorldCorners` has no production caller.
 - Draw with a plane selected redraws its outline, and the toolbar title "Draw a plane on this surface" is misleading in that case (user to confirm).
 
@@ -77,12 +91,9 @@ Each line says what was decided, why, and what it costs if the call was wrong.
 
 **Staleness**
 - `wall_vertices` exact-equality staleness may grey out on float drift after a unit change.
-- `CalcPlanePlotModal` is not wall-aware.
 - The draft guard runs only at select time (check that `setSurface` clears it).
 
 **Zone editor**
-- A legacy ceiling plane with no stored surface jumps to floor after editing Below ceiling or Flip; set `surface` in `distancePartial` / `flipPartial` when unset.
-- Exposure-time-zero tests and the numeric-disabled rule are untested after the `ZoneEditor` deletion.
 - The plot-settings e2e dropped its editor-to-plot-window display-mode check.
 - From wall has no upper bound.
-- The ZonePanel pick listener ignores zone type (clear pickMode onDestroy).
+- Undoing an orphan's re-bind to the floor restores the store's wall fields, but the backend keeps the floor plane (its old wall geometry is not known to the frontend).

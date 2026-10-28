@@ -28,7 +28,7 @@
 	import DockArea from '$lib/workspace/DockArea.svelte';
 	import ViewHost from '$lib/workspace/ViewHost.svelte';
 	import MainViewBar from '$lib/workspace/MainViewBar.svelte';
-	import { followPickMode } from '$lib/workspace/viewDemands';
+	import { cancelPickOffMain, followPickMode } from '$lib/workspace/viewDemands';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
 	import { scrollRowIntoView } from '$lib/workspace/parts/scrollRowIntoView';
@@ -295,6 +295,9 @@
 		if (!isMobile) showMain('2d');
 	};
 	onMount(() => followPickMode(pickMode, () => dock, setDock, () => !isMobile));
+	$effect(() => {
+		if (!isMobile) cancelPickOffMain(dock.main, pickMode);
+	});
 
 	let startChooserBusy = $state(false);
 	let lampManagerInitialType = $state<CustomLampType | null>(null);

@@ -20,11 +20,25 @@ export function togglePick(type: ZonePick, current?: [number, number, number]): 
   pickMode.set({ type: type as PickType, lockedAxis: axis, lockedValue: axis && current ? current[axis === 'x' ? 0 : axis === 'y' ? 1 : 2] : undefined });
 }
 
+/** Cancel a running zone pick (a lamp's pick is left alone). */
+export function cancelZonePick(): void {
+  const type = get(pickMode)?.type;
+  if (type && ZONE_PICKS.includes(type as ZonePick)) pickMode.set(null);
+}
+
+const ZONE_PICKS: ZonePick[] = ['point_position', 'aim_point', 'direction', 'target'];
+
+/** The zone type each pick belongs to. */
+const PICK_ZONE_TYPE: Record<ZonePick, CalcZone['type']> = {
+  point_position: 'point', aim_point: 'point', direction: 'plane', target: 'plane',
+};
+
 const round = (v: number, k: number) => Math.round(v * k) / k;
 
-/** The zone fields a pick result sets, or null when it is not a zone pick. */
-export function pickPartial(result: PickResult): Partial<CalcZone> | null {
+/** The zone fields a pick result sets, or null when it is not a pick for this type of zone. */
+export function pickPartial(result: PickResult, zoneType?: CalcZone['type']): Partial<CalcZone> | null {
   if (!result) return null;
+  if (zoneType && PICK_ZONE_TYPE[result.type as ZonePick] !== zoneType) return null;
   const [x, y, z] = result.value;
   switch (result.type) {
     case 'point_position': return { x: round(x, 1e6), y: round(y, 1e6), z: round(z, 1e6) };

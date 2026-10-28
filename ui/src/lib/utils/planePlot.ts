@@ -23,15 +23,16 @@ export interface PlaneGrid {
  * The plane's values as a display grid. `flipV` is true when the values run
  * toward +v, so their last column belongs at the top.
  */
-export function planeGrid(values: number[][], flipV: boolean, factor = 1): PlaneGrid {
+export function planeGrid(values: number[][], flipV: boolean, factor = 1, mirrorU = false): PlaneGrid {
   const nU = values.length;
   const nV = values[0]?.length ?? 0;
   const data = new Float64Array(nU * nV);
   for (let i = 0; i < nU; i++) {
+    const col = mirrorU ? nU - 1 - i : i;
     for (let j = 0; j < nV; j++) {
       const row = flipV ? nV - 1 - j : j;
       const v = values[i][j];
-      data[row * nU + i] = Number.isFinite(v) ? v * factor : NaN;
+      data[row * nU + col] = Number.isFinite(v) ? v * factor : NaN;
     }
   }
   return { nU, nV, data };
@@ -78,7 +79,7 @@ export function contourShapes(grid: PlaneGrid, levels: number[], colors: string[
  * the limit at its point. The level's line then falls where every point
  * reaches the same fraction of its own limit. Undefined when no level needs one.
  */
-export function levelFields(grid: PlaneGrid, flipV: boolean, levelLimits: (LevelLimit | null)[] | null | undefined): (Float64Array | null)[] | undefined {
+export function levelFields(grid: PlaneGrid, flipV: boolean, levelLimits: (LevelLimit | null)[] | null | undefined, mirrorU = false): (Float64Array | null)[] | undefined {
   if (!levelLimits?.some((l) => l?.perPoint)) return undefined;
   const byKey = new Map<string, Float64Array>();
   return levelLimits.map((limit) => {
@@ -86,7 +87,7 @@ export function levelFields(grid: PlaneGrid, flipV: boolean, levelLimits: (Level
     if (!limit || !perPoint) return null;
     let field = byKey.get(limit.key);
     if (!field) {
-      const tlvs = planeGrid(perPoint.grid as number[][], flipV);
+      const tlvs = planeGrid(perPoint.grid as number[][], flipV, 1, mirrorU);
       if (tlvs.nU !== grid.nU || tlvs.nV !== grid.nV) return null;
       field = grid.data.map((v, k) => {
         const tlv = tlvs.data[k];

@@ -509,6 +509,64 @@ describe('planes on surfaces', () => {
     ctl.setSurface('wall:1');
     expect(ctl.wallView!.planes.map((p) => p.id)).toEqual(['zw']);
   });
+
+  test('drawing on the floor adds a plane at eye height', async () => {
+    const { ctl, actions } = make();
+    ctl.setContext('zones');
+    ctl.canvas = fakeCanvas();
+    ctl.startZoneDraw('plane');
+    ctl.draft = [[1, 1], [3, 1], [2, 3]];
+    await ctl.onDrawEnd(true);
+    const [, geometry] = vi.mocked(actions.addZone).mock.calls[0];
+    expect(geometry).toMatchObject({ surface: 'floor', height: 1.8, fit_room: false });
+  });
+
+  test('an orphaned wall plane is drawn on no wall and opens on Floor', () => {
+    const orphan = { ...drawn, wall_orphan: true } as CalcZone;
+    const { ctl } = make({ zones: [orphan] });
+    ctl.setContext('zones');
+    expect(ctl.wallPlaneLines).toEqual([]);
+    ctl.setSurface('wall:1');
+    expect(ctl.wallView!.planes).toEqual([]);
+    ctl.selectZone('zw');
+    expect(ctl.surface).toBe('floor');
+    expect(ctl.selectedWallPlane).toBeNull();
+  });
+
+  test('Delete and Ctrl+D act on a plane selected on its wall; arrows do nothing', async () => {
+    const { ctl, actions } = make({ zones: [drawn] });
+    ctl.setContext('zones');
+    ctl.canvas = { ...fakeCanvas(), nudge: vi.fn() };
+    ctl.selectZone('zw');
+    expect(ctl.onWall).toBe(true);
+    press(ctl, 'ArrowLeft');
+    expect(actions.updateZone).not.toHaveBeenCalled();
+    expect(ctl.canvas!.nudge).not.toHaveBeenCalled();
+    press(ctl, 'd', document.body, { ctrlKey: true });
+    await tick();
+    expect(actions.copyZone).toHaveBeenCalledWith('zw', expect.any(Number), expect.any(Number));
+    ctl.selectZone('zw');
+    press(ctl, 'Delete');
+    expect(actions.removeZone).toHaveBeenCalledWith('zw');
+  });
+
+  test('on a wall, Delete does nothing without a plane of that wall selected', () => {
+    const { ctl, actions } = make({ zones: [drawn] });
+    ctl.setContext('zones');
+    ctl.selectZone('zw');
+    // Another wall: the selection is dropped, and nothing is deleted
+    ctl.setSurface('wall:0');
+    press(ctl, 'Delete');
+    press(ctl, 'd', document.body, { ctrlKey: true });
+    expect(actions.removeZone).not.toHaveBeenCalled();
+    expect(actions.copyZone).not.toHaveBeenCalled();
+    // Lamps context on the plane's wall: still inert
+    ctl.setContext('lamps');
+    ctl.setSurface('wall:1');
+    ctl.selectLamp('lamp-1');
+    press(ctl, 'Delete');
+    expect(actions.removeLamp).not.toHaveBeenCalled();
+  });
 });
 
 describe('editing in a wall view', () => {

@@ -727,8 +727,8 @@
 	<SceneObject3D object={obj} {scale} selected={selectedObjectIds.includes(obj.id)} highlighted={highlightedObjectIds.includes(obj.id)} onclick={sceneClickHandler} labelSize={labelledObjectIds.includes(obj.id) ? maxDim * 0.04 : 0} />
 {/each}
 
-<!-- Calculation Zones - Planes -->
-{#each filteredZones.filter(z => z.type === 'plane') as zone (zone.id)}
+<!-- Calculation Zones - Planes (one whose wall is gone has no place to be drawn) -->
+{#each filteredZones.filter(z => z.type === 'plane' && !z.wall_orphan) as zone (zone.id)}
 	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} {globalValueRange} valueFactor={zoneValueFactor(zone, zoneResults?.[zone.id])} />
 {/each}
 
