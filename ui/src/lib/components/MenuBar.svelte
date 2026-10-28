@@ -52,7 +52,6 @@
 		onSetAllZonesDisplayMode: (mode: ZoneDisplayMode) => void;
 		globalHeatmapNormalization: boolean;
 		onToggleGlobalHeatmapNormalization: () => void;
-		onSwapViews?: () => void;
 		onResetPanels?: () => void;
 	}
 
@@ -102,7 +101,6 @@
 		onSetAllZonesDisplayMode,
 		globalHeatmapNormalization,
 		onToggleGlobalHeatmapNormalization,
-		onSwapViews,
 		onResetPanels
 	}: Props = $props();
 
@@ -458,9 +456,6 @@
 				</button>
 				{#if expandedSection === 'view'}
 					<div class="mobile-section-items">
-						{#if onSwapViews}
-							<button class="mobile-menu-item" onclick={() => mobileAction(() => onSwapViews())}>Swap views</button>
-						{/if}
 						{#if onResetPanels}
 							<button class="mobile-menu-item" onclick={() => mobileAction(() => onResetPanels())}>Reset panel layout</button>
 						{/if}
@@ -668,17 +663,12 @@
 			</span>
 			{#if activeMenu === 'view'}
 				<div class="menu-dropdown" role="menu">
-					{#if onSwapViews}
-						<div class="menu-item" onclick={(e) => handleMenuAction(() => onSwapViews(), e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(() => onSwapViews())} role="menuitem" tabindex="0">
-							<span>Swap views</span>
-						</div>
-					{/if}
 					{#if onResetPanels}
 						<div class="menu-item" onclick={(e) => handleMenuAction(() => onResetPanels(), e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(() => onResetPanels())} role="menuitem" tabindex="0">
 							<span>Reset panel layout</span>
 						</div>
 					{/if}
-					{#if onSwapViews || onResetPanels}
+					{#if onResetPanels}
 						<div class="menu-separator"></div>
 					{/if}
 					<!-- Theme submenu -->

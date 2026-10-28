@@ -9,6 +9,8 @@
 		dragging?: boolean;
 		/** In the floating window: fills it instead of keeping the docked 4:3 shape. */
 		floating?: boolean;
+		/** Its size in a column, when the user set its height. */
+		style?: string;
 		onToggleMinimized: () => void;
 		onSwap?: () => void;
 		onBarPointerDown: (e: PointerEvent) => void;
@@ -19,11 +21,11 @@
 		children: Snippet;
 	}
 
-	let { id, title, minimized, dragging = false, floating = false, onToggleMinimized, onSwap, onBarPointerDown, barAction, tools, children }: Props =
+	let { id, title, minimized, dragging = false, floating = false, style, onToggleMinimized, onSwap, onBarPointerDown, barAction, tools, children }: Props =
 		$props();
 </script>
 
-<section class="dock-panel" class:minimized class:dragging class:floating data-panel={id}>
+<section class="dock-panel" class:minimized class:dragging class:floating data-panel={id} {style}>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="dock-bar" onpointerdown={onBarPointerDown}>
 		<span class="dock-grip" aria-hidden="true">⋮⋮</span>

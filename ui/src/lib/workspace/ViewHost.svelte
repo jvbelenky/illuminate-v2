@@ -14,13 +14,15 @@
 		miniVisible: boolean;
 		/** True while the mini view floats: its slot then sits above the floating window. */
 		miniFloating?: boolean;
+		/** The floating mini window's stacking order (DockArea); its slot sits just above it. */
+		miniZ?: number;
 		view2d: Snippet<[boolean]>;
 		view3d: Snippet<[boolean]>;
 		/** Anything that can move an anchor without resizing it (the dock layout). */
 		layoutKey?: unknown;
 	}
 
-	let { main, mainAnchor, miniAnchor, miniVisible, miniFloating = false, view2d, view3d, layoutKey }: Props = $props();
+	let { main, mainAnchor, miniAnchor, miniVisible, miniFloating = false, miniZ, view2d, view3d, layoutKey }: Props = $props();
 
 	type Box = { left: number; top: number; width: number; height: number };
 	const VIEWS: MainView[] = ['2d', '3d'];
@@ -66,11 +68,11 @@
 		};
 	});
 
-	function styleOf(b: Box | null, hidden: boolean): string {
+	function styleOf(b: Box | null, hidden: boolean, z?: number): string {
 		const pos = b
 			? `left:${b.left}px;top:${b.top}px;width:${b.width}px;height:${b.height}px;`
 			: 'left:0;top:0;width:0;height:0;';
-		return pos + (hidden ? 'visibility:hidden;' : '');
+		return pos + (hidden ? 'visibility:hidden;' : '') + (z !== undefined ? `z-index:${z};` : '');
 	}
 </script>
 
@@ -82,7 +84,7 @@
 			class:mini
 			class:floating={mini && miniFloating}
 			data-view={v}
-			style={styleOf(mini ? miniBox : mainBox, mini && (!miniVisible || !miniBox))}
+			style={styleOf(mini ? miniBox : mainBox, mini && (!miniVisible || !miniBox), mini && miniFloating && miniZ !== undefined ? miniZ + 1 : undefined)}
 		>
 			{#if v === '2d'}{@render view2d(mini)}{:else}{@render view3d(mini)}{/if}
 		</div>
