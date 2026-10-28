@@ -43,7 +43,7 @@ const volume: CalcZone = {
 const point: CalcZone = { id: 'zone-5', name: 'Pt', type: 'point', x: 2, y: 3, z: 1.8, aim_x: 2, aim_y: 4, aim_z: 1.8 };
 
 function fakeController(extra: Partial<PlanController> = {}) {
-  return { surface: 'floor', drawing: false, drawKind: null, startZoneDraw: vi.fn(), ...extra } as unknown as PlanController;
+  return { surface: 'floor', drawing: false, drawKind: null, startZoneDraw: vi.fn(), setSurface: vi.fn(), selectZone: vi.fn(), ...extra } as unknown as PlanController;
 }
 
 function renderPanel(zone: CalcZone, opts: { isStandard?: boolean; controller?: PlanController } = {}) {
@@ -60,7 +60,7 @@ afterEach(() => {
 });
 
 describe('ZonePanel', () => {
-  it('plane on floor shows Height and Flip, Draw on floor, Fit to room, and folded Geometry, Grid points and Display', async () => {
+  it('plane on floor shows Height and Flip, Draw outline, Fit to room, and folded Geometry, Grid points and Display', async () => {
     const { container, spy, controller } = renderPanel(floorPlane);
     expect(container.querySelector('.zone-panel')).not.toBeNull();
     expect(screen.getByLabelText('Calculation')).toBeTruthy();
@@ -75,20 +75,84 @@ describe('ZonePanel', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Flip' }));
     expect(spy).toHaveBeenLastCalledWith('zone-1', { direction: -1 });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Draw on floor' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
     expect(controller.startZoneDraw).toHaveBeenCalledWith('plane');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Fit to room' }));
+    // Fit to room is a switch: off keeps the geometry as explicit bounds
+    const fit = screen.getByRole('switch', { name: 'Fit to room' }) as HTMLInputElement;
+    expect(fit.checked).toBe(true);
+    await fireEvent.click(fit);
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { fit_room: false, x1: 0, x2: 6, y1: 0, y2: 4, vertices: undefined });
+  });
+
+  it('Fit to room switched on refits the plane to the room', async () => {
+    const { spy } = renderPanel({ ...floorPlane, fit_room: false, x1: 1, x2: 2, y1: 1, y2: 2 });
+    const fit = screen.getByRole('switch', { name: 'Fit to room' }) as HTMLInputElement;
+    expect(fit.checked).toBe(false);
+    await fireEvent.click(fit);
     const [, partial] = spy.mock.calls.at(-1)!;
     expect(partial).toMatchObject({ fit_room: true, x1: 0, x2: 6, y1: 0, y2: 4 });
     expect('vertices' in partial && partial.vertices === undefined).toBe(true);
+  });
+
+  it('the Surface select lists the floor, the ceiling and each wall, and moves the plane, keeping it selected', async () => {
+    const { spy, controller } = renderPanel(floorPlane);
+    const select = screen.getByLabelText('Surface') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Floor', 'Ceiling', 'Wall 1', 'Wall 2', 'Wall 3', 'Wall 4']);
+    expect(select.value).toBe('floor');
+    // Above Calculation
+    const calc = screen.getByLabelText('Calculation');
+    expect(select.compareDocumentPosition(calc) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await fireEvent.change(select, { target: { value: 'wall:2' } });
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { surface: 'wall:2', fit_room: true, normal_offset: 0, flip: false, wall_vertices: undefined, wall_orphan: undefined });
+    expect(controller.setSurface).toHaveBeenLastCalledWith('wall:2');
+    expect(controller.selectZone).toHaveBeenLastCalledWith('zone-1');
+
+    await fireEvent.change(select, { target: { value: 'ceiling' } });
+    expect(spy.mock.calls.at(-1)![1]).toMatchObject({ surface: 'ceiling', fit_room: true, height: 2.7, direction: -1, ref_surface: 'xy' });
+  });
+
+  it('an orphaned plane shows no surface, so any can be chosen', async () => {
+    const { spy } = renderPanel({ ...wallPlane, wall_orphan: true });
+    const select = screen.getByLabelText('Surface') as HTMLSelectElement;
+    expect(select.value).toBe('');
+    const none = [...select.options].find((o) => o.value === '')!;
+    expect(none.textContent).toBe('—');
+    expect(none.disabled).toBe(true);
+    await fireEvent.change(select, { target: { value: 'floor' } });
+    expect(spy.mock.calls.at(-1)![1]).toMatchObject({ surface: 'floor', fit_room: true, height: 1.8, direction: 1, wall_orphan: undefined });
+  });
+
+  it('Geometry of a rectangle plane: X and Y ranges, an edit turns Fit off', async () => {
+    const { spy, container } = renderPanel(floorPlane);
+    await fireEvent.click(fold('Geometry'));
+    expect(screen.getByText('X Range')).toBeTruthy();
+    expect(screen.getByText('Y Range')).toBeTruthy();
+    const vals = ['x1', 'x2', 'y1', 'y2'].map((n) => parseFloat((screen.getByLabelText(n) as HTMLInputElement).value));
+    expect(vals).toEqual([0, 6, 0, 4]);
+    expect(container.querySelector('.zone-panel')!.textContent).not.toMatch(/Corners/);
+    await fireEvent.change(screen.getByLabelText('x2'), { target: { value: '3' } });
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { x1: 0, x2: 3, y1: 0, y2: 4, vertices: undefined, fit_room: false });
+  });
+
+  it('Geometry of a drawn outline: the corners table, its headings with no units', async () => {
+    const { spy, container } = renderPanel({ ...floorPlane, fit_room: false, vertices: [[0.5, 0.5], [3, 0.5], [3, 2.5]] });
+    await fireEvent.click(fold('Geometry'));
+    expect(screen.queryByText('X Range')).toBeNull();
+    const table = container.querySelector('.zp-corners')!;
+    expect(table.querySelector('.zp-label')!.textContent).toBe('Corners');
+    expect([...table.querySelectorAll('.zp-corner-head span')].map((s) => s.textContent)).toEqual(['', 'X', 'Y']);
+    expect(table.textContent).not.toMatch(/\(m\)/);
+    await fireEvent.change(screen.getByLabelText('Corner 2 X'), { target: { value: '4' } });
+    expect(spy.mock.calls.at(-1)![1]).toMatchObject({ fit_room: false, x1: 0.5, x2: 4, y1: 0.5, y2: 2.5 });
   });
 
   it('plane on ceiling labels the distance Below ceiling and writes height = roomZ − value', async () => {
     const { spy } = renderPanel(ceilingPlane, { controller: fakeController({ surface: 'ceiling' }) });
     const below = screen.getByLabelText(/^Below ceiling/) as HTMLInputElement;
     expect(parseFloat(below.value)).toBeCloseTo(0.3, 6);
-    expect(screen.getByRole('button', { name: 'Draw on ceiling' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Draw outline' })).toBeTruthy();
     await fireEvent.change(below, { target: { value: '0.5' } });
     const [id, partial] = spy.mock.calls.at(-1)!;
     expect(id).toBe('zone-2');
@@ -107,11 +171,23 @@ describe('ZonePanel', () => {
     expect(spy).toHaveBeenLastCalledWith('zone-3', { normal_offset: 0.6 });
     await fireEvent.click(screen.getByRole('button', { name: 'Flip' }));
     expect(spy).toHaveBeenLastCalledWith('zone-3', { flip: true });
-    expect(screen.getByRole('button', { name: 'Draw on wall' })).toBeTruthy();
-    await fireEvent.click(screen.getByRole('button', { name: 'Fit to wall' }));
-    expect(spy).toHaveBeenLastCalledWith('zone-3', { fit_room: true, wall_vertices: undefined });
-    // No Flat/Upright switch on a wall; the corners are in wall coordinates
+    expect(screen.getByRole('button', { name: 'Draw outline' })).toBeTruthy();
+    const fit = screen.getByRole('switch', { name: 'Fit to wall' }) as HTMLInputElement;
+    expect(fit.checked).toBe(true);
+    await fireEvent.click(fit);
+    expect(spy).toHaveBeenLastCalledWith('zone-3', { fit_room: false, wall_vertices: [[0, 0], [4, 0], [4, 2.7], [0, 2.7]] });
+    // No Flat/Upright switch on a wall; the ranges are in wall coordinates, the whole wall while fit
     expect(screen.queryByText(/Upright|Flat/)).toBeNull();
+    await fireEvent.click(fold('Geometry'));
+    expect(screen.getByText('Along Range')).toBeTruthy();
+    expect(screen.getByText('Up Range')).toBeTruthy();
+    expect(['a1', 'a2', 'u1', 'u2'].map((n) => parseFloat((screen.getByLabelText(n) as HTMLInputElement).value))).toEqual([0, 4, 0, 2.7]);
+    await fireEvent.change(screen.getByLabelText('u2'), { target: { value: '2' } });
+    expect(spy).toHaveBeenLastCalledWith('zone-3', { wall_vertices: [[0, 0], [4, 0], [4, 2], [0, 2]], fit_room: false });
+  });
+
+  it('a wall plane with a drawn outline shows its corners as Along and Up', async () => {
+    renderPanel({ ...wallPlane, fit_room: false, wall_vertices: [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5]] });
     await fireEvent.click(fold('Geometry'));
     expect(screen.getByLabelText('Corner 1 Along')).toBeTruthy();
     expect(screen.getByLabelText('Corner 1 Up')).toBeTruthy();
@@ -136,10 +212,15 @@ describe('ZonePanel', () => {
     expect(parseFloat(top.value)).toBe(2.7);
     await fireEvent.change(top, { target: { value: '2' } });
     expect(spy).toHaveBeenLastCalledWith('zone-4', { z_min: 0, z_max: 2 });
-    await fireEvent.click(screen.getByRole('button', { name: 'Draw on floor' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
     expect(controller.startZoneDraw).toHaveBeenCalledWith('volume');
-    await fireEvent.click(screen.getByRole('button', { name: 'Fit to room' }));
-    expect(spy.mock.calls.at(-1)![1]).toMatchObject({ fit_room: true, z_min: 0, z_max: 2.7, x_min: 0, x_max: 6 });
+    const fit = screen.getByRole('switch', { name: 'Fit to room' }) as HTMLInputElement;
+    expect(fit.checked).toBe(true);
+    await fireEvent.click(fit);
+    expect(spy).toHaveBeenLastCalledWith('zone-4', { fit_room: false, x_min: 0, x_max: 6, y_min: 0, y_max: 4, vertices: undefined });
+    await fireEvent.click(fold('Geometry'));
+    await fireEvent.change(screen.getByLabelText('y1'), { target: { value: '1' } });
+    expect(spy).toHaveBeenLastCalledWith('zone-4', { x_min: 0, x_max: 6, y_min: 1, y_max: 4, vertices: undefined, fit_room: false });
     expect(fold('Grid points').textContent).toMatch('10 × 12 × 8');
     await fireEvent.click(fold('Display'));
     const seg = screen.getByRole('group', { name: 'Display mode' });
@@ -187,9 +268,11 @@ describe('ZonePanel', () => {
     expect(fold('Grid points').getAttribute('aria-expanded')).toBe('true');
     expect(screen.queryByLabelText('Calculation')).toBeNull();
     expect(screen.queryByLabelText(/^Height/)).toBeNull();
-    for (const name of ['Geometry', 'Display', 'Flip', 'Draw on floor', 'Fit to room']) {
+    for (const name of ['Geometry', 'Display', 'Flip', 'Draw outline']) {
       expect(screen.queryByRole('button', { name: new RegExp(`^${name}`) })).toBeNull();
     }
+    expect(screen.queryByRole('switch')).toBeNull();
+    expect(screen.queryByLabelText('Surface')).toBeNull();
   });
 
   it('a zone changed elsewhere shows the new values', async () => {
@@ -205,10 +288,14 @@ describe('ZonePanel', () => {
     renderPanel({ ...floorPlane, id: 'zone-6', surface: undefined, ref_surface: 'xz', height: 1, z_min: 0, z_max: 2.7 });
     expect(screen.getByLabelText('Calculation')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Flip' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Draw on/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Draw/ })).toBeNull();
+    expect(screen.queryByRole('switch')).toBeNull();
+    expect((screen.getByLabelText('Surface') as HTMLSelectElement).value).toBe('');
     await fireEvent.click(fold('Geometry'));
+    expect(screen.getByText('X Range')).toBeTruthy();
+    expect(screen.getByText('Z Range')).toBeTruthy();
     const inputs = [...document.querySelectorAll('.zone-panel .fold-body input')] as HTMLInputElement[];
-    expect(inputs.length).toBeGreaterThan(0);
+    expect(inputs).toHaveLength(4);
     expect(inputs.every((i) => i.disabled)).toBe(true);
   });
 

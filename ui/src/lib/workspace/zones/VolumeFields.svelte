@@ -1,18 +1,18 @@
 <script lang="ts">
-	// A volume: Bottom and Top like a structure, Draw on floor and Fit to room
-	// (Fit fills the room floor to ceiling), then Geometry, Grid points and Display.
+	// A volume: Bottom and Top like a structure, Fit to room (the room outline,
+	// floor to ceiling) and Draw outline, then Geometry, Grid points and Display.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
-	import ShapeGeometryFields from '$lib/workspace/parts/ShapeGeometryFields.svelte';
-	import type { ReferenceMode } from '$lib/workspace/parts/shapeGeometry';
 	import { userSettings } from '$lib/stores/settings';
 	import { unitAbbrev, unitStep } from '$lib/utils/unitConversion';
-	import { footprintGeometry, roomFillGeometry, roomFootprint, zoneFootprint } from '$lib/utils/zoneFootprint';
+	import { footprintGeometry } from '$lib/utils/zoneFootprint';
 	import type { Vertex } from '$lib/utils/roomGeometry';
 	import type { CalcZone, RoomConfig } from '$lib/types/project';
 	import type { PlanController } from '$lib/plan/planController.svelte';
 	import ZoneFold from './ZoneFold.svelte';
+	import ZoneGeometry from './ZoneGeometry.svelte';
 	import GridPointsFold from './GridPointsFold.svelte';
 	import DisplayFold from './DisplayFold.svelte';
+	import { fitPartial, rangePartial, shownFootprint } from './zoneFields';
 
 	interface Props {
 		zone: CalcZone;
@@ -37,10 +37,7 @@
 		commit({ z_min: Math.min(v, other), z_max: Math.max(v, other) });
 	}
 
-	let reference = $state<ReferenceMode>('centre');
-	const footprint = $derived<Vertex[]>(
-		!(zone.vertices && zone.vertices.length >= 3) && zone.x_min == null && zone.fit_room ? roomFootprint(room) : zoneFootprint(zone)
-	);
+	const footprint = $derived<Vertex[]>(shownFootprint(zone, room));
 </script>
 
 <div class="dims c2">
@@ -55,19 +52,21 @@
 </div>
 
 <div class="plan-actions">
-	<button type="button" class="secondary plan-btn" class:active={drawing} aria-pressed={drawing} onclick={() => ctl.startZoneDraw('volume')}>Draw on floor</button>
-	<button type="button" class="secondary plan-btn" onclick={() => commit({ fit_room: true, ...roomFillGeometry('volume', room), z_min: 0, z_max: room.z })}>Fit to room</button>
+	<label class="zp-switch">
+		<span>Fit to room</span>
+		<input type="checkbox" role="switch" checked={zone.fit_room ?? false} onchange={(e) => commit(fitPartial(zone, room, e.currentTarget.checked))} />
+	</label>
+	<button type="button" class="secondary plan-btn" class:active={drawing} aria-pressed={drawing} onclick={() => ctl.startZoneDraw('volume')}>Draw outline</button>
 </div>
 
 <ZoneFold label="Geometry">
-	<ShapeGeometryFields
+	<ZoneGeometry
 		vertices={footprint}
-		yaw={0}
-		{reference}
-		units={$userSettings.units}
-		onChange={(next) => commit({ ...footprintGeometry('volume', next), fit_room: false })}
-		onReferenceChange={(m) => (reference = m)}
-		rotatable={false}
+		axes={['X', 'Y']}
+		precision={room.precision}
+		{step}
+		onRanges={(r) => commit(rangePartial('volume', r))}
+		onCorners={(next) => commit({ ...footprintGeometry('volume', next), fit_room: false })}
 	/>
 </ZoneFold>
 

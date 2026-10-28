@@ -272,15 +272,19 @@ test.describe.serial('Comprehensive workflow', () => {
 
     // --- Bounds --- (a new zone covers the whole room; give it its own extent instead)
     await openZoneFold(page, 'Geometry');
-    const width = zoneEditor(page).getByLabel('Width', { exact: true });
-    await width.click({ clickCount: 3 });
-    await width.fill('3');
-    await width.press('Tab');
+    const x2 = zoneEditor(page).getByLabel('x2', { exact: true });
+    await x2.click({ clickCount: 3 });
+    await x2.fill('3');
+    await x2.press('Tab');
     await expect.poll(async () => (await userZones(page))[0].fit_room).toBe(false);
+    await expect.poll(async () => (await userZones(page))[0].x2).toBe(3);
+    const fit = zoneEditor(page).getByRole('switch', { name: 'Fit to room' });
+    await expect(fit).not.toBeChecked();
 
     // --- Fit to room puts it back ---
-    await zoneEditor(page).getByRole('button', { name: 'Fit to room' }).click();
+    await fit.click();
     await expect.poll(async () => (await userZones(page))[0].fit_room).toBe(true);
+    await expect(fit).toBeChecked();
 
     // --- Display mode ---
     await setDisplayMode(page, 'Numeric');
@@ -312,10 +316,11 @@ test.describe.serial('Comprehensive workflow', () => {
 
     // Footprint
     await openZoneFold(page, 'Geometry');
-    const width = zoneEditor(page).getByLabel('Width', { exact: true });
-    await width.click({ clickCount: 3 });
-    await width.fill('3');
-    await width.press('Tab');
+    const x2 = zoneEditor(page).getByLabel('x2', { exact: true });
+    await x2.click({ clickCount: 3 });
+    await x2.fill('3');
+    await x2.press('Tab');
+    await expect.poll(async () => (await userZones(page))[1].x_max).toBe(3);
 
     // Grid resolution
     await toggleResolutionMode(page);

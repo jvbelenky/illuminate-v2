@@ -1818,12 +1818,25 @@ function createProjectStore() {
 
       const zoneDiff = diffEntities(userZones(now.zones), userZones(target.zones));
       for (const id of zoneDiff.removes) this.removeZone(id);
-      for (const { id, partial } of zoneDiff.updates) this.updateZone(id, partial);
+      // Undoing an orphan's re-bind is skipped: the backend has no geometry for the gone wall,
+      // so the plane stays where it was re-bound, in the store as on the backend. A diff that
+      // orphans a plane still on a wall applies only with a room change (a redo of the one that orphaned it).
+      const roomChanged = Object.keys(roomPartial).length > 0;
+      const skipped = new Set<string>();
+      for (const { id, partial } of zoneDiff.updates) {
+        const current = now.zones.find((z) => z.id === id);
+        const offWall = !current?.surface || wallIndex(current.surface) == null;
+        if (partial.wall_orphan === true && current && (offWall || !roomChanged)) {
+          skipped.add(id);
+          continue;
+        }
+        this.updateZone(id, partial);
+      }
       // A restored outline renames walls (cardinal <-> wall_n), so wall planes the diff left alone resend theirs
       if (roomPartial.shape !== undefined || roomPartial.vertices !== undefined) {
         const updated = new Set(zoneDiff.updates.map((u) => u.id));
         for (const z of userZones(target.zones)) {
-          if (z.surface && !z.wall_orphan && wallIndex(z.surface) != null && !updated.has(z.id) && now.zones.some((n) => n.id === z.id)) {
+          if (z.surface && !z.wall_orphan && wallIndex(z.surface) != null && !updated.has(z.id) && !skipped.has(z.id) && now.zones.some((n) => n.id === z.id)) {
             // A whole-wall plane is sent the whole wall, not the backend's old outline
             this.updateZone(z.id, z.fit_room || !z.wall_vertices ? { surface: z.surface, wall_vertices: undefined } : { surface: z.surface });
           }
@@ -3293,10 +3306,12 @@ function createProjectStore() {
       const fromWall = before?.surface ? wallIndex(before.surface) : null;
       const toWall = partial.surface ? wallIndex(partial.surface) : null;
       const leavesWall = 'surface' in partial && fromWall != null && toWall == null;
+      // A legacy vertical plane (no surface, xz / yz) given one is rebuilt on it, not reoriented in place
+      const leavesLegacy = partial.surface != null && !!before && !before.surface && (before.ref_surface === 'xz' || before.ref_surface === 'yz');
       if ('surface' in partial && fromWall != null && fromWall !== toWall) {
         partial = {
           wall_vertices: undefined,
-          ...(toWall == null ? { normal_offset: undefined, flip: undefined } : {}),
+          ...(toWall == null ? { normal_offset: undefined, flip: undefined, ref_surface: 'xy' as const } : {}),
           ...partial,
         };
       }
@@ -3311,7 +3326,7 @@ function createProjectStore() {
       // are a delete+recreate — never coalesced — carrying a full snapshot so the
       // recreated zone preserves its identity and config.
       // A plane leaving a wall for the floor or ceiling cannot be patched flat: it is recreated too
-      if (partial.type != null || leavesWall) {
+      if (partial.type != null || leavesWall || leavesLegacy) {
         const zone = get({ subscribe }).zones.find(z => z.id === id);
         if (zone) {
           syncQueue.enqueue({

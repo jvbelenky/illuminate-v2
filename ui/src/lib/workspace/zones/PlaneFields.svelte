@@ -1,26 +1,26 @@
 <script lang="ts">
-	// A plane: Calculation, its distance from its surface with Flip, Draw and
-	// Fit, then Geometry, Grid points and Display folded away. A vertical plane
-	// parallel to no wall (legacy) shows its geometry read-only.
+	// A plane: its Surface, Calculation, its distance from its surface with Flip,
+	// Fit to room and Draw outline, then Geometry, Grid points and Display folded
+	// away. A vertical plane parallel to no wall (legacy) shows its geometry read-only.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
-	import ShapeGeometryFields from '$lib/workspace/parts/ShapeGeometryFields.svelte';
-	import type { ReferenceMode } from '$lib/workspace/parts/shapeGeometry';
 	import { userSettings } from '$lib/stores/settings';
 	import { pickMode } from '$lib/stores/pickMode';
 	import { unitAbbrev, unitStep } from '$lib/utils/unitConversion';
-	import { wallIndex, zoneSurface } from '$lib/utils/surfaces';
+	import { allSurfaces, parseSurface, surfaceName, wallIndex, zoneSurface, type Surface } from '$lib/utils/surfaces';
 	import { planeWall, wallPlaneOutline } from '$lib/utils/planeWorld';
-	import { footprintGeometry, roomFillGeometry, roomFootprint, zoneFootprint, rectangleCorners } from '$lib/utils/zoneFootprint';
-	import type { Vertex } from '$lib/utils/roomGeometry';
+	import { footprintGeometry, rectangleCorners } from '$lib/utils/zoneFootprint';
+	import { roomVertices, type Vertex } from '$lib/utils/roomGeometry';
 	import type { CalcZone, PlaneCalcMode, RoomConfig } from '$lib/types/project';
 	import type { PlanController } from '$lib/plan/planController.svelte';
 	import ZoneFold from './ZoneFold.svelte';
+	import ZoneGeometry from './ZoneGeometry.svelte';
 	import GridPointsFold from './GridPointsFold.svelte';
 	import DisplayFold from './DisplayFold.svelte';
 	import { togglePick } from './zonePick';
 	import {
 		CALC_MODES, DEFAULT_CUSTOM_FLAGS, calcModeFlags, showsFov, isLegacyPlane,
 		distanceLabel, distanceOf, distancePartial, flipPartial, type CustomFlags,
+		surfaceChoice, surfacePartial, fitPartial, rangePartial, shownFootprint, type Ranges,
 	} from './zoneFields';
 
 	interface Props {
@@ -39,6 +39,20 @@
 	const onWall = $derived(wallIndex(surface) !== null);
 	const legacy = $derived(isLegacyPlane(zone));
 	const mode = $derived<PlaneCalcMode>(zone.calc_mode ?? 'planar_normal');
+
+	// --- Surface
+	const surfaces = $derived(allSurfaces(roomVertices(room)));
+	const choice = $derived(surfaceChoice(zone, room.z));
+
+	/** Move the plane to fill another surface; the 2D view follows, the plane still selected. */
+	function chooseSurface(value: string) {
+		const next = parseSurface(value);
+		if (!next || next === choice) return;
+		const id = zone.id;
+		commit(surfacePartial(next as Surface, room, $userSettings.units));
+		ctl.setSurface(next);
+		ctl.selectZone(id);
+	}
 
 	// --- Calculation
 	// Custom's flags, remembered while the panel is open so a trip to another mode brings them back
@@ -72,25 +86,18 @@
 		commit({ [key]: next });
 	}
 
-	// --- Distance, Flip, Draw, Fit
+	// --- Distance, Flip, Fit, Draw
 	const distance = $derived(distanceOf(zone, surface, room.z));
-	const drawLabel = $derived(onWall ? 'Draw on wall' : surface === 'ceiling' ? 'Draw on ceiling' : 'Draw on floor');
 	const drawing = $derived(ctl.drawing && ctl.drawKind === 'plane');
 
 	function setDistance(v: number) {
 		if (v !== distance) commit(distancePartial(zone, surface, room.z, v));
 	}
 
-	function fit() {
-		commit(onWall ? { fit_room: true, wall_vertices: undefined } : { fit_room: true, ...roomFillGeometry('plane', room) });
-	}
-
 	// --- Geometry
-	// Where X/Y point: UI state of this panel, not saved
-	let reference = $state<ReferenceMode>('centre');
 	const wall = $derived(onWall ? planeWall(zone, room) : null);
 
-	const geometry = $derived.by((): { vertices: Vertex[]; axes: [string, string]; sizes?: [string, string] } | null => {
+	const geometry = $derived.by((): { vertices: Vertex[]; axes: [string, string] } | null => {
 		if (legacy) {
 			const xz = zone.ref_surface === 'xz';
 			const [a1, a2] = xz ? [zone.x1 ?? 0, zone.x2 ?? room.x] : [zone.y1 ?? 0, zone.y2 ?? room.y];
@@ -98,17 +105,18 @@
 			return {
 				vertices: rectangleCorners(Math.min(a1, a2), Math.max(a1, a2), Math.min(z1, z2), Math.max(z1, z2)),
 				axes: xz ? ['X', 'Z'] : ['Y', 'Z'],
-				sizes: ['Width', 'Height'],
 			};
 		}
-		if (onWall) return wall ? { vertices: wallPlaneOutline(zone, wall, room.z), axes: ['Along', 'Up'], sizes: ['Width', 'Height'] } : null;
-		const drawn = zone.vertices && zone.vertices.length >= 3;
-		const vertices = !drawn && zone.x1 == null && zone.fit_room ? roomFootprint(room) : zoneFootprint(zone);
-		return { vertices, axes: ['X', 'Y'] };
+		if (onWall) return wall ? { vertices: wallPlaneOutline(zone, wall, room.z), axes: ['Along', 'Up'] } : null;
+		return { vertices: shownFootprint(zone, room), axes: ['X', 'Y'] };
 	});
 
-	function setGeometry(next: Vertex[]): boolean | void {
-		if (legacy) return false;
+	function setRanges(r: Ranges) {
+		if (!legacy) commit(rangePartial(onWall ? 'wall' : 'plane', r));
+	}
+
+	function setCorners(next: Vertex[]) {
+		if (legacy) return;
 		if (onWall) commit({ wall_vertices: next.map(([a, u]) => [a, u] as [number, number]), fit_room: false });
 		else commit({ ...footprintGeometry('plane', next), fit_room: false });
 	}
@@ -117,6 +125,18 @@
 		onWall ? ['Across', 'Up'] : legacy ? (zone.ref_surface === 'xz' ? ['X', 'Z'] : ['Y', 'Z']) : ['X', 'Y']
 	);
 </script>
+
+<label class="zp-field">
+	<span>Surface</span>
+	<select value={choice} onchange={(e) => chooseSurface(e.currentTarget.value)}>
+		{#if choice === ''}
+			<option value="" disabled>—</option>
+		{/if}
+		{#each surfaces as s (s)}
+			<option value={s}>{surfaceName(s)}</option>
+		{/each}
+	</select>
+</label>
 
 <label class="zp-field">
 	<span>Calculation</span>
@@ -181,24 +201,25 @@
 	</div>
 
 	<div class="plan-actions">
-		<button type="button" class="secondary plan-btn" class:active={drawing} aria-pressed={drawing} onclick={() => ctl.startZoneDraw('plane')}>{drawLabel}</button>
-		<button type="button" class="secondary plan-btn" onclick={fit}>{onWall ? 'Fit to wall' : 'Fit to room'}</button>
+		<label class="zp-switch">
+			<span>{onWall ? 'Fit to wall' : 'Fit to room'}</span>
+			<input type="checkbox" role="switch" checked={zone.fit_room ?? false} onchange={(e) => commit(fitPartial(zone, room, e.currentTarget.checked))} />
+		</label>
+		<button type="button" class="secondary plan-btn" class:active={drawing} aria-pressed={drawing} onclick={() => ctl.startZoneDraw('plane')}>Draw outline</button>
 	</div>
 {/if}
 
 {#if geometry}
 	<ZoneFold label="Geometry">
-		<ShapeGeometryFields
+		<ZoneGeometry
 			vertices={geometry.vertices}
-			yaw={0}
-			{reference}
-			units={$userSettings.units}
-			onChange={setGeometry}
-			onReferenceChange={(m) => (reference = m)}
 			axes={geometry.axes}
-			sizes={geometry.sizes}
-			rotatable={false}
+			precision={room.precision}
+			{step}
+			ranges={legacy}
 			readonly={legacy}
+			onRanges={setRanges}
+			onCorners={setCorners}
 		/>
 	</ZoneFold>
 {/if}

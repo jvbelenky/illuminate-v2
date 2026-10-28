@@ -4514,6 +4514,172 @@ describe('wall planes keep their outline', () => {
     expect(posts.at(-1)!.wall).toBeUndefined();
   });
 
+  describe('undoing an orphan re-bind', () => {
+    function track() {
+      const posts: Record<string, unknown>[] = [];
+      const patches: Record<string, unknown>[] = [];
+      const deletes: string[] = [];
+      server.use(
+        http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          posts.push(body);
+          return HttpResponse.json({ success: true, zone_id: body.id });
+        }),
+        http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+          patches.push((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({ success: true });
+        }),
+        http.delete(`${API_BASE}/session/zones/:zoneId`, ({ params }) => {
+          deletes.push(String(params.zoneId));
+          return HttpResponse.json({ success: true });
+        }),
+      );
+      return { posts, patches, deletes };
+    }
+
+    async function orphanSetup() {
+      const sent = track();
+      const { project } = await import('./project');
+      const { defaultZone } = await import('$lib/types/project');
+      await project.initSession();
+      const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:2', wall_orphan: true, normal_offset: 0.4, wall_vertices: W });
+      await vi.runAllTimersAsync();
+      return { ...sent, project, id };
+    }
+
+    async function undo(project: { history: { undo: () => Promise<boolean> } }) {
+      const u = project.history.undo();
+      await vi.runAllTimersAsync();
+      expect(await u).toBe(true);
+      await vi.runAllTimersAsync();
+    }
+
+    it("editing an orphan's Height then undoing it sends no wall and leaves the store on the floor, as the backend is", async () => {
+      const { project, id, posts, patches } = await orphanSetup();
+      project.updateZone(id, { height: 1.2 });
+      await vi.runAllTimersAsync();
+      const rebound = posts.at(-1)!;
+      expect(rebound.wall).toBeUndefined();
+      expect(rebound.height).toBe(1.2);
+      patches.length = 0;
+
+      await undo(project);
+      expect(patches.filter((b) => 'wall' in b)).toEqual([]);
+      const z = get(project).zones.find((q) => q.id === id)!;
+      expect(z.wall_orphan).toBeUndefined();
+      expect(z.surface).toBe('floor');
+      expect(z.height).toBe(1.2);
+    });
+
+    it('re-binding an orphan to the floor through the Surface choice, then undoing it, keeps store and backend on the floor', async () => {
+      const { surfacePartial } = await import('$lib/workspace/zones/zoneFields');
+      const { project, id, posts, patches } = await orphanSetup();
+      project.updateZone(id, surfacePartial('floor', get(project).room, 'meters'));
+      await vi.runAllTimersAsync();
+      expect(posts.at(-1)!.wall).toBeUndefined();
+      expect(posts.at(-1)!.ref_surface).toBe('xy');
+      patches.length = 0;
+      const postCount = posts.length;
+
+      await undo(project);
+      expect(patches.filter((b) => 'wall' in b)).toEqual([]);
+      expect(posts.length).toBe(postCount);
+      const z = get(project).zones.find((q) => q.id === id)!;
+      expect(z.wall_orphan).toBeUndefined();
+      expect(z.surface).toBe('floor');
+    });
+
+    it('re-binding an orphan to a wall, then undoing it, keeps store and backend on that wall', async () => {
+      const { surfacePartial } = await import('$lib/workspace/zones/zoneFields');
+      const { project, id, patches } = await orphanSetup();
+      project.updateZone(id, surfacePartial('wall:0', get(project).room, 'meters'));
+      await vi.runAllTimersAsync();
+      expect(patches.at(-1)).toMatchObject({ wall: { wall_id: 'south', normal_offset: 0, flip: false }, vertices: null });
+      patches.length = 0;
+
+      await undo(project);
+      expect(patches).toEqual([]);
+      const z = get(project).zones.find((q) => q.id === id)!;
+      expect(z.wall_orphan).toBeUndefined();
+      expect(z.surface).toBe('wall:0');
+    });
+
+    it('redoing the room change that orphaned a plane orphans it again', async () => {
+      const sent = track();
+      const { project } = await import('./project');
+      const { defaultZone } = await import('$lib/types/project');
+      await project.initSession();
+      project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 3], [3, 5], [0, 3]] });
+      await vi.runAllTimersAsync();
+      const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:2', wall_vertices: W });
+      await vi.runAllTimersAsync();
+      project.updateRoom({ vertices: [[0, 0], [6, 0], [6, 3], [0, 3]] });
+      await vi.runAllTimersAsync();
+      expect(get(project).zones.find((q) => q.id === id)!.wall_orphan).toBe(true);
+
+      await undo(project);
+      expect(get(project).zones.find((q) => q.id === id)!.wall_orphan).toBeUndefined();
+      expect(get(project).zones.find((q) => q.id === id)!.surface).toBe('wall:2');
+
+      sent.patches.length = 0;
+      const r = project.history.redo();
+      await vi.runAllTimersAsync();
+      expect(await r).toBe(true);
+      await vi.runAllTimersAsync();
+      const z = get(project).zones.find((q) => q.id === id)!;
+      expect(z.wall_orphan).toBe(true);
+      expect(z.surface).toBe('wall:2');
+    });
+  });
+
+  it('a plane leaving a wall for the floor is recreated flat, never as xz', async () => {
+    const posts: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        posts.push(body);
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+      http.delete(`${API_BASE}/session/zones/:zoneId`, () => HttpResponse.json({ success: true })),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    await project.initSession();
+    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:1', ref_surface: 'xz', normal_offset: 0.2 });
+    await vi.runAllTimersAsync();
+    project.updateZone(id, { surface: 'floor', height: 1 });
+    await vi.runAllTimersAsync();
+    expect(posts.at(-1)!.ref_surface).toBe('xy');
+    expect(posts.at(-1)!.wall).toBeUndefined();
+    expect(get(project).zones.find((q) => q.id === id)!.ref_surface).toBe('xy');
+  });
+
+  it('a legacy vertical plane given a surface is recreated on it', async () => {
+    const posts: Record<string, unknown>[] = [];
+    const deletes: string[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        posts.push(body);
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+      http.delete(`${API_BASE}/session/zones/:zoneId`, ({ params }) => {
+        deletes.push(String(params.zoneId));
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    const { surfacePartial } = await import('$lib/workspace/zones/zoneFields');
+    await project.initSession();
+    const id = await project.addZone({ ...defaultZone(get(project).room, 0), ref_surface: 'xz', height: 1, z_min: 0, z_max: 2 });
+    await vi.runAllTimersAsync();
+    project.updateZone(id, surfacePartial('floor', get(project).room, 'meters'));
+    await vi.runAllTimersAsync();
+    expect(deletes).toContain(id);
+    expect(posts.at(-1)).toMatchObject({ id, ref_surface: 'xy', height: 1.8 });
+  });
+
   it('a unit change scales a wall plane offset and outline', async () => {
     server.use(
       http.post(`${API_BASE}/session/zones`, async ({ request }) => {
