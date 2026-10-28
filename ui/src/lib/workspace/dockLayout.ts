@@ -4,7 +4,7 @@
  * user dragged. Pure functions only.
  */
 
-export type DockPanelId = 'editor' | 'results' | 'mini' | 'calculate';
+export type DockPanelId = 'editor' | 'results' | 'mini';
 export type DockColumn = 'left' | 'right';
 export type MainView = '2d' | '3d';
 
@@ -37,20 +37,15 @@ export interface AreaSize {
   height: number;
 }
 
-/**
- * Floating sizes per panel (px). Calculate floats at its content height: its
- * `h` only stands in for that height until it is measured.
- */
+/** Floating sizes per panel (px); a floating Results window includes the Calculate control above it. */
 export const FLOAT_DEFAULTS: Record<DockPanelId, { w: number; h: number }> = {
   editor: { w: 420, h: 600 },
   results: { w: 420, h: 500 },
-  calculate: { w: 300, h: 120 },
   mini: { w: 300, h: 225 },
 };
 export const FLOAT_MINS: Record<DockPanelId, { w: number; h: number }> = {
   editor: { w: 260, h: 200 },
   results: { w: 260, h: 200 },
-  calculate: { w: 200, h: 40 },
   mini: { w: 200, h: 150 },
 };
 
@@ -72,11 +67,14 @@ export const COLUMN_LIMITS: Record<DockColumn, { min: number; max: number }> = {
 
 const COLUMNS: DockColumn[] = ['left', 'right'];
 
-const PANEL_IDS: DockPanelId[] = ['editor', 'results', 'mini', 'calculate'];
+const PANEL_IDS: DockPanelId[] = ['editor', 'results', 'mini'];
+
+/** A panel id from before Calculate became a control above Results: dropped from stored layouts. */
+const RETIRED = 'calculate';
 
 export const DEFAULT_DOCK: DockLayout = {
   left: ['editor', 'mini'],
-  right: ['calculate', 'results'],
+  right: ['results'],
   minimized: [],
   main: '2d',
 };
@@ -171,6 +169,7 @@ function sanitizeFloats(raw: unknown): Partial<Record<DockPanelId, FloatBox>> | 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const out: Partial<Record<DockPanelId, FloatBox>> = {};
   for (const [id, b] of Object.entries(raw as Record<string, unknown>)) {
+    if (id === RETIRED) continue;
     if (!isPanelId(id)) return null;
     const box = sanitizeFloat(b, id);
     if (!box) return null;
@@ -191,14 +190,14 @@ function sanitizeWidths(raw: unknown): Partial<Record<DockColumn, number>> {
   return out;
 }
 
-/** Stored heights of docked panels (not Calculate), as finite numbers clamped to the panel's range. */
+/** Stored heights of docked panels, as finite numbers clamped to the panel's range. */
 function sanitizeHeights(raw: unknown, docked: DockPanelId[]): Partial<Record<DockPanelId, number>> {
   const out: Partial<Record<DockPanelId, number>> = {};
   if (!raw || typeof raw !== 'object') return out;
   const r = raw as Record<string, unknown>;
   for (const id of docked) {
     const h = r[id];
-    if (id !== 'calculate' && typeof h === 'number' && Number.isFinite(h)) {
+    if (typeof h === 'number' && Number.isFinite(h)) {
       out[id] = Math.round(clamp(h, minPanelHeight(id), MAX_HEIGHT));
     }
   }
@@ -223,31 +222,21 @@ export function sanitizeDock(raw: unknown): DockLayout {
     floats = { mini };
   }
   const floating = Object.keys(floats) as DockPanelId[];
-  let left = r.left as unknown[];
-  let right = r.right as unknown[];
-  // A layout stored before Calculate had its own panel gets one directly above Results
-  if (![...left, ...right, ...floating].includes('calculate')) {
-    if (left.includes('results')) {
-      left = [...left];
-      left.splice(left.indexOf('results'), 0, 'calculate');
-    } else if (right.includes('results')) {
-      right = [...right];
-      right.splice(right.indexOf('results'), 0, 'calculate');
-    } else {
-      right = ['calculate', ...right];
-    }
-  }
+  // Calculate was a panel for a while: a stored layout drops it
+  const left = (r.left as unknown[]).filter((p) => p !== RETIRED);
+  const right = (r.right as unknown[]).filter((p) => p !== RETIRED);
+  const minimized = (r.minimized as unknown[]).filter((p) => p !== RETIRED);
   const placed = [...left, ...right, ...floating];
   if (!placed.every(isPanelId)) return fresh(DEFAULT_DOCK);
   // Every panel exactly once, in a column or floating
   if (placed.length !== PANEL_IDS.length || !PANEL_IDS.every((id) => placed.filter((p) => p === id).length === 1)) {
     return fresh(DEFAULT_DOCK);
   }
-  if (!r.minimized.every(isPanelId) || new Set(r.minimized).size !== r.minimized.length) return fresh(DEFAULT_DOCK);
+  if (!minimized.every(isPanelId) || new Set(minimized).size !== minimized.length) return fresh(DEFAULT_DOCK);
   let layout: DockLayout = {
     left: [...(left as DockPanelId[])],
     right: [...(right as DockPanelId[])],
-    minimized: [...(r.minimized as DockPanelId[])],
+    minimized: [...(minimized as DockPanelId[])],
     main: r.main,
   };
   layout = withWidths(layout, sanitizeWidths(r.widths));
@@ -329,13 +318,11 @@ export function moveFloat(l: DockLayout, id: DockPanelId, x: number, y: number, 
   return withKey(next, 'floats', { ...next.floats, [id]: placeBox({ ...b, x, y }, area) });
 }
 
-/** A floating panel resized, between its min size and the area, kept inside it (Calculate: width only). */
+/** A floating panel resized, between its min size and the area, kept inside it. */
 export function resizeFloat(l: DockLayout, id: DockPanelId, w: number, h: number, area: AreaSize): DockLayout {
   const b = l.floats?.[id];
   if (!b) return l;
-  const next = fresh(l);
-  const fitted = fitBox({ ...b, w, h: id === 'calculate' ? b.h : h }, area, id);
-  return withKey(next, 'floats', { ...next.floats, [id]: id === 'calculate' ? { ...fitted, h: b.h } : fitted });
+  return withKey(fresh(l), 'floats', { ...l.floats, [id]: fitBox({ ...b, w, h }, area, id) });
 }
 
 /** A floating panel docked into a column at an index. */
@@ -356,12 +343,12 @@ export function fillPanel(l: DockLayout, column: DockColumn): DockPanelId | null
 }
 
 /**
- * The dividers in a column: one per pair of the nearest resizable panels
- * (open, not Calculate) above and below a gap, at the first gap between them.
+ * The dividers in a column: one per pair of the nearest open panels above and
+ * below a gap, at the first gap between them.
  */
 export function splitPairs(l: DockLayout, column: DockColumn): { gap: number; above: DockPanelId; below: DockPanelId }[] {
   const ids = l[column];
-  const sizable = (id: DockPanelId) => id !== 'calculate' && !l.minimized.includes(id);
+  const sizable = (id: DockPanelId) => !l.minimized.includes(id);
   const out: { gap: number; above: DockPanelId; below: DockPanelId }[] = [];
   for (let gap = 0; gap < ids.length - 1; gap++) {
     const above = ids.slice(0, gap + 1).reverse().find(sizable);

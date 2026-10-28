@@ -32,8 +32,8 @@
 		titles: Record<DockPanelId, string>;
 		panel: Snippet<[DockPanelId]>;
 		main: Snippet;
-		/** The Calculate control: full in its panel, compact (true) in its minimized bar. */
-		calculate?: Snippet<[boolean]>;
+		/** The Calculate control: bare, directly above the Results panel wherever it is. */
+		calculate?: Snippet;
 		/** Icon buttons in the Results title bar. */
 		resultsTools?: Snippet;
 		/** Defaults to swapping the main view in the layout. */
@@ -117,17 +117,13 @@
 	);
 	const zOf = (id: DockPanelId) => FLOAT_Z + 4 * Math.max(0, floatIds.indexOf(id));
 
-	// A floating Calculate is as tall as its content
-	let calcHeight = $state(0);
-
 	// A floating window's corner drag shows live and is stored on release
 	let floatResize = $state<{ id: DockPanelId; sx: number; sy: number; w0: number; h0: number; w: number; h: number } | null>(null);
 
-	/** A floating panel as stored, kept inside the workspace (Calculate at its measured height). */
+	/** A floating panel as stored, kept inside the workspace. */
 	function shownBox(id: DockPanelId): FloatBox | null {
 		const b = layout.floats?.[id];
-		if (!b) return null;
-		return floatInArea(id === 'calculate' && calcHeight > 0 ? { ...b, h: calcHeight } : b, areaSize, id);
+		return b ? floatInArea(b, areaSize, id) : null;
 	}
 
 	/** Every floating panel as it shows now, following a drag of its bar or corner. */
@@ -136,7 +132,7 @@
 		for (const id of floatIds) {
 			let b = shownBox(id)!;
 			if (drag?.floating && drag.started && drag.id === id) b = { ...b, x: b.x + drag.x - drag.sx, y: b.y + drag.y - drag.sy };
-			if (floatResize?.id === id) b = { ...b, w: floatResize.w, h: id === 'calculate' ? b.h : floatResize.h };
+			if (floatResize?.id === id) b = { ...b, w: floatResize.w, h: floatResize.h };
 			out[id] = floatInArea(b, areaSize, id);
 		}
 		return out;
@@ -180,7 +176,7 @@
 		e.preventDefault();
 		touch(id);
 		floatResize = { id, sx: e.clientX, sy: e.clientY, w0: b.w, h0: b.h, w: b.w, h: b.h };
-		document.body.style.cursor = id === 'calculate' ? 'ew-resize' : 'nwse-resize';
+		document.body.style.cursor = 'nwse-resize';
 		document.body.style.userSelect = 'none';
 		window.addEventListener('pointermove', onFloatResizeMove);
 		window.addEventListener('pointerup', onFloatResizeUp);
@@ -288,7 +284,7 @@
 
 	/** A docked panel's size in its column: a stored height, unless it fills the column. */
 	function panelStyle(column: DockColumn, id: DockPanelId): string | undefined {
-		if (id === 'calculate' || live.minimized.includes(id)) return undefined;
+		if (live.minimized.includes(id)) return undefined;
 		const h = live.heights?.[id];
 		if (h === undefined || fillPanel(live, column) === id) return undefined;
 		return `flex: 0 1 ${h}px; aspect-ratio: auto; min-height: ${minPanelHeight(id)}px`;
@@ -379,7 +375,10 @@
 		// The grab point within the panel, kept inside a window of the floating size
 		const w = layout.floats?.[id]?.w ?? FLOAT_DEFAULTS[id].w;
 		const ox = pr ? Math.max(0, Math.min(w - 24, e.clientX - pr.left)) : 0;
-		const oy = pr ? Math.max(0, Math.min(26, e.clientY - pr.top)) : 0;
+		// A Results window starts with the Calculate control above its bar
+		const calcH = id === 'results' ? (areaEl?.querySelector('.dock-calc')?.getBoundingClientRect().height ?? 0) : 0;
+		const above = calcH > 0 ? calcH + 6 : 0;
+		const oy = (pr ? Math.max(0, Math.min(26, e.clientY - pr.top)) : 0) + above;
 		drag = { id, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, started: false, floating, ox, oy };
 		window.addEventListener('pointermove', onMove);
 		window.addEventListener('pointerup', onUp);
@@ -394,7 +393,6 @@
 	bind:this={areaEl}
 	style:grid-template-columns="{widths.left}px minmax(0, 1fr) {widths.right}px"
 >
-	{#snippet calcBar()}{@render calculate?.(true)}{/snippet}
 	{#each columns as col (col)}
 		{#if col === 'right'}
 			<div class="dock-main" style:margin-left={widths.left ? '6px' : '0'} style:margin-right={widths.right ? '6px' : '0'}>
@@ -433,6 +431,9 @@
 						<div class="dock-gap"></div>
 					{/if}
 				{/if}
+				{#if id === 'results' && calculate}
+					<div class="dock-calc">{@render calculate()}</div>
+				{/if}
 				<DockPanel
 					{id}
 					title={titles[id]}
@@ -442,7 +443,6 @@
 					onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
 					onSwap={id === 'mini' ? swap : undefined}
 					onBarPointerDown={(e) => barDown(id, e)}
-					barAction={id === 'calculate' && calculate ? calcBar : undefined}
 					tools={id === 'results' ? resultsTools : undefined}
 				>
 					{@render panel(id)}
@@ -482,44 +482,30 @@
 				style:left="{b.x}px"
 				style:top="{b.y}px"
 				style:width="{b.w}px"
-				style:height={min || id === 'calculate' ? undefined : `${b.h}px`}
+				style:height={min ? undefined : `${b.h}px`}
 				style:z-index={zOf(id)}
 				onpointerdowncapture={() => touch(id)}
 			>
-				{#if id === 'calculate'}
-					<div class="dock-float-measure" bind:offsetHeight={calcHeight}>
-						<DockPanel
-							{id}
-							floating
-							title={titles[id]}
-							minimized={min}
-							onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
-							onBarPointerDown={(e) => barDown(id, e)}
-							barAction={calculate ? calcBar : undefined}
-						>
-							{@render panel(id)}
-						</DockPanel>
-					</div>
-				{:else}
-					<DockPanel
-						{id}
-						floating
-						title={titles[id]}
-						minimized={min}
-						onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
-						onSwap={id === 'mini' ? swap : undefined}
-						onBarPointerDown={(e) => barDown(id, e)}
-						tools={id === 'results' ? resultsTools : undefined}
-					>
-						{@render panel(id)}
-					</DockPanel>
+				{#if id === 'results' && calculate}
+					<div class="dock-calc">{@render calculate()}</div>
 				{/if}
+				<DockPanel
+					{id}
+					floating
+					title={titles[id]}
+					minimized={min}
+					onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
+					onSwap={id === 'mini' ? swap : undefined}
+					onBarPointerDown={(e) => barDown(id, e)}
+					tools={id === 'results' ? resultsTools : undefined}
+				>
+					{@render panel(id)}
+				</DockPanel>
 			</div>
 			{#if !min}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					class="dock-float-resize"
-					class:width-only={id === 'calculate'}
 					data-float={id}
 					aria-hidden="true"
 					style:left="{b.x + b.w - 14}px"
@@ -672,12 +658,16 @@
 		position: absolute;
 		display: flex;
 		flex-direction: column;
-		border-radius: var(--radius-md);
+	}
+	.dock-float > :global(.dock-panel) {
 		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 	}
-	.dock-float-measure {
+	/* Calculate and Auto, bare, right-aligned directly above the Results panel */
+	.dock-calc {
+		flex: none;
 		display: flex;
-		flex-direction: column;
+		justify-content: flex-end;
+		margin-bottom: 6px;
 	}
 	.dock-float-resize {
 		position: absolute;
@@ -697,9 +687,6 @@
 			transparent 78%
 		);
 		opacity: 0.7;
-	}
-	.dock-float-resize.width-only {
-		cursor: ew-resize;
 	}
 	.dock-float-resize:hover {
 		opacity: 1;

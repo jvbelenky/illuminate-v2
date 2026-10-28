@@ -69,7 +69,7 @@ describe('settings store workspace layout', () => {
   });
 
   it('keeps a valid stored dock', async () => {
-    const dock = { left: ['editor', 'calculate', 'results'], right: ['mini'], minimized: [], main: '3d' };
+    const dock = { left: ['editor', 'results'], right: ['mini'], minimized: [], main: '3d' };
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ workspaceDock: dock }));
     const { userSettings } = await import('./settings');
     expect(get(userSettings).workspaceDock).toEqual(dock);

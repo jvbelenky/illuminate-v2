@@ -285,7 +285,6 @@
 	const dockTitles = $derived<Record<DockPanelId, string>>({
 		editor: $workspaceUi.mode === 'summary' ? 'Summary' : 'Editor',
 		results: 'Results',
-		calculate: 'Calculate',
 		mini: dock.main === '2d' ? '3D' : '2D'
 	});
 	let mainAnchor = $state<HTMLElement>();
@@ -1163,8 +1162,6 @@
 	{#snippet dockPanel(id: DockPanelId)}
 		{#if id === 'editor'}
 			<div class="dock-editor">{@render editorColumn()}</div>
-		{:else if id === 'calculate'}
-			<div class="dock-calculate"><CalculateButton layout="panel" /></div>
 		{:else if id === 'results'}
 			<div class="dock-results">{@render resultsContent(false)}</div>
 		{:else}
@@ -1178,8 +1175,8 @@
 		</button>
 	{/snippet}
 
-	{#snippet dockCalculate(_compact: boolean)}
-		<CalculateButton layout="bar" />
+	{#snippet dockCalculate()}
+		<CalculateButton layout="panel" />
 	{/snippet}
 
 	{#snippet dockMain()}
@@ -1508,10 +1505,6 @@
 	}
 	.dock-audit.has-warnings {
 		color: var(--color-near-limit);
-	}
-
-	.dock-calculate {
-		padding: var(--spacing-md);
 	}
 
 	.dock-results {
