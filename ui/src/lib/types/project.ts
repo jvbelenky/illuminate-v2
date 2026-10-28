@@ -605,8 +605,8 @@ export interface LampSelectionOptions {
 
 // Centralized default values - use these instead of hardcoding
 export const ROOM_DEFAULTS = {
-  x: 4,
-  y: 6,
+  x: 6,
+  y: 4,
   z: 2.7,
   shape: 'rectangle' as const,
   standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' as const,
