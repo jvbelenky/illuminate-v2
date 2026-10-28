@@ -28,7 +28,6 @@
 	import DockArea from '$lib/workspace/DockArea.svelte';
 	import ViewHost from '$lib/workspace/ViewHost.svelte';
 	import MainViewControls from '$lib/workspace/MainViewControls.svelte';
-	import UnitsSelect from '$lib/workspace/UnitsSelect.svelte';
 	import { cancelPickOffMain, followPickMode } from '$lib/workspace/viewDemands';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
@@ -1151,12 +1150,8 @@
 
 	{#snippet view3d(mini: boolean)}
 		<div class="viewer-host">
-			<RoomViewer {mini} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} unitsSelect={roomUnits} />
+			<RoomViewer {mini} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 		</div>
-	{/snippet}
-
-	{#snippet roomUnits()}
-		<UnitsSelect units={$userSettings.units} onchange={plan.handleUnitsChange} />
 	{/snippet}
 
 	{#snippet mobileView2d()}{@render view2d(false)}{/snippet}
