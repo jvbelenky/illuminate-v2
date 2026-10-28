@@ -679,6 +679,9 @@ button:disabled {
 :root, [data-theme] {
   --color-btn-fill: color-mix(in srgb, var(--color-text) 14%, var(--color-bg-tertiary));
   --color-btn-fill-hover: color-mix(in srgb, var(--color-text) 22%, var(--color-bg-tertiary));
+  /* For buttons on tinted panels (the lamp editor): a stronger fill than the shared one */
+  --color-btn-fill-raised: color-mix(in srgb, var(--color-text) 30%, var(--color-bg-tertiary));
+  --color-btn-fill-raised-hover: color-mix(in srgb, var(--color-text) 38%, var(--color-bg-tertiary));
 }
 
 button.secondary {

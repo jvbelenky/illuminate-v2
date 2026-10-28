@@ -769,6 +769,14 @@
 		gap: var(--spacing-xs);
 	}
 
+	.select-with-button button.secondary {
+		background: var(--color-btn-fill-raised);
+		border-color: transparent;
+	}
+	.select-with-button button.secondary:hover:not(:disabled) {
+		background: var(--color-btn-fill-raised-hover);
+	}
+
 	.select-with-button select,
 	.select-with-button input {
 		flex: 1;
