@@ -46,7 +46,7 @@ describe('DockArea', () => {
 		expect(ids('left')).toEqual(['editor']);
 		expect(ids('right')).toEqual(['mini', 'results']);
 		expect(screen.getByTestId('main-view')).toBeTruthy();
-		expect(colEl(container, 'left').style.width).toBe('300px');
+		expect(colEl(container, 'left').style.width).toBe('420px');
 	});
 
 	test('minimize hides content and keeps the bar', () => {
@@ -143,11 +143,11 @@ describe('DockArea', () => {
 		ptr('pointermove', window, 380, 200);
 		await tick();
 		// Live while dragging, stored on release
-		expect(colEl(container, 'left').style.width).toBe('380px');
+		expect(colEl(container, 'left').style.width).toBe('500px');
 		expect(onChange).not.toHaveBeenCalled();
 		ptr('pointerup', window, 380, 200);
 		expect(onChange).toHaveBeenCalledTimes(1);
-		expect(onChange.mock.calls[0][0].widths).toEqual({ left: 380 });
+		expect(onChange.mock.calls[0][0].widths).toEqual({ left: 500 });
 		// The right gutter grows its column as it moves left, within the limits
 		ptr('pointerdown', right, 900, 200);
 		ptr('pointermove', window, 100, 200);
@@ -171,7 +171,7 @@ describe('DockArea', () => {
 		const { container } = render(Host, base({ onChange }));
 		const left = container.querySelector('.dock-gutter[data-column=left]') as HTMLElement;
 		await fireEvent.keyDown(left, { key: 'ArrowRight' });
-		expect(onChange.mock.calls[0][0].widths).toEqual({ left: 316 });
+		expect(onChange.mock.calls[0][0].widths).toEqual({ left: 436 });
 	});
 
 	test('an empty column has no gutter', () => {

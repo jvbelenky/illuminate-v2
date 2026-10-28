@@ -19,7 +19,7 @@ export interface DockLayout {
 
 /** How narrow and wide a column can be dragged (px). */
 export const COLUMN_LIMITS: Record<DockColumn, { min: number; max: number }> = {
-  left: { min: 280, max: 550 },
+  left: { min: 320, max: 550 },
   right: { min: 260, max: 600 },
 };
 
@@ -114,6 +114,7 @@ export function withMain(l: DockLayout, view: MainView): DockLayout {
 }
 
 export function panelWidth(id: DockPanelId, resultsWide: boolean): number {
+  if (id === 'editor') return 420;
   return id === 'results' && resultsWide ? 420 : 300;
 }
 

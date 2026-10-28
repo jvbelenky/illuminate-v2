@@ -45,13 +45,13 @@ describe('dockLayout', () => {
     expect(swapMain(swapMain(DEFAULT_DOCK))).toEqual(DEFAULT_DOCK);
   });
 
-  it('column widths default to the panels in them (left 300; right 300, 420 once results exist)', () => {
-    expect(columnWidth(DEFAULT_DOCK, 'left', false)).toBe(300);
+  it('column widths default to the panels in them (left 420; right 300, 420 once results exist)', () => {
+    expect(columnWidth(DEFAULT_DOCK, 'left', false)).toBe(420);
     expect(columnWidth(DEFAULT_DOCK, 'right', false)).toBe(300);
     expect(columnWidth(DEFAULT_DOCK, 'right', true)).toBe(420);
     const both = movePanel(DEFAULT_DOCK, 'results', 'left', 1);
     expect(columnWidth(both, 'left', true)).toBe(420);
-    expect(columnWidth(both, 'left', false)).toBe(300);
+    expect(columnWidth(both, 'left', false)).toBe(420);
     expect(panelWidth('mini', true)).toBe(300);
   });
 
@@ -62,10 +62,10 @@ describe('dockLayout', () => {
   });
 
   it('a dragged width is clamped to the column limits', () => {
-    expect(COLUMN_LIMITS.left).toEqual({ min: 280, max: 550 });
+    expect(COLUMN_LIMITS.left).toEqual({ min: 320, max: 550 });
     expect(COLUMN_LIMITS.right).toEqual({ min: 260, max: 600 });
     expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'left', 420.4), 'left', false)).toBe(420);
-    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'left', 100), 'left', false)).toBe(280);
+    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'left', 100), 'left', false)).toBe(320);
     expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'left', 9999), 'left', false)).toBe(550);
     expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'right', 100), 'right', false)).toBe(260);
     expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'right', 9999), 'right', false)).toBe(600);
@@ -77,7 +77,7 @@ describe('dockLayout', () => {
     expect(columnWidth(l, 'right', false)).toBe(350);
     expect(columnWidth(l, 'right', true)).toBe(350);
     // The other column still follows its panels
-    expect(columnWidth(l, 'left', true)).toBe(300);
+    expect(columnWidth(l, 'left', true)).toBe(420);
     // Survives a reload, moves, minimizing and a swap
     expect(sanitizeDock(JSON.parse(JSON.stringify(l)))).toEqual(l);
     expect(movePanel(l, 'results', 'right', 0).widths).toEqual({ right: 350 });
@@ -99,7 +99,7 @@ describe('dockLayout', () => {
     expect(sanitizeDock({ ...base, widths: 'wide' })).toEqual(DEFAULT_DOCK);
     expect(sanitizeDock({ ...base, widths: { left: 'x', right: NaN } })).toEqual(DEFAULT_DOCK);
     expect(sanitizeDock({ ...base, widths: { left: null, right: Infinity } })).toEqual(DEFAULT_DOCK);
-    expect(sanitizeDock({ ...base, widths: { left: 10, right: 5000, middle: 300 } }).widths).toEqual({ left: 280, right: 600 });
+    expect(sanitizeDock({ ...base, widths: { left: 10, right: 5000, middle: 300 } }).widths).toEqual({ left: 320, right: 600 });
     expect(sanitizeDock({ ...base, widths: { left: 333.6 } }).widths).toEqual({ left: 334 });
   });
 
