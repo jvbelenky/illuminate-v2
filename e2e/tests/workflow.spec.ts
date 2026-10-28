@@ -113,7 +113,7 @@ test.describe.serial('Comprehensive workflow', () => {
 
     // --- Toggles ---
     await openLampFold(page, 'Display');
-    const showLabel = lampEditor(page).getByLabel('Show label');
+    const showLabel = lampEditor(page).getByLabel('Show label in 3D');
     await showLabel.check();
     await expect(showLabel).toBeChecked();
 

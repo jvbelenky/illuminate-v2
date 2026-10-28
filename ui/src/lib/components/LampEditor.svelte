@@ -676,7 +676,7 @@
 				<div class="display-section">
 					<span class="display-head">3D</span>
 					<label class="ep-check">
-						<input type="checkbox" checked={lamp.show_label ?? false} onchange={(e) => update({ show_label: e.currentTarget.checked })} />
+						<input type="checkbox" aria-label="Show label in 3D" checked={lamp.show_label ?? false} onchange={(e) => update({ show_label: e.currentTarget.checked })} />
 						<span>Show label</span>
 					</label>
 					<label class="ep-check">

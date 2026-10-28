@@ -55,9 +55,11 @@ export async function addZone(page: Page, type: 'plane' | 'volume' | 'point' = '
 
 /** Set the open plane's Calculation by its title (e.g. 'Fluence Rate'). */
 export async function setCalcMode(page: Page, mode: string): Promise<void> {
-  const select = zoneEditor(page).getByLabel('Calculation');
-  await select.selectOption({ label: mode });
-  await expect(select.locator('option:checked')).toHaveText(mode);
+  const group = zoneEditor(page).getByRole('group', { name: 'Calculation type' });
+  const summary = group.locator('.calc-summary');
+  if ((await summary.getAttribute('aria-expanded')) !== 'true') await summary.click();
+  await group.locator('.calc-option', { has: page.locator('.calc-option-title', { hasText: new RegExp(`^${mode.replace(/[()]/g, '\\$&')}$`) }) }).click();
+  await expect(summary.locator('.calc-summary-title')).toHaveText(mode);
 }
 
 /** Count the zones the user made (read from the store, so any step can ask). */
