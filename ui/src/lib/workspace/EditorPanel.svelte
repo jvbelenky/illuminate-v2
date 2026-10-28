@@ -162,12 +162,15 @@
 	.editor-done:hover {
 		background: var(--color-primary-hover);
 	}
+	/* The tabs run edge to edge on top of the card, whose sides are the panel's own border.
+	   The row draws the line under the tabs; the open tab covers it and joins the body. */
 	.editor-stages {
 		display: flex;
 		gap: 4px;
-		padding: 10px 10px 0;
+		padding: 10px 0 0;
+		background: linear-gradient(var(--color-border), var(--color-border)) bottom / 100% 1px no-repeat;
 	}
-	/* Number and label on one line at every width; the open tab runs into the card body */
+	/* Number and label on one line at every width */
 	.editor-stage {
 		flex: 1 1 0;
 		min-width: 0;
@@ -177,13 +180,20 @@
 		gap: 6px;
 		padding: 6px 6px;
 		border: 1px solid var(--color-border);
-		border-bottom: 0;
 		border-radius: 8px 8px 0 0;
 		background: var(--color-btn-fill);
 		color: var(--color-text-muted);
 		font-size: var(--font-size-sm);
 		line-height: 1.2;
 		white-space: nowrap;
+	}
+	.editor-stage:first-child {
+		border-left: 0;
+		border-top-left-radius: 0;
+	}
+	.editor-stage:last-child {
+		border-right: 0;
+		border-top-right-radius: 0;
 	}
 	.editor-stage:hover:not(.on) {
 		background: var(--color-btn-fill-hover);
@@ -217,9 +227,7 @@
 		color: var(--color-success);
 	}
 	.editor-stage.on {
-		position: relative;
-		z-index: 1;
-		margin-bottom: -1px;
+		border-bottom: 0;
 		background: var(--color-bg-tertiary);
 		color: var(--color-text);
 		font-weight: 600;
@@ -227,14 +235,10 @@
 	@container (max-width: 359px) {
 		.editor-stages {
 			gap: 3px;
-			padding: 10px 4px 0;
 		}
 		.editor-stage {
 			gap: 4px;
 			padding: 6px 3px;
-		}
-		.editor-panel .editor-nav {
-			margin: 0 4px 4px;
 		}
 	}
 	.editor-stagebody {
@@ -242,10 +246,7 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
-		margin: 0 10px;
 		background: var(--color-bg-tertiary);
-		border: 1px solid var(--color-border);
-		border-bottom: 0;
 	}
 	.editor-parts {
 		display: flex;
@@ -287,20 +288,15 @@
 	}
 	@container (max-width: 359px) {
 		.editor-body {
-			padding: 12px 4px;
-		}
-		.editor-stagebody {
-			margin: 0 4px;
+			padding: 12px 6px;
 		}
 	}
 	.editor-nav {
 		display: flex;
 		justify-content: space-between;
-		margin: 0 10px 10px;
 		padding: 10px;
 		background: var(--color-bg-tertiary);
-		border: 1px solid var(--color-border);
-		border-radius: 0 0 8px 8px;
+		border-top: 1px solid var(--color-border);
 	}
 	.editor-back,
 	.editor-next:not(.editor-done) {
