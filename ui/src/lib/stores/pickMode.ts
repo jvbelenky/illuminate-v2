@@ -27,6 +27,8 @@ export type PickRequest = {
   lockedAxis?: LockedAxis;
   /** Value to use for the locked axis */
   lockedValue?: number;
+  /** The lamp a lamp_position / lamp_aim pick is for (the 2D plan picks for it). */
+  lampId?: string;
 } | null;
 
 export type PickResult = {

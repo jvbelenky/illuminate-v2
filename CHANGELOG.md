@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Lamp editor: the Position and Aim pick buttons pick on the 2D plan when it is the main view (floor or wall) instead of switching to 3D, and sit level with their inputs; a ⟳ 90° button beside the stick boxes turns the lamp a quarter turn about its axis; Display has 2D and 3D sections, each with its own Show photometric web and a Web size slider (0.25×–3×); the dimmer takes up to 1000% (slider to 200%)
 - The 2D view projects each lamp's photometric web in its wavelength colour: seen from above on the floor and ceiling, face-on on a wall for lamps in front of it
 - Room › Floorplan: Width and Length stay editable for a polygon room; changing one squashes or stretches the outline along that axis, and wall lamps, planes and fit zones follow
 - Calculate and Auto have their own dock panel (above Results by default) that moves between columns and minimizes to a compact Calculate button; the Results panel keeps one width whether or not results exist

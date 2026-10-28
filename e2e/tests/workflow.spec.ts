@@ -117,7 +117,7 @@ test.describe.serial('Comprehensive workflow', () => {
     await showLabel.check();
     await expect(showLabel).toBeChecked();
 
-    const showWeb = lampEditor(page).getByLabel('Show photometric web');
+    const showWeb = lampEditor(page).getByLabel('Show photometric web in 3D');
     const webChecked = await showWeb.isChecked();
     if (webChecked) {
       await showWeb.uncheck();

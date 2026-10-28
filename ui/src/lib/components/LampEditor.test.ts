@@ -46,7 +46,8 @@ import { getLampOptions, placeSessionLamp } from '$lib/api/client';
 import { customLamps } from '$lib/stores/lampLibrary';
 import { project } from '$lib/stores/project';
 import { photometricWebSource } from './photometricWeb';
-import type { Writable } from 'svelte/store';
+import { get, type Writable } from 'svelte/store';
+import { pickMode } from '$lib/stores/pickMode';
 
 const customLampsW = customLamps as unknown as Writable<unknown[]>;
 
@@ -473,7 +474,8 @@ describe('LampEditor', () => {
         const range = container.querySelector('.dimmer input[type="range"]') as HTMLInputElement;
         const box = container.querySelector('.dimmer input[type="number"]') as HTMLInputElement;
         expect(range.min).toBe('0');
-        expect(range.max).toBe('100');
+        expect(range.max).toBe('200');
+        expect(box.max).toBe('1000');
         expect(range.value).toBe('80');
         expect(box.value).toBe('80');
 
@@ -481,12 +483,109 @@ describe('LampEditor', () => {
         expect(updateSpy).toHaveBeenCalledTimes(1);
         expect(updateSpy).toHaveBeenCalledWith('lamp-1', { scaling_factor: 0.5 });
 
-        // The number box clamps to 0-100
+        // The number box goes past 100%, up to 1000%
         updateSpy.mockClear();
         await fireEvent.change(box, { target: { value: '150' } });
-        expect(updateSpy).toHaveBeenCalledWith('lamp-1', { scaling_factor: 1 });
+        expect(updateSpy).toHaveBeenCalledWith('lamp-1', { scaling_factor: 1.5 });
+        await fireEvent.change(box, { target: { value: '1500' } });
+        expect(updateSpy).toHaveBeenCalledWith('lamp-1', { scaling_factor: 10 });
         await fireEvent.change(box, { target: { value: '-5' } });
         expect(updateSpy).toHaveBeenCalledWith('lamp-1', { scaling_factor: 0 });
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('a dimmer above 200% leaves the slider at its max', async () => {
+      const { container } = renderEditor({ ...mockLamp, scaling_factor: 3 });
+      await screen.findByText('Dimmer');
+      const range = container.querySelector('.dimmer input[type="range"]') as HTMLInputElement;
+      const box = container.querySelector('.dimmer input[type="number"]') as HTMLInputElement;
+      expect(box.value).toBe('300');
+      expect(range.value).toBe('200');
+    });
+
+    it('the pick buttons ask for a pick for this lamp, and press again to cancel', async () => {
+      const { container } = renderEditor();
+      await openFold('Geometry');
+      const pos = container.querySelector('button.pick-position') as HTMLButtonElement;
+      const aim = container.querySelector('button.pick-aim') as HTMLButtonElement;
+      await fireEvent.click(pos);
+      expect(get(pickMode)).toMatchObject({ type: 'lamp_position', lampId: 'lamp-1' });
+      await fireEvent.click(aim);
+      expect(get(pickMode)).toMatchObject({ type: 'lamp_aim', lampId: 'lamp-1' });
+      await fireEvent.click(aim);
+      expect(get(pickMode)).toBeNull();
+      // Each sits in its own cell at the end of its row, under a label-high gap, so it is level with the inputs
+      const cell = pos.parentElement!;
+      expect(cell.classList.contains('pick-cell')).toBe(true);
+      expect(cell.parentElement?.classList.contains('vector-row')).toBe(true);
+      expect(cell.firstElementChild?.classList.contains('pick-gap')).toBe(true);
+    });
+
+    it('Rotate 90° sits with the stick boxes and turns the lamp about its axis; four presses come back', async () => {
+      const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+      try {
+        const props = { lamp: { ...mockLamp, angle: 30 }, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() };
+        const { container, rerender } = render(LampEditor, { props });
+        const btn = await screen.findByTitle('Rotate 90° about its axis');
+        expect(btn.closest('.sticks')).toBe(container.querySelector('.sticks'));
+        expect(btn.textContent).toContain('90°');
+        let angle = 30;
+        for (let i = 0; i < 4; i++) {
+          await fireEvent.click(btn);
+          const next = updateSpy.mock.calls.at(-1)![1].angle as number;
+          await rerender({ ...props, lamp: { ...mockLamp, angle: next } });
+          angle = next;
+        }
+        expect(updateSpy).toHaveBeenCalledTimes(4);
+        expect(updateSpy.mock.calls.map((c) => c[1])).toEqual([{ angle: 120 }, { angle: 210 }, { angle: 300 }, { angle: 30 }]);
+        expect(angle).toBe(30);
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('Display has 2D and 3D sections with their own web toggle and web size', async () => {
+      const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+      try {
+        const { container } = renderEditor({ ...mockLamp, web_size_3d: 1.5 });
+        await openFold('Display');
+        const heads = Array.from(container.querySelectorAll('.display-head')).map((h) => h.textContent?.trim());
+        expect(heads).toEqual(['2D', '3D']);
+        const sections = container.querySelectorAll('.display-section');
+        const [d2, d3] = Array.from(sections) as HTMLElement[];
+        // 2D: web toggle and size; 3D: label, web toggle and size
+        expect(d2.textContent).not.toContain('Show label');
+        expect(d3.textContent).toContain('Show label');
+        // Distinct accessible names, the same visible text
+        expect(screen.getByLabelText('Show photometric web in 2D')).toBeTruthy();
+        expect(screen.getByLabelText('Show photometric web in 3D')).toBeTruthy();
+        const web2 = d2.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        expect(web2.checked).toBe(true);
+        await fireEvent.click(web2);
+        expect(updateSpy).toHaveBeenLastCalledWith('lamp-1', { show_photometric_web_2d: false });
+        const web3 = Array.from(d3.querySelectorAll('input[type="checkbox"]')).at(-1) as HTMLInputElement;
+        await fireEvent.click(web3);
+        expect(updateSpy).toHaveBeenLastCalledWith('lamp-1', { show_photometric_web: false });
+
+        const s2 = d2.querySelector('input[type="range"]') as HTMLInputElement;
+        const s3 = d3.querySelector('input[type="range"]') as HTMLInputElement;
+        for (const s of [s2, s3]) {
+          expect(s.min).toBe('0.25');
+          expect(s.max).toBe('3');
+          expect(s.step).toBe('0.05');
+        }
+        expect(s2.value).toBe('1');
+        expect(d2.textContent).toContain('1.0×');
+        expect(d3.textContent).toContain('1.5×');
+        // A drag previews, the release commits once
+        await fireEvent.input(s2, { target: { value: '2.25' } });
+        expect(d2.textContent).toContain('2.25×');
+        await fireEvent.change(s2, { target: { value: '2.25' } });
+        expect(updateSpy).toHaveBeenLastCalledWith('lamp-1', { web_size_2d: 2.25 });
+        await fireEvent.change(s3, { target: { value: '0.5' } });
+        expect(updateSpy).toHaveBeenLastCalledWith('lamp-1', { web_size_3d: 0.5 });
       } finally {
         updateSpy.mockRestore();
       }
@@ -541,8 +640,8 @@ describe('LampEditor', () => {
       expect(container.querySelector('button.pick-aim')).not.toBeNull();
       // Pick buttons sit at the right end of their rows
       const rows = container.querySelectorAll('.vector-row');
-      expect(rows[0].lastElementChild?.classList.contains('pick-position')).toBe(true);
-      expect(rows[1].lastElementChild?.classList.contains('pick-aim')).toBe(true);
+      expect(rows[0].lastElementChild?.querySelector('.pick-position')).not.toBeNull();
+      expect(rows[1].lastElementChild?.querySelector('.pick-aim')).not.toBeNull();
       // Tilt, orientation and rotation are all shown together
       expect(screen.getByLabelText(/^Tilt/)).toBeTruthy();
       expect(screen.getByLabelText(/^Orientation/)).toBeTruthy();
@@ -550,7 +649,7 @@ describe('LampEditor', () => {
 
       await fireEvent.click(display);
       expect(screen.getByText('Show label')).toBeTruthy();
-      expect(screen.getByText('Show photometric web')).toBeTruthy();
+      expect(screen.getAllByText('Show photometric web')).toHaveLength(2);
     });
 
     it('tilt and orientation write the aim point', async () => {

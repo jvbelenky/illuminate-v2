@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { photometricWebSource, photometricWebCacheKey, webLongestSpoke, webDisplayScale } from './photometricWeb';
+import { photometricWebSource, photometricWebCacheKey, webLongestSpoke, webDisplayScale, webSize } from './photometricWeb';
 import type { LampInstance } from '$lib/types/project';
 
 function lamp(overrides: Partial<LampInstance>): LampInstance {
@@ -126,5 +126,20 @@ describe('webDisplayScale', () => {
   it('never scales up and tolerates a degenerate web or room', () => {
     expect(webDisplayScale(0, room)).toBe(1);
     expect(webDisplayScale(5, { x: 0, y: 4, z: 3 })).toBe(1);
+  });
+});
+
+describe('webSize', () => {
+  it('is the lamp\'s web size, 1 when unset, kept within 0.25 to 3', () => {
+    expect(webSize(undefined)).toBe(1);
+    expect(webSize(1.5)).toBe(1.5);
+    expect(webSize(0.1)).toBe(0.25);
+    expect(webSize(9)).toBe(3);
+    expect(webSize(NaN)).toBe(1);
+  });
+  it('multiplies the drawn size, so the shape is unchanged', () => {
+    const room = { x: 6, y: 4, z: 2.7 };
+    expect(webDisplayScale(1, room) * webSize(2)).toBe(2);
+    expect(webDisplayScale(40, room) * webSize(0.5)).toBeCloseTo(webDisplayScale(40, room) / 2);
   });
 });

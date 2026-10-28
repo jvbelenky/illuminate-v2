@@ -726,6 +726,80 @@ describe('Place and Aim on the plan', () => {
     expect(actions.updateZone).not.toHaveBeenCalled();
   });
 
+  describe('a lamp Position or Aim pick from the lamp editor', () => {
+    // The harness lamp stands at (2, 2, 2.5), aimed straight down at (2, 2, 0)
+    function lampSetup(over: Partial<LampInstance> = {}) {
+      const r = make({ lamps: [{ ...lamp, ...over }] });
+      r.ctl.canvas = canvas();
+      return r;
+    }
+
+    test('on the floor a click moves x and y, keeps z, and carries the aim along, in one update', () => {
+      const { ctl, actions } = lampSetup({ aimx: 3, aimy: 2.5 });
+      ctl.syncPointPick({ type: 'lamp_position', lampId: 'lamp-1' });
+      expect(ctl.pointPick).toBe('lamp_position');
+      expect(ctl.tool).toBe('custom');
+      ctl.onCustomClick(click(4, 1));
+      expect(actions.updateLamp).toHaveBeenCalledTimes(1);
+      expect(actions.updateLamp).toHaveBeenCalledWith('lamp-1', { x: 4, y: 1, aimx: 5, aimy: 1.5 });
+      expect(ctl.pointPick).toBeNull();
+      expect(ctl.tool).toBe('edit');
+    });
+
+    test('Aim on the floor sets aimx and aimy and keeps aimz', () => {
+      const { ctl, actions } = lampSetup();
+      ctl.syncPointPick({ type: 'lamp_aim', lampId: 'lamp-1' });
+      ctl.onCustomClick(click(5, 3));
+      expect(actions.updateLamp).toHaveBeenCalledWith('lamp-1', { aimx: 5, aimy: 3 });
+    });
+
+    test('on wall:0 a click sets (along, up) at the lamp\'s depth; Aim keeps its own depth', () => {
+      const { ctl, actions } = lampSetup();
+      ctl.setSurface('wall:0');
+      ctl.canvas = canvas();
+      ctl.syncPointPick({ type: 'lamp_position', lampId: 'lamp-1' });
+      // canvas (3, 2) is along 3, up 2; the lamp is 2 in from the wall; the aim moves by the same delta
+      ctl.onCustomClick(click(3, 2));
+      expect(actions.updateLamp).toHaveBeenLastCalledWith('lamp-1', { x: 3, y: 2, z: 2, aimx: 3, aimy: 2, aimz: -0.5 });
+      ctl.syncPointPick({ type: 'lamp_aim', lampId: 'lamp-1' });
+      // canvas (1, 0.5) is along 5, up 0.5; the aim point is 2 in from the wall
+      ctl.onCustomClick(click(1, 0.5));
+      expect(actions.updateLamp).toHaveBeenLastCalledWith('lamp-1', { aimx: 5, aimy: 2, aimz: 0.5 });
+    });
+
+    test('a lamp stuck to the wall showing stays on it, clamped to its length', () => {
+      const { ctl, actions } = lampSetup({ y: 0.25, aimy: 0.25, stick_wall: true, wall_index: 0, wall_t: 2, wall_offset: 0.25 });
+      ctl.setSurface('wall:0');
+      ctl.canvas = canvas();
+      ctl.syncPointPick({ type: 'lamp_position', lampId: 'lamp-1' });
+      // canvas x -1 is along 7, past the wall's end at 6
+      ctl.onCustomClick(click(-1, 2));
+      expect(actions.updateLamp).toHaveBeenCalledWith('lamp-1', expect.objectContaining({ x: 6, y: 0.25, z: 2, stick_wall: true, wall_t: expect.any(Number) }));
+    });
+
+    test('without a lamp id it picks for the selected lamp; with neither nothing changes', () => {
+      const { ctl, actions } = lampSetup();
+      ctl.syncPointPick({ type: 'lamp_aim' });
+      ctl.onCustomClick(click(1, 1));
+      expect(actions.updateLamp).not.toHaveBeenCalled();
+      ctl.setContext('lamps');
+      ctl.selectLamp('lamp-1');
+      ctl.syncPointPick({ type: 'lamp_aim' });
+      ctl.onCustomClick(click(1, 1));
+      expect(actions.updateLamp).toHaveBeenCalledWith('lamp-1', { aimx: 1, aimy: 1 });
+    });
+
+    test('Escape cancels the pick and the request, without an update', () => {
+      const { ctl, actions } = lampSetup();
+      pickMode.set({ type: 'lamp_position', lampId: 'lamp-1' });
+      ctl.syncPointPick(get(pickMode));
+      expect(ctl.onEscapeKey()).toBe(true);
+      expect(ctl.pointPick).toBeNull();
+      expect(get(pickMode)).toBeNull();
+      expect(actions.updateLamp).not.toHaveBeenCalled();
+    });
+  });
+
   test('other pick types, or none, end it; the ghost follows the pointer', () => {
     const { ctl } = setup();
     ctl.syncPointPick({ type: 'point_position' });
