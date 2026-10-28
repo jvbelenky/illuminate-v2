@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Calculate and Auto have their own dock panel (above Results by default) that moves between columns and minimizes to a compact Calculate button; the Results panel keeps one width whether or not results exist
 - Zoom out (−) and Zoom in (+) buttons in the 2D view tools, also on the - and + keys; the units dropdown shows full unit names
 - The 2D view has a Floor · Ceiling · Walls switcher; [ and ] step through surfaces, and opening a plane switches to its surface
 - Walls in the 2D view show the wall face-on, with lamps and structures in front of it projected and faded by distance, and the neighbouring walls named at each end
@@ -42,6 +43,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Undo and redo for scene edits: Ctrl+Z (⌘Z) undoes the last change to the room, lamps, calculation zones, structures, reflectance or the floor-plan image, wherever it was made, and Ctrl+Shift+Z or Ctrl+Y redoes it. The Edit menu shows what will be undone. A deleted lamp, zone or obstacle comes back as it was (a lamp with an uploaded IES file asks for the file again). Text fields keep their own typing undo; loading a project, New and changing units start a fresh history
 
 ### Changed
+- The lamp editor's placement buttons match the Add lamp card and have space below the Stick toggles; Add lamp and Add zone icons are larger; secondary buttons, including the editor footer's back and next, use a fill that stands out from the panel behind them
 - Selection highlight is sky cyan instead of orange, in the 3D view, the floor plan and the editor rows
 - Add lamp and Add zone cards: neutral outline, filled buttons with readable 13 px labels and calm pictograms
 - Add lamp and Add zone cards: neutral outline, filled buttons with readable 13 px labels and calm pictograms

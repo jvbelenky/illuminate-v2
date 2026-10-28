@@ -217,12 +217,12 @@
 		padding: 6px 12px;
 		font-size: var(--font-size-sm);
 		font-weight: 500;
-		background: color-mix(in srgb, var(--color-text) 14%, var(--color-bg-tertiary));
+		background: var(--color-btn-fill);
 		border: 1px solid transparent;
 		border-radius: var(--radius-md);
 	}
 	.plan-actions .plan-btn:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--color-text) 22%, var(--color-bg-tertiary));
+		background: var(--color-btn-fill-hover);
 		border-color: transparent;
 	}
 	.reference-panel {

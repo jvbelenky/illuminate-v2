@@ -675,14 +675,20 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Filled secondary buttons: the fill is always visibly off the surface they sit on (panel, card or tertiary). */
+:root, [data-theme] {
+  --color-btn-fill: color-mix(in srgb, var(--color-text) 14%, var(--color-bg-tertiary));
+  --color-btn-fill-hover: color-mix(in srgb, var(--color-text) 22%, var(--color-bg-tertiary));
+}
+
 button.secondary {
-  background: var(--color-bg-tertiary);
+  background: var(--color-btn-fill);
   color: var(--color-text);
   border: 1px solid var(--color-border);
 }
 
 button.secondary:hover {
-  background: var(--color-border);
+  background: var(--color-btn-fill-hover);
   color: var(--color-text);
   border-color: var(--color-text-muted);
 }
