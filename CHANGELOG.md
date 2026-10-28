@@ -11,6 +11,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The server no longer slows down for everyone when a few people run reflectance calculations at once. Two calculations run at a time (was four) and each may use up to 600 MB (was 1.5 GB), sized to the host rather than to a larger one; a finished calculation keeps its results but not its intermediate form factors (most of a reflectance calculation's memory), memory a calculation or an expired session frees is handed back to the operating system instead of staying resident, and the container is capped at 3 GB so it can never push the host into swap
 
 ### Added
+- Edit strip tools are one-shot: Move grid, Move, Aim, Move image and Edit corners light up when clicked, do one drag on the 2D view, then switch off (click again or Escape cancels); while armed the canvas shows the tool's cursor (move or crosshair) instead of Pan or Zoom. Draw lights up while drawing and a second click cancels it
 - Editor panel: step numbers sit inline before Room, Lamps and Zones, the red line under the tabs is gone, and the part pills (Floorplan, Structures, Ceiling, Reflectance) are roomier with a filled active state instead of a red outline
 - The default room is 6 m wide (x) and 4 m long (y), wider than it is long; saved projects and examples are unchanged
 - Default layout: the Editor column is 420 px, Results 400 px, and the docked mini view is a short 25% of the column (at least 150 px) instead of 4:3

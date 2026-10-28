@@ -101,8 +101,8 @@ test.describe('Objects (obstacles)', () => {
     await addObject(page);
     await setObjectField(page, 'width', 1.5);
     // Put it at the room centre, where the default view looks
-    await setObjectField(page, 'x', 2);
-    await setObjectField(page, 'y', 3);
+    await setObjectField(page, 'x', 3);
+    await setObjectField(page, 'y', 2);
     // Close the editor so the click-to-select can be observed
     await closeObjectEditor(page);
     await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(0);

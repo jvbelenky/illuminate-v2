@@ -27,9 +27,9 @@ test.describe('Lamps on the plan', () => {
     await placements.getByRole('button', { name: 'Corner' }).click();
     await expect(lampRows).toHaveCount(2);
     await waitForApiIdle(page);
-    // Both came with the fixture; Move is on
+    // Both came with the fixture; Move is offered, not armed
     await expect(lampRows.nth(1).locator('.subtitle')).not.toHaveText('');
-    await expect(planTool(page, 'Move')).toHaveAttribute('aria-pressed', 'true');
+    await expect(planTool(page, 'Move')).toHaveAttribute('aria-pressed', 'false');
     // The last one added is selected, with its full editor in its row
     await expect(lampEditor(page).locator('select#preset')).toBeVisible();
 
