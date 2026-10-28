@@ -271,16 +271,13 @@ export function withMain(l: DockLayout, view: MainView): DockLayout {
 /** The window width default widths assume when none is known (px). */
 export const DEFAULT_AREA_WIDTH = 1920;
 
-/** Results' default column width (px): fixed, so Results does not resize when it fills. */
-const RESULTS_WIDTH = 420;
-
 /**
  * A panel's default column width (px) in a window `areaWidth` wide: the
- * editor 22% of it (280–550), Results a fixed 420, the mini view 300.
+ * editor 22% of it (280–550), Results 24% of it (260–420), the mini view 300.
  */
 export function panelWidth(id: DockPanelId, areaWidth = DEFAULT_AREA_WIDTH): number {
   if (id === 'editor') return Math.round(clamp(0.22 * areaWidth, 280, 550));
-  if (id === 'results') return RESULTS_WIDTH;
+  if (id === 'results') return Math.round(clamp(0.24 * areaWidth, 260, 420));
   return 300;
 }
 
