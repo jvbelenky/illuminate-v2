@@ -15,6 +15,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - One main view with a 2D | 3D switch; the other view, the editor and results are dockable panels: drag them by their bar to either side, minimize them, and swap views from the mini view. View › Reset panel layout restores the default.
 - Main view controls are icons: view and surface top-left, Calculate top-right, edit tools bottom-left (also in 3D), units and view tools bottom-right. Side panels can be resized again.
 - Standard zones start hidden in the views; they still calculate.
+- Summary: standard zones fold away under "Standard zones enabled" (shown instead of None); open it to list them, and click one to edit it in the Zones step.
 - Plane editor: a Surface dropdown moves a plane between the floor, the ceiling and the walls; Fit to room is a switch that drawing turns off; Draw outline; Geometry shows x1–x2 / y1–y2 ranges.
 - Planes parallel to a wall (including old XZ and YZ planes) are now recognised as wall planes: the project reports the wall, the distance from it and which way the plane faces
 - A point's Place and Aim pick on the 2D view when it is the main view (a click on the floor, or on a wall at the point's depth); Escape cancels. Fit leaves room for the corner controls

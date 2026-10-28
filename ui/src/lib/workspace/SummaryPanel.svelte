@@ -21,9 +21,11 @@
 		onEdit: (stage: EditorStage, part?: RoomPart) => void;
 		/** The pointer entered or left an item's row. */
 		onHover?: (kind: 'lamps' | 'zones' | 'objects', id: string, hovered: boolean) => void;
+		/** A standard zone's row was clicked: open the Zones step with it selected. */
+		onSelectZone?: (id: string) => void;
 	}
 
-	let { scene, actions, onEdit, onHover = () => {} }: Props = $props();
+	let { scene, actions, onEdit, onHover = () => {}, onSelectZone = () => {} }: Props = $props();
 
 	const SECTIONS: { edit: string; label: string }[] = [
 		{ edit: 'room:floorplan', label: 'Room' },
@@ -60,7 +62,9 @@
 		return `On · R ${refl(lo) === refl(hi) ? refl(lo) : `${refl(lo)}–${refl(hi)}`}`;
 	});
 
-	const zones = $derived(scene.zones.filter((z) => !z.isStandard || scene.room.useStandardZones));
+	const zones = $derived(scene.zones.filter((z) => !z.isStandard));
+	const standardZones = $derived(scene.room.useStandardZones ? scene.zones.filter((z) => z.isStandard) : []);
+	let standardOpen = $state(false);
 
 	function fixtureName(l: LampInstance): string {
 		const key = fixtureKeyOf(l);
@@ -134,7 +138,7 @@
 					{/each}
 				</div>
 			{:else}
-				{#if zones.length === 0}<span class="ep-chip">None</span>{/if}
+				{#if zones.length === 0 && !scene.room.useStandardZones}<span class="ep-chip">None</span>{/if}
 				<div class="ep-list">
 					{#each zones as z (z.id)}
 						<ItemRow
@@ -154,6 +158,33 @@
 						</ItemRow>
 					{/each}
 				</div>
+				{#if scene.room.useStandardZones}
+					<button type="button" class="ep-disc std-disc" aria-expanded={standardOpen} onclick={() => (standardOpen = !standardOpen)}>
+						<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
+						Standard zones enabled
+					</button>
+					{#if standardOpen}
+						<div class="ep-list">
+							{#each standardZones as z (z.id)}
+								<ItemRow
+									id={z.id}
+									name={z.name || z.id}
+									open={false}
+									renamable={false}
+									hidden={scene.hidden.zones.has(z.id)}
+									enabled={z.enabled !== false}
+									onToggleOpen={() => onSelectZone(z.id)}
+									onRename={() => {}}
+									onToggleHidden={() => actions.setHidden('zones', z.id, !scene.hidden.zones.has(z.id))}
+									onToggleEnabled={() => actions.updateZone(z.id, { enabled: !(z.enabled !== false) })}
+									onHover={(on) => onHover('zones', z.id, on)}
+								>
+									{#snippet lead()}<CalcTypeIllustration type={iconOf(z)} size={16} />{/snippet}
+								</ItemRow>
+							{/each}
+						</div>
+					{/if}
+				{/if}
 			{/if}
 		</section>
 	{/each}
@@ -200,6 +231,15 @@
 	}
 	.summary-section:active {
 		transform: translateY(1px);
+	}
+	.std-disc {
+		border-top: 0;
+		padding: 2px 0;
+		margin-top: 0;
+		width: auto;
+		align-self: flex-start;
+		text-transform: none;
+		letter-spacing: normal;
 	}
 	.dot {
 		width: 9px;
