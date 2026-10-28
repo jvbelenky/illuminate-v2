@@ -2,7 +2,7 @@
 	import { buildExploreZoneOptions } from '$lib/utils/exploreZones';
 	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, plotSettings, ceilingLayout } from '$lib/stores/project';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
-	import { refreshPositionWarnings } from '$lib/stores/audit';
+	import { auditProblems, refreshPositionWarnings } from '$lib/stores/audit';
 	import StartChooserModal, { type StartChoice } from '$lib/components/StartChooserModal.svelte';
 	import { roomVertices } from '$lib/utils/roomGeometry';
 	import { zoneHasFootprint, zoneFootprint, footprintGeometry } from '$lib/utils/zoneFootprint';
@@ -1125,7 +1125,7 @@
 	{#snippet editorColumn()}
 		{#if $workspaceUi.mode === 'summary'}
 			<div class="summary-host">
-				<SummaryPanel scene={planScene} actions={planActions} onEdit={editFromSummary} onSelectZone={(id) => openStep('zones', undefined, () => plan.selectZone(id))} onHover={plan.hoverItem} />
+				<SummaryPanel scene={planScene} actions={planActions} onEdit={editFromSummary} onSelectZone={(id) => openStep('zones', undefined, () => plan.selectZone(id))} onSelectLamp={(id) => openStep('lamps', undefined, () => plan.selectLamp(id))} onSelectObject={(id) => openStep('room', 'structures', () => plan.selectObstacle(id))} onHover={plan.hoverItem} />
 			</div>
 		{:else}
 			<div class="editor-host" data-plan-scope>
@@ -1161,10 +1161,20 @@
 		{#if id === 'editor'}
 			<div class="dock-editor">{@render editorColumn()}</div>
 		{:else if id === 'results'}
-			<div class="dock-results">{@render resultsContent()}</div>
+			<div class="dock-results">{@render resultsContent(false)}</div>
 		{:else}
 			<div class="mini-anchor" bind:this={miniAnchor}></div>
 		{/if}
+	{/snippet}
+
+	{#snippet dockResultsTools()}
+		<button type="button" class="dock-audit" class:has-warnings={$auditProblems.length > 0} aria-label="Design Audit" title="Design Audit" onclick={() => openOrRestore('Design Audit', () => showAuditModal = true)}>
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+		</button>
+	{/snippet}
+
+	{#snippet dockCalculate(compact: boolean)}
+		<CalculateButton layout={compact ? 'bar' : 'panel'} />
 	{/snippet}
 
 	{#snippet dockMain()}
@@ -1172,8 +1182,8 @@
 		<MainViewControls main={dock.main} onSelectMain={showMain} controller={plan} editing={$workspaceUi.mode === 'editor'} />
 	{/snippet}
 
-	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onOpenReport={() => openOrRestore('Generate report', () => showReportModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoGeometryMap} />
+	{#snippet resultsContent(header: boolean)}
+		<ZoneStatsPanel showHeader={header} onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onOpenReport={() => openOrRestore('Generate report', () => showReportModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoGeometryMap} />
 	{/snippet}
 
 	<!-- Main Layout -->
@@ -1196,7 +1206,7 @@
 			<!-- Results panel -->
 			<div class="mobile-panel" class:active={activeMobileTab === 'results'}>
 				<div class="mobile-panel-scroll">
-					{@render resultsContent()}
+					{@render resultsContent(true)}
 				</div>
 			</div>
 
@@ -1236,7 +1246,7 @@
 		</div>
 	{:else}
 		<div class="app-layout desktop">
-			<DockArea layout={dock} resultsWide={!!$results} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} />
+			<DockArea layout={dock} resultsWide={!!$results} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} calculate={dockCalculate} resultsTools={dockResultsTools} />
 			<ViewHost main={dock.main} {mainAnchor} {miniAnchor} miniVisible={!dock.minimized.includes('mini')} {view2d} {view3d} layoutKey={dock} />
 		</div>
 	{/if}
@@ -1473,6 +1483,26 @@
 		height: 100%;
 		display: flex;
 		flex-direction: column;
+	}
+
+	.dock-audit {
+		width: 20px;
+		height: 18px;
+		display: grid;
+		place-items: center;
+		padding: 0;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--color-text-muted);
+		cursor: pointer;
+	}
+	.dock-audit:hover {
+		background: var(--color-bg-input);
+		color: var(--color-text);
+	}
+	.dock-audit.has-warnings {
+		color: var(--color-near-limit);
 	}
 
 	.dock-results {

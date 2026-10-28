@@ -1,9 +1,7 @@
 <script lang="ts">
 	// The controls over the main view, one row per corner, on an 8 px inset:
-	// top-left the 2D | 3D switch and (2D) the surface; top-right Auto and
-	// Calculate; bottom-left the edit strip, also while 3D is main. Units and
+	// top-left the 2D | 3D switch; top-right (2D) the surface; bottom-left the edit strip, also while 3D is main. Units and
 	// the view tools sit bottom-right inside each view (PlanCanvas, RoomViewer).
-	import CalculateButton from '$lib/components/CalculateButton.svelte';
 	import PlanEditStrip from '$lib/plan/PlanEditStrip.svelte';
 	import SurfaceSwitcher from '$lib/plan/SurfaceSwitcher.svelte';
 	import type { PlanController } from '$lib/plan/planController.svelte';
@@ -25,12 +23,11 @@
 <div class="main-view-controls">
 	<div class="corner tl" data-plan-scope>
 		<MainViewBar {main} onSelect={onSelectMain} />
+	</div>
+	<div class="corner tr" data-plan-scope>
 		{#if main === '2d' && editing}
 			<SurfaceSwitcher surface={ctl.surface} surfaces={ctl.surfaces} onSelect={ctl.setSurface} />
 		{/if}
-	</div>
-	<div class="corner tr">
-		<CalculateButton layout="corner" />
 	</div>
 	{#if editing}
 		<div class="corner bl" data-plan-scope>

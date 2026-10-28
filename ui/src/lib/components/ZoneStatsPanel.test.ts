@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
+import { cleanup, render, screen, waitFor, fireEvent } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import ZoneStatsPanel from './ZoneStatsPanel.svelte';
 
@@ -34,9 +34,12 @@ describe('ZoneStatsPanel', () => {
     await tick();
   });
 
-  it('renders the results heading', () => {
-    render(ZoneStatsPanel);
+  it('renders the results heading unless the dock supplies it', () => {
+    const first = render(ZoneStatsPanel);
     expect(screen.getByText('Results')).toBeTruthy();
+    first.unmount();
+    render(ZoneStatsPanel, { showHeader: false });
+    expect(screen.queryByText('Results')).toBeNull();
   });
 
   it('shows empty state when no results', () => {
@@ -53,6 +56,9 @@ describe('ZoneStatsPanel', () => {
   it('renders panel header', () => {
     const { container } = render(ZoneStatsPanel);
     expect(container.querySelector('.panel-header')).toBeTruthy();
+    cleanup();
+    const bare = render(ZoneStatsPanel, { showHeader: false });
+    expect(bare.container.querySelector('.panel-header')).toBeNull();
   });
 
   it('renders stats panel container', () => {
@@ -186,6 +192,19 @@ describe('ZoneStatsPanel — editable units and dose time', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('the Custom Calculation Zones section folds and unfolds, open by default', async () => {
+    await seedCustomZone();
+    render(ZoneStatsPanel);
+    const head = screen.getByRole('button', { name: /Custom Calculation Zones/i });
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('My Zone')).toBeTruthy();
+    await fireEvent.click(head);
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('My Zone')).toBeNull();
+    await fireEvent.click(head);
+    expect(screen.getByText('My Zone')).toBeTruthy();
   });
 
   it('shows a units toggle button in fluence mode', async () => {
@@ -388,6 +407,16 @@ describe('ZoneStatsPanel safety exposure with mixed lamp spectra', () => {
       expect(screen.getByTestId('hours-acgih').textContent).toContain('Indefinite (11.3 h)');
     });
     expect(screen.getByTestId('hours-icnirp').textContent).toContain('1.8 h');
+
+    // The Summary section folds and unfolds, open by default
+    const summaryHead = screen.getByRole('button', { name: /Summary/ });
+    expect(summaryHead.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Generate Report' })).toBeTruthy();
+    await fireEvent.click(summaryHead);
+    expect(summaryHead.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Generate Report' })).toBeNull();
+    await fireEvent.click(summaryHead);
+    expect(screen.getByTestId('hours-acgih')).toBeTruthy();
 
     // The safety table (room standard is ACGIH by default) agrees
     await fireEvent.click(screen.getByText('Photobiological Safety'));

@@ -1,10 +1,15 @@
 <script lang="ts">
 	import DockArea from '../DockArea.svelte';
+	import CalculateButton from '$lib/components/CalculateButton.svelte';
 
-	let props: any = $props();
+	let { withCalculate = false, ...props }: any = $props();
 </script>
 
-<DockArea {...props}>
+<DockArea {...props} calculate={withCalculate ? calc : undefined}>
 	{#snippet panel(id)}<div data-testid={'content-' + id}>{id}</div>{/snippet}
 	{#snippet main()}<div data-testid="main-view">Main</div>{/snippet}
 </DockArea>
+
+{#snippet calc(compact: boolean)}
+	<CalculateButton layout={compact ? 'bar' : 'panel'} />
+{/snippet}

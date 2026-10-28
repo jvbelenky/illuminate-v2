@@ -33,6 +33,8 @@
 
 	interface Props {
 		onShowAudit?: () => void;
+		/** The Results heading and audit button; off in the dock, whose title bar carries both. */
+		showHeader?: boolean;
 		/** Opens the PDF report dialog; without it the button downloads the CSV report. */
 		onOpenReport?: () => void;
 		onLampHover?: (lampId: string | null) => void;
@@ -41,14 +43,14 @@
 		isoGeometryMap?: Record<string, { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }>;
 	}
 
-	let { onShowAudit, onOpenReport, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoGeometryMap = {} }: Props = $props();
+	let { onShowAudit, showHeader = true, onOpenReport, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoGeometryMap = {} }: Props = $props();
 
 	// Inline dose-time editing on the zone result cards (null = nothing being edited)
 	let editingDoseTimeZoneId = $state<string | null>(null);
 
 	// The sections below the Summary start folded; the Summary carries the headline numbers.
-	let sectionOpen = $state({ safety: false, pathogens: false, ozone: false });
-	function toggleSection(key: 'safety' | 'pathogens' | 'ozone') {
+	let sectionOpen = $state({ custom: true, summary: true, safety: false, pathogens: false, ozone: false });
+	function toggleSection(key: 'custom' | 'summary' | 'safety' | 'pathogens' | 'ozone') {
 		sectionOpen = { ...sectionOpen, [key]: !sectionOpen[key] };
 	}
 
@@ -573,6 +575,7 @@ values: result.values as number[][][],
 </script>
 
 <div class="stats-panel">
+	{#if showHeader}
 	<div class="panel-header">
 		<h3>Results</h3>
 		<div class="panel-header-right">
@@ -592,6 +595,7 @@ values: result.values as number[][][],
 			{/if}
 		</div>
 	</div>
+	{/if}
 
 	{#if !$results}
 		<div class="empty-state">
@@ -605,7 +609,11 @@ values: result.values as number[][][],
 		{#if customZones.length > 0}
 			<section class="results-section stale-wrapper">
 				{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
-				<h4 class="section-title">Custom Calculation Zones</h4>
+				<button type="button" class="section-toggle" aria-expanded={sectionOpen.custom} onclick={() => toggleSection('custom')}>
+					<span class="chevron">{sectionOpen.custom ? '▼' : '▶'}</span>
+					<h4 class="section-title">Custom Calculation Zones</h4>
+				</button>
+				{#if sectionOpen.custom}
 
 				{#each customZones as zone (zone.id)}
 					{@const result = getZoneResult(zone.id)}
@@ -695,13 +703,18 @@ values: result.values as number[][][],
 						{/if}
 					</div>
 				{/each}
+				{/if}
 			</section>
 		{/if}
 
 		<!-- Summary Section -->
 		{#if $room.useStandardZones}
 			<section class="results-section">
-				<h4 class="section-title">Summary</h4>
+				<button type="button" class="section-toggle" aria-expanded={sectionOpen.summary} onclick={() => toggleSection('summary')}>
+					<span class="chevron">{sectionOpen.summary ? '▼' : '▶'}</span>
+					<h4 class="section-title">Summary</h4>
+				</button>
+				{#if sectionOpen.summary}
 
 				<!-- Fluence, selectable pathogen, eACH, CADR and inactivation times -->
 				<div class="stale-wrapper">
@@ -725,6 +738,7 @@ values: result.values as number[][][],
 				<button class="export-btn report-btn" onclick={onOpenReport ?? generateReport} disabled={isGeneratingReport}>
 					{isGeneratingReport ? 'Generating...' : 'Generate Report'}
 				</button>
+				{/if}
 			</section>
 		{:else}
 			<section class="results-section">

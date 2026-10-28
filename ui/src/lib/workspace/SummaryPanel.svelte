@@ -23,9 +23,11 @@
 		onHover?: (kind: 'lamps' | 'zones' | 'objects', id: string, hovered: boolean) => void;
 		/** A standard zone's row was clicked: open the Zones step with it selected. */
 		onSelectZone?: (id: string) => void;
+		onSelectLamp?: (id: string) => void;
+		onSelectObject?: (id: string) => void;
 	}
 
-	let { scene, actions, onEdit, onHover = () => {}, onSelectZone = () => {} }: Props = $props();
+	let { scene, actions, onEdit, onHover = () => {}, onSelectZone = () => {}, onSelectLamp = () => {}, onSelectObject = () => {} }: Props = $props();
 
 	const SECTIONS: { edit: string; label: string }[] = [
 		{ edit: 'room:floorplan', label: 'Room' },
@@ -104,7 +106,7 @@
 							renamable={false}
 							hidden={scene.hidden.objects.has(o.id)}
 							enabled={o.enabled !== false}
-							onToggleOpen={() => {}}
+							onToggleOpen={() => onSelectObject(o.id)}
 							onRename={() => {}}
 							onToggleHidden={() => actions.setHidden('objects', o.id, !scene.hidden.objects.has(o.id))}
 							onToggleEnabled={() => actions.updateObstacle(o.id, { enabled: !(o.enabled !== false) })}
@@ -125,7 +127,7 @@
 							renamable={false}
 							hidden={scene.hidden.lamps.has(l.id)}
 							enabled={l.enabled !== false}
-							onToggleOpen={() => {}}
+							onToggleOpen={() => onSelectLamp(l.id)}
 							onRename={() => {}}
 							onToggleHidden={() => actions.setHidden('lamps', l.id, !scene.hidden.lamps.has(l.id))}
 							onToggleEnabled={() => actions.updateLamp(l.id, { enabled: !(l.enabled !== false) })}
@@ -148,7 +150,7 @@
 							renamable={false}
 							hidden={scene.hidden.zones.has(z.id)}
 							enabled={z.enabled !== false}
-							onToggleOpen={() => {}}
+							onToggleOpen={() => onSelectZone(z.id)}
 							onRename={() => {}}
 							onToggleHidden={() => actions.setHidden('zones', z.id, !scene.hidden.zones.has(z.id))}
 							onToggleEnabled={() => actions.updateZone(z.id, { enabled: !(z.enabled !== false) })}

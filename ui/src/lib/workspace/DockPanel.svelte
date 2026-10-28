@@ -10,10 +10,16 @@
 		onToggleMinimized: () => void;
 		onSwap?: () => void;
 		onBarPointerDown: (e: PointerEvent) => void;
+		/** Compact action in the title bar while minimized. */
+		barAction?: Snippet;
+		/** Small icon buttons in the title bar, open or minimized. */
+		tools?: Snippet;
+		/** Pinned above the content while open. */
+		top?: Snippet;
 		children: Snippet;
 	}
 
-	let { id, title, minimized, dragging = false, onToggleMinimized, onSwap, onBarPointerDown, children }: Props =
+	let { id, title, minimized, dragging = false, onToggleMinimized, onSwap, onBarPointerDown, barAction, tools, top, children }: Props =
 		$props();
 </script>
 
@@ -23,6 +29,8 @@
 		<span class="dock-grip" aria-hidden="true">⋮⋮</span>
 		<span class="dock-title">{title}</span>
 		<span class="dock-spacer"></span>
+		{#if minimized && barAction}{@render barAction()}{/if}
+		{#if tools}{@render tools()}{/if}
 		{#if onSwap}
 			<button type="button" class="dock-btn" aria-label="Swap views" onclick={onSwap}>⇄</button>
 		{/if}
@@ -34,6 +42,7 @@
 		>
 	</div>
 	{#if !minimized}
+		{#if top}<div class="dock-top">{@render top()}</div>{/if}
 		<div class="dock-content">{@render children()}</div>
 	{/if}
 </section>
@@ -103,6 +112,10 @@
 	}
 	.dock-btn:hover {
 		background: var(--color-bg-input);
+	}
+	.dock-top {
+		flex: none;
+		padding: var(--spacing-md) var(--spacing-md) 0;
 	}
 	.dock-content {
 		flex: 1;

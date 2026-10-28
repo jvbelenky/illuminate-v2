@@ -35,7 +35,7 @@
 
 				<section class="card">
 					<h3>3. Calculate</h3>
-					<p>Calculate sits at the top right of the 3D view. Results show average fluence, 8-hour skin and eye dose, and whether the design stays within exposure limits.</p>
+					<p>Calculate sits at the top of the Results panel. Results show average fluence, 8-hour skin and eye dose, and whether the design stays within exposure limits.</p>
 				</section>
 
 				<section class="card">

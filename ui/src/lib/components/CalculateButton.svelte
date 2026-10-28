@@ -14,10 +14,11 @@
 		onCalculated?: () => void;
 		/**
 		 * `floating`: compact button for the mobile bar.
-		 * `corner`: the main view's top-right corner: Auto, then a 36 px Calculate.
+		 * `panel`: top of the Results panel: Auto, then a Calculate that fills the row.
+		 * `bar`: compact Calculate for the Results title bar (panel minimized).
 		 * `sidebar`: full-width button with a spelled-out state line underneath.
 		 */
-		layout?: 'floating' | 'corner' | 'sidebar';
+		layout?: 'floating' | 'panel' | 'bar' | 'sidebar';
 	}
 
 	let { onCalculated, layout = 'floating' }: Props = $props();
@@ -116,9 +117,9 @@
 	}
 </script>
 
-{#if layout === 'corner'}
-<div class="calculate-corner">
-	{#if !$isMobile}
+{#if layout === 'panel' || layout === 'bar'}
+<div class="calculate-corner" class:bar={layout === 'bar'}>
+	{#if !$isMobile && layout === 'panel'}
 		<label class="autorecalc-label" title="Recalculate automatically">
 			<input
 				type="checkbox"
@@ -211,6 +212,20 @@
 		align-items: center;
 		gap: 8px;
 		height: 36px;
+	}
+	.calculate-corner .calculate-btn {
+		flex: 1;
+		justify-content: center;
+	}
+	.calculate-corner.bar {
+		height: 20px;
+	}
+	.calculate-corner.bar .calculate-btn {
+		flex: none;
+		height: 20px;
+		padding: 0 8px;
+		gap: 4px;
+		font-size: var(--font-size-xs);
 	}
 	.calculate-corner .autorecalc-label {
 		margin: 0;

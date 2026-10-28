@@ -49,6 +49,21 @@ describe('DockArea', () => {
 		expect(colEl(container, 'left').style.width).toBe('420px');
 	});
 
+	test('Calculate sits at the top of the Results panel, and in its bar when minimized', () => {
+		const open = render(Host, base({ withCalculate: true }));
+		const res = panelEl(open.container, 'results');
+		expect(res.querySelector('.dock-top button.calculate-btn')).not.toBeNull();
+		expect(res.querySelector('.dock-bar button.calculate-btn')).toBeNull();
+		expect(res.querySelector('.dock-top')!.nextElementSibling!.classList.contains('dock-content')).toBe(true);
+		expect(panelEl(open.container, 'editor').querySelector('button.calculate-btn')).toBeNull();
+		open.unmount();
+		const min = render(Host, base({ withCalculate: true, layout: { ...DEFAULT_DOCK, left: ['editor'], right: ['mini', 'results'], minimized: ['results'] } }));
+		const res2 = panelEl(min.container, 'results');
+		expect(res2.querySelector('.dock-bar button.calculate-btn')).not.toBeNull();
+		expect(res2.querySelector('.dock-top')).toBeNull();
+		expect(min.container.querySelectorAll('button.calculate-btn').length).toBe(1);
+	});
+
 	test('minimize hides content and keeps the bar', () => {
 		const { container } = render(Host, base({ layout: { ...DEFAULT_DOCK, minimized: ['results'] } }));
 		expect(screen.queryByTestId('content-results')).toBeNull();

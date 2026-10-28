@@ -247,6 +247,10 @@
 		view = { x: ax - (ax - view.x) * k, y: ay - (ay - view.y) * k, size: newSize };
 		userMoved = true;
 	}
+	/** One-click zoom step about the view centre: dir 1 zooms in, -1 out. */
+	export function zoomStep(dir: 1 | -1) {
+		zoomAbout(view.x + viewW / 2, view.y + viewH / 2, dir > 0 ? 1 / 1.25 : 1.25);
+	}
 	/** Fit the view to the room-space box from `a` to `b`, centred on it. */
 	function zoomToBox(a: Vertex, b: Vertex) {
 		const w = Math.abs(a[0] - b[0]);
@@ -579,6 +583,12 @@
 	let pointerOver = false;
 
 	function onWindowKeyDown(event: KeyboardEvent) {
+		if (navControls && (event.key === '+' || event.key === '=' || event.key === '-') && !event.ctrlKey && !event.metaKey && !event.altKey) {
+			if (!planShouldHandleKey(event)) return;
+			event.preventDefault();
+			zoomStep(event.key === '-' ? -1 : 1);
+			return;
+		}
 		if (event.key !== ' ') return;
 		const armed = pointerOver || (!!svgEl && document.activeElement === svgEl);
 		if (!armed || !planShouldHandleKey(event)) return;
@@ -1266,6 +1276,12 @@
 		<button type="button" class="mv-btn nav-mode" data-mode="zoom" aria-pressed={navMode === 'zoom'} aria-label="Zoom" title="Zoom (Z)" onclick={() => setNavMode('zoom')}>
 			<Glyph name="zoom" />
 		</button>
+	</div>
+	<div class="mv-seg" role="group" aria-label="Zoom steps">
+		<button type="button" class="mv-btn nav-out" aria-label="Zoom out" title="Zoom out (−)" onclick={() => zoomStep(-1)}>−</button>
+		<button type="button" class="mv-btn nav-in" aria-label="Zoom in" title="Zoom in (+)" onclick={() => zoomStep(1)}>+</button>
+	</div>
+	<div class="mv-seg" role="group" aria-label="Fit">
 		<button type="button" class="mv-btn nav-fit" aria-label="Fit" title="Fit (F)" onclick={() => fitView()}>
 			<Glyph name="fit" />
 		</button>

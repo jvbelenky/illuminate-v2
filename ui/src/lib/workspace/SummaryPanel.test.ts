@@ -103,6 +103,18 @@ describe('SummaryPanel', () => {
     expect(onSelectZone).toHaveBeenCalledWith('WholeRoomFluence');
   });
 
+  it('clicking a user zone, lamp or structure row selects it for editing', async () => {
+    const onSelectLamp = vi.fn();
+    const onSelectObject = vi.fn();
+    const { onSelectZone } = setup({}, {}, { onSelectLamp, onSelectObject });
+    await fireEvent.click(screen.getByText('Floor'));
+    expect(onSelectZone).toHaveBeenCalledWith('zone-1');
+    await fireEvent.click(screen.getByText('Beacon'));
+    expect(onSelectLamp).toHaveBeenCalledWith('lamp-1');
+    await fireEvent.click(screen.getByText('Desk'));
+    expect(onSelectObject).toHaveBeenCalledWith('object-1');
+  });
+
   it('without standard zones or user zones the section says None', () => {
     setup({ zones: [std] }, { useStandardZones: false });
     expect(screen.queryByRole('button', { name: 'Standard zones enabled' })).toBeNull();
