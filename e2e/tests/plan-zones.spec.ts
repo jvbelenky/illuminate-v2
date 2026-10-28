@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { waitForApiIdle } from '../helpers/network';
 import { waitForSession } from '../helpers/session';
 import { attachErrorGuard } from '../helpers/errors';
-import { addZone, userZoneRows, zoneCount } from '../helpers/zones';
+import { addZone, userZoneRows, zoneCount, zoneEditor } from '../helpers/zones';
 import { planSvg, planTool, showMain } from '../helpers/workspace';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
@@ -74,6 +74,37 @@ test.describe('Calc zones in the workspace', () => {
     await calculate(page);
     const card = page.locator('.zone-card', { has: page.locator('.zone-name', { hasText: plane!.name }) });
     await expect(card.locator('.stat-value').first()).toHaveText(/\d/, { timeout: 15_000 });
+    guard.assertClean();
+  });
+
+  test('the Surface select moves a plane to a wall and the ceiling, the 2D view following; undo puts the backend back', async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    await waitForSession(page);
+    await showMain(page, '2d');
+    await addZone(page, 'plane');
+    const surface = zoneEditor(page).getByLabel('Surface');
+    await expect(surface).toHaveValue('floor');
+
+    await surface.selectOption({ label: 'Wall 2' });
+    await expect(page.getByRole('combobox', { name: 'Walls' })).toHaveValue('wall:1');
+    await expect(zoneEditor(page)).toBeVisible();
+    await expect(zoneEditor(page).getByRole('switch', { name: 'Fit to wall' })).toBeChecked();
+    await waitForApiIdle(page);
+    let plane = (await backendZones(page)).find((z) => !z.is_standard && z.type === 'plane');
+    expect(plane?.wall?.wall_id).toBe('east');
+
+    await surface.selectOption({ label: 'Ceiling' });
+    await expect(surface).toHaveValue('ceiling');
+    await waitForApiIdle(page);
+    plane = (await backendZones(page)).find((z) => !z.is_standard && z.type === 'plane');
+    expect(plane?.wall ?? null).toBeNull();
+    expect(plane?.ref_surface).toBe('xy');
+
+    // Keyboard focus off any field, so the shortcut means "undo the scene"
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+z');
+    await waitForApiIdle(page);
+    await expect.poll(async () => (await backendZones(page)).find((z) => !z.is_standard && z.type === 'plane')?.wall?.wall_id).toBe('east');
     guard.assertClean();
   });
 });

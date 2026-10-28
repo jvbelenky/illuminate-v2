@@ -3,9 +3,13 @@
  * (Height on the floor, Below ceiling on the ceiling, From wall on a wall),
  * its Flip, the calculation modes, and the grid-points summary and spacing text.
  */
-import type { CalcZone, PlaneCalcMode } from '$lib/types/project';
-import { wallIndex, type Surface } from '$lib/utils/surfaces';
+import type { CalcZone, PlaneCalcMode, RoomConfig } from '$lib/types/project';
+import { wallIndex, zoneSurface, type Surface } from '$lib/utils/surfaces';
 import { formatFloat } from '$lib/utils/formatting';
+import { fromMeters, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
+import { footprintGeometry, rectangleCorners, roomFillGeometry, roomFootprint, zoneFootprint } from '$lib/utils/zoneFootprint';
+import { planeWall, wallPlaneOutline } from '$lib/utils/planeWorld';
+import type { Vertex } from '$lib/utils/roomGeometry';
 
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
@@ -112,4 +116,91 @@ export function valueKind(zone: CalcZone): 'Fluence rate' | 'Irradiance' | 'Dose
   if (zone.dose) return 'Dose';
   const aimed = zone.calc_mode === 'eye_directional' || zone.calc_mode === 'eye_target';
   return zone.vert && zone.horiz && !zone.use_normal && !aimed ? 'Fluence rate' : 'Irradiance';
+}
+
+// --- Surface, Fit to room, ranges
+
+/**
+ * The fields that move a plane onto `target`, filling it: the floor at eye height facing
+ * up, the ceiling facing down, or a whole wall. What belonged to the old surface is
+ * cleared (present and undefined), as is an orphan's flag.
+ */
+export function surfacePartial(target: Surface, room: RoomConfig, units: LengthUnit): Partial<CalcZone> {
+  if (onWall(target)) {
+    return { surface: target, fit_room: true, normal_offset: 0, flip: false, wall_vertices: undefined, wall_orphan: undefined };
+  }
+  const ceiling = target === 'ceiling';
+  return {
+    surface: target,
+    fit_room: true,
+    height: ceiling ? room.z : roundToUnit(fromMeters(EYE_HEIGHT_M, units), units),
+    direction: ceiling ? -1 : 1,
+    ref_surface: 'xy',
+    ...roomFillGeometry('plane', room),
+    normal_offset: undefined,
+    flip: undefined,
+    wall_vertices: undefined,
+    wall_orphan: undefined,
+  };
+}
+
+const EYE_HEIGHT_M = 1.8;
+
+/** The Surface select's value: none ('') for a plane whose wall is gone or a legacy vertical plane. */
+export function surfaceChoice(zone: CalcZone, roomZ: number): Surface | '' {
+  if (zone.wall_orphan || isLegacyPlane(zone)) return '';
+  return zoneSurface(zone, roomZ);
+}
+
+/** The footprint a flat plane or volume shows: its outline, the room when fit with no bounds, else its bounds. */
+export function shownFootprint(zone: CalcZone, room: RoomConfig): Vertex[] {
+  const drawn = zone.vertices && zone.vertices.length >= 3;
+  const noBounds = zone.type === 'volume' ? zone.x_min == null : zone.x1 == null;
+  return !drawn && noBounds && zone.fit_room ? roomFootprint(room) : zoneFootprint(zone);
+}
+
+/**
+ * Fit to room switched on (refit to the surface: the room outline, the whole wall, or for
+ * a volume floor to ceiling) or off (what it shows becomes explicit, so nothing moves).
+ */
+export function fitPartial(zone: CalcZone, room: RoomConfig, on: boolean): Partial<CalcZone> {
+  if (zone.type === 'volume') {
+    if (on) return { fit_room: true, ...roomFillGeometry('volume', room), z_min: 0, z_max: room.z };
+    return { fit_room: false, ...footprintGeometry('volume', shownFootprint(zone, room)) };
+  }
+  const wall = planeWall(zone, room);
+  if (wall) {
+    if (on) return { fit_room: true, wall_vertices: undefined };
+    return { fit_room: false, wall_vertices: wallPlaneOutline(zone, wall, room.z).map(([a, u]) => [a, u] as [number, number]) };
+  }
+  if (on) return { fit_room: true, ...roomFillGeometry('plane', room) };
+  return { fit_room: false, ...footprintGeometry('plane', shownFootprint(zone, room)) };
+}
+
+/** A rectangle's ranges: [first1, first2, second1, second2]. */
+export type Ranges = [number, number, number, number];
+
+/** The ranges with one end set; the two ends swap rather than cross. Null for an empty range. */
+export function editRange(ranges: Ranges, index: 0 | 1 | 2 | 3, v: number): Ranges | null {
+  const next = [...ranges] as Ranges;
+  next[index] = v;
+  const pair = index < 2 ? 0 : 2;
+  const [a, b] = [next[pair], next[pair + 1]];
+  if (Math.abs(a - b) < 1e-9) return null;
+  next[pair] = Math.min(a, b);
+  next[pair + 1] = Math.max(a, b);
+  return next;
+}
+
+/** The fields for a rectangle given by its ranges (X/Y, or Along/Up on a wall), with Fit off. */
+export function rangePartial(kind: 'plane' | 'volume' | 'wall', [a1, a2, b1, b2]: Ranges): Partial<CalcZone> {
+  const corners = rectangleCorners(a1, a2, b1, b2);
+  if (kind === 'wall') return { wall_vertices: corners.map(([a, u]) => [a, u] as [number, number]), fit_room: false };
+  return { ...footprintGeometry(kind, corners), fit_room: false };
+}
+
+/** The ranges of a rectangle outline. */
+export function rangesOf(vs: Vertex[]): Ranges {
+  const xs = vs.map((p) => p[0]), ys = vs.map((p) => p[1]);
+  return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
 }

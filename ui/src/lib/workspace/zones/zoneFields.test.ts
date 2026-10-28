@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { CalcZone } from '$lib/types/project';
-import { distanceOf, distancePartial, flipPartial, gridSummary, distanceLabel, isLegacyPlane, spacingText } from './zoneFields';
+import { distanceOf, distancePartial, flipPartial, gridSummary, distanceLabel, isLegacyPlane, spacingText, surfacePartial, surfaceChoice, fitPartial, editRange, rangePartial } from './zoneFields';
+import { defaultRoom } from '$lib/types/project';
 import { zoneSurface } from '$lib/utils/surfaces';
 
 const plane = (extra: Partial<CalcZone> = {}): CalcZone => ({ id: 'z', type: 'plane', ...extra });
@@ -85,5 +86,80 @@ describe('legacy planes', () => {
     expect(isLegacyPlane(plane({ ref_surface: 'xz', surface: 'wall:0' }))).toBe(false);
     expect(isLegacyPlane(plane({ ref_surface: 'xy' }))).toBe(false);
     expect(isLegacyPlane({ type: 'volume' })).toBe(false);
+  });
+});
+
+describe('moving a plane to another surface', () => {
+  const room = { ...defaultRoom(), x: 6, y: 4, z: 2.7 };
+
+  it('the floor: whole room at eye height, facing up, wall fields cleared', () => {
+    const p = surfacePartial('floor', room, 'meters');
+    expect(p).toMatchObject({ surface: 'floor', fit_room: true, height: 1.8, direction: 1, ref_surface: 'xy', x1: 0, x2: 6, y1: 0, y2: 4 });
+    for (const k of ['normal_offset', 'flip', 'wall_vertices', 'vertices', 'wall_orphan'] as const) {
+      expect(k in p && p[k] === undefined).toBe(true);
+    }
+  });
+
+  it('eye height is in the project units', () => {
+    expect(surfacePartial('floor', room, 'feet').height).toBeCloseTo(5.91, 2);
+  });
+
+  it('the ceiling: whole room at the ceiling, facing down', () => {
+    const p = surfacePartial('ceiling', room, 'meters');
+    expect(p).toMatchObject({ surface: 'ceiling', fit_room: true, height: 2.7, direction: -1, ref_surface: 'xy' });
+    expect('wall_orphan' in p).toBe(true);
+  });
+
+  it('a wall: the whole wall, on it, unflipped', () => {
+    const p = surfacePartial('wall:2', room, 'meters');
+    expect(p).toEqual({ surface: 'wall:2', fit_room: true, normal_offset: 0, flip: false, wall_vertices: undefined, wall_orphan: undefined });
+  });
+
+  it('the select value: the surface, or none for an orphan or a legacy plane', () => {
+    expect(surfaceChoice(plane({ surface: 'wall:1' }), 2.7)).toBe('wall:1');
+    expect(surfaceChoice(plane({ surface: 'wall:1', wall_orphan: true }), 2.7)).toBe('');
+    expect(surfaceChoice(plane({ ref_surface: 'xz' }), 2.7)).toBe('');
+    expect(surfaceChoice(plane({ height: 2.7, direction: -1 }), 2.7)).toBe('ceiling');
+  });
+});
+
+describe('Fit to room', () => {
+  const room = { ...defaultRoom(), x: 6, y: 4, z: 2.7 };
+
+  it('on refits a floor plane to the room; off keeps what it shows as explicit bounds', () => {
+    const z = plane({ surface: 'floor', height: 1, fit_room: false, x1: 1, x2: 2, y1: 1, y2: 3 });
+    expect(fitPartial(z, room, true)).toMatchObject({ fit_room: true, x1: 0, x2: 6, y1: 0, y2: 4, vertices: undefined });
+    const fit = plane({ surface: 'floor', height: 1, fit_room: true });
+    expect(fitPartial(fit, room, false)).toEqual({ fit_room: false, x1: 0, x2: 6, y1: 0, y2: 4, vertices: undefined });
+  });
+
+  it('on a wall: on clears the outline, off keeps the whole wall as an outline', () => {
+    const z = plane({ surface: 'wall:0', fit_room: true, normal_offset: 0 });
+    expect(fitPartial(z, room, true)).toEqual({ fit_room: true, wall_vertices: undefined });
+    expect(fitPartial(z, room, false)).toEqual({ fit_room: false, wall_vertices: [[0, 0], [6, 0], [6, 2.7], [0, 2.7]] });
+  });
+
+  it('a volume: on fills floor to ceiling, off keeps its footprint', () => {
+    const v: CalcZone = { id: 'v', type: 'volume', fit_room: false, x_min: 1, x_max: 2, y_min: 1, y_max: 2, z_min: 0.5, z_max: 1 };
+    expect(fitPartial(v, room, true)).toMatchObject({ fit_room: true, x_min: 0, x_max: 6, y_min: 0, y_max: 4, z_min: 0, z_max: 2.7 });
+    expect(fitPartial({ ...v, fit_room: true, x_min: undefined }, room, false)).toEqual({ fit_room: false, x_min: 0, x_max: 6, y_min: 0, y_max: 4, vertices: undefined });
+  });
+});
+
+describe('range edits', () => {
+  it('sets one end, keeping the other; the ends swap rather than cross', () => {
+    expect(editRange([0, 6, 0, 4], 1, 3)).toEqual([0, 3, 0, 4]);
+    expect(editRange([2, 6, 0, 4], 0, 7)).toEqual([6, 7, 0, 4]);
+    expect(editRange([0, 6, 0, 4], 2, 1)).toEqual([0, 6, 1, 4]);
+  });
+
+  it('refuses an empty range', () => {
+    expect(editRange([0, 6, 0, 4], 0, 6)).toBeNull();
+  });
+
+  it('writes the rectangle for each kind, turning Fit off', () => {
+    expect(rangePartial('plane', [1, 2, 3, 4])).toEqual({ x1: 1, x2: 2, y1: 3, y2: 4, vertices: undefined, fit_room: false });
+    expect(rangePartial('volume', [1, 2, 3, 4])).toEqual({ x_min: 1, x_max: 2, y_min: 3, y_max: 4, vertices: undefined, fit_room: false });
+    expect(rangePartial('wall', [1, 2, 0, 1])).toEqual({ wall_vertices: [[1, 0], [2, 0], [2, 1], [1, 1]], fit_room: false });
   });
 });
