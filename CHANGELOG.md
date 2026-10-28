@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- The Floor · Ceiling · Walls switcher shows whenever 2D is the main view, in the summary too, and the 3D view (mini view included) fills the surface the 2D view shows in translucent selection cyan with an outline instead of a faint dashed outline; report captures leave it out
 - Default panel widths follow the window: the editor column is 22% of it (280–550 px) and Results 21% (260–600 px); the editor column narrows to 280 px. Calculate fills the full width above Results, with Auto as a compact checkbox at its left. The Summary panel has no heading of its own (its bar says Summary)
 - Lamp editor: the placement buttons (Add lamp and the lamp's own row) are shorter with a 22 px icon and a 13 px label (Upper-room breaks at its hyphen when narrow) and stand out from the editor body by their fill; Details... also stands out; the rotate button reads Rotate; Display › 2D has Show label, which turns the lamp's name on the 2D plan on or off (on by default)
 - Editor icon button rows (Add to ceiling, Add lamp placements, the lamp placement row, Add zone) stay on one row down to the narrowest panel, with smaller icons and labels when narrow
