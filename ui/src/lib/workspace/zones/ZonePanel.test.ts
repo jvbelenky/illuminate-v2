@@ -290,7 +290,7 @@ describe('ZonePanel', () => {
     expect(screen.queryByRole('button', { name: 'Flip' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Draw/ })).toBeNull();
     expect(screen.queryByRole('switch')).toBeNull();
-    expect((screen.getByLabelText('Surface') as HTMLSelectElement).value).toBe('');
+    expect(screen.queryByLabelText('Surface')).toBeNull();
     await fireEvent.click(fold('Geometry'));
     expect(screen.getByText('X Range')).toBeTruthy();
     expect(screen.getByText('Z Range')).toBeTruthy();

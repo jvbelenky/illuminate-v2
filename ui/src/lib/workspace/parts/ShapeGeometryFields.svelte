@@ -4,7 +4,7 @@
 	// put), Rotation, and the corner table. Every change hands back the whole
 	// polygon and yaw through onChange. Used for keep-out areas, structures and
 	// calc zones (which name their axes, drop Rotation, or show it read-only).
-	import { roundToUnit, unitAbbrev, type LengthUnit } from '$lib/utils/unitConversion';
+	import { roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
 	import { validatePolygon, type Vertex } from '$lib/utils/roomGeometry';
 	import { moveReference, referencePoint, resizeShape, rotateShape, shapeSize, type ReferenceMode } from './shapeGeometry';
 
@@ -36,7 +36,6 @@
 		axes = ['X', 'Y'], sizes = ['Width', 'Length'], rotatable = true, readonly = false,
 	}: Props = $props();
 
-	const unit = $derived(unitAbbrev(units));
 	const ref = $derived(referencePoint(vertices, yaw, reference));
 	const size = $derived(shapeSize(vertices, yaw));
 	const shown = (v: number) => roundToUnit(v, units);
@@ -125,7 +124,7 @@
 		</div>
 	{/if}
 	<div class="sg-corners">
-		<span class="sg-label">Corners ({unit})</span>
+		<span class="sg-label">Corners</span>
 		{#each vertices as [vx, vy], i (i)}
 			<div class="sg-corner">
 				<span>{i + 1}</span>

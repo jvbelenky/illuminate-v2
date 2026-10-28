@@ -126,17 +126,19 @@
 	);
 </script>
 
-<label class="zp-field">
-	<span>Surface</span>
-	<select value={choice} onchange={(e) => chooseSurface(e.currentTarget.value)}>
-		{#if choice === ''}
-			<option value="" disabled>—</option>
-		{/if}
-		{#each surfaces as s (s)}
-			<option value={s}>{surfaceName(s)}</option>
-		{/each}
-	</select>
-</label>
+{#if !legacy}
+	<label class="zp-field">
+		<span>Surface</span>
+		<select value={choice} onchange={(e) => chooseSurface(e.currentTarget.value)}>
+			{#if choice === ''}
+				<option value="" disabled>—</option>
+			{/if}
+			{#each surfaces as s (s)}
+				<option value={s}>{surfaceName(s)}</option>
+			{/each}
+		</select>
+	</label>
+{/if}
 
 <label class="zp-field">
 	<span>Calculation</span>
