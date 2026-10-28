@@ -265,7 +265,7 @@
 
 	// Camera position based on room size
 	const maxDim = $derived(Math.max(roomDims.x, roomDims.y, roomDims.z));
-	const cameraDistance = $derived(maxDim * 2);
+	const cameraDistance = $derived(maxDim * 1.4);
 	const defaultCamPos = $derived([-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7] as [number, number, number]);
 	const defaultTarget = $derived([roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2] as [number, number, number]);
 
