@@ -2,12 +2,13 @@
 	import * as THREE from 'three';
 	import { Canvas } from '@threlte/core';
 	import Scene from './Scene.svelte';
-	import ViewSnapOverlay, { type ViewPreset } from './ViewSnapOverlay.svelte';
+	import type { ViewPreset } from './ViewSnapOverlay.svelte';
+	import type { Snippet } from 'svelte';
+	import ViewTools3D from './ViewTools3D.svelte';
 	import type { RoomConfig, LampInstance, CalcZone, ZoneResult, SceneObject } from '$lib/types/project';
 	import type { IsoScale } from '$lib/utils/plotScale';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import type { CeilingLayout } from '$lib/ceiling/ceilingLayout';
-	import ProjectionToggle from './ProjectionToggle.svelte';
 	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
 	import { unitLabel } from '$lib/utils/unitConversion';
@@ -55,9 +56,11 @@
 		viewedSurface?: Surface | null;
 		/** The editor context deciding what a click selects; null (the summary) picks nothing */
 		clickContext?: PlanContext | null;
+		/** Shown first among the view tools, bottom right (the units select) */
+		unitsSelect?: Snippet;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false, onSurfaceClick, onSurfaceHover, viewedSurface = null, clickContext = null }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false, onSurfaceClick, onSurfaceHover, viewedSurface = null, clickContext = null, unitsSelect }: Props = $props();
 
 	// Drag detection: suppress clicks that follow a drag (orbit/pan). The handlers
 	// stay attached in the mini view (Threlte registers them at creation) and do nothing there.
@@ -299,31 +302,16 @@
 
 <div class="viewer-container" class:mini bind:this={viewerContainer} onpointerdown={handlePointerDown} onpointerup={handlePointerUp} onpointerleave={() => { hover = null; pointerHeld = false; }}>
 	{#if !mini}
-	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
-	<ProjectionToggle isOrtho={useOrtho} onclick={handleToggleProjection} />
-	<span class="units-label">Units: {unitLabel($userSettings.units)}</span>
-	<div class="viewer-actions">
-		<button class="viewer-action-btn" title="Open in new window" onclick={previewImage}>
-			<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-				<path d="M11 3h6v6" />
-				<path d="M17 3L9 11" />
-				<path d="M15 11v5a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1h5" />
-			</svg>
-		</button>
-		<button class="viewer-action-btn" title="Save as image" onclick={saveImage} disabled={savingImage}>
-			{#if savingImage}
-				<svg class="spinner" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
-					<circle cx="10" cy="10" r="7" stroke-dasharray="30 14" />
-				</svg>
-			{:else}
-				<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M10 3v10" />
-					<path d="M6 9l4 4 4-4" />
-					<path d="M3 14v2a1 1 0 001 1h12a1 1 0 001-1v-2" />
-				</svg>
-			{/if}
-		</button>
-	</div>
+	<ViewTools3D
+		{activeView}
+		onViewChange={handleViewChange}
+		isOrtho={useOrtho}
+		onToggleProjection={handleToggleProjection}
+		onOpen={previewImage}
+		onSave={saveImage}
+		saving={savingImage}
+		lead={unitsSelect}
+	/>
 	{/if}
 	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: true })}>
 		<Scene {room} ceiling={effectiveCeiling} {selectedCeilingId} lamps={effectiveLamps} zones={effectiveZones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} visibleLampIds={effectiveVisibleLampIds} visibleZoneIds={effectiveVisibleZoneIds} visibleObjectIds={effectiveVisibleObjectIds} {labelledObjectIds} {globalValueRange} isoScaleMap={effectiveIsoScaleMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} interactive={!mini} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} onSurfaceClick={wrappedSurfaceClick} onSurfaceHover={handleSurfaceHover} viewedSurface={visibilityOverride ? null : viewedSurface} hoveredSurface={chip?.surface ?? null} />
@@ -358,71 +346,6 @@
 		.viewer-container {
 			min-height: 0;
 		}
-	}
-
-	.units-label {
-		position: absolute;
-		bottom: var(--spacing-md);
-		left: calc(var(--spacing-sm) + 124px);
-		z-index: 10;
-		font-size: 0.75rem;
-		color: var(--color-text-muted);
-		line-height: 1;
-	}
-
-	@media (max-width: 767px) {
-		.units-label {
-			left: calc(var(--spacing-sm) + 132px);
-		}
-	}
-
-	.viewer-actions {
-		position: absolute;
-		bottom: var(--spacing-sm);
-		right: var(--spacing-sm);
-		z-index: 10;
-		display: flex;
-		gap: 4px;
-	}
-
-	.viewer-action-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 36px;
-		height: 36px;
-		padding: 6px;
-		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
-		backdrop-filter: blur(4px);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		color: var(--color-text-muted);
-		cursor: pointer;
-		transition: all 0.15s;
-	}
-
-	.viewer-action-btn:hover {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-accent);
-		color: var(--color-text);
-	}
-
-	.viewer-action-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.viewer-action-btn svg {
-		width: 20px;
-		height: 20px;
-	}
-
-	.viewer-action-btn .spinner {
-		animation: spin 1s linear infinite;
-	}
-
-	@keyframes spin {
-		to { transform: rotate(360deg); }
 	}
 
 	.surface-chip {

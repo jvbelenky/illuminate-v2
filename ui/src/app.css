@@ -687,6 +687,88 @@ button.secondary:hover {
   border-color: var(--color-text-muted);
 }
 
+/* Main view controls: 28 px icon buttons, grouped into segmented controls */
+.mv-seg {
+  display: inline-flex;
+  height: 28px;
+}
+
+.mv-btn,
+select.mv-select {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  min-width: 30px;
+  width: auto;
+  padding: 0 7px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mv-seg > .mv-btn,
+.mv-seg > select.mv-select {
+  border-radius: 0;
+}
+
+.mv-seg > :first-child {
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+}
+
+.mv-seg > :last-child {
+  border-top-right-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+}
+
+.mv-seg > * + * {
+  margin-left: -1px;
+}
+
+.mv-btn:hover:not(:disabled),
+select.mv-select:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.mv-btn[aria-pressed="true"],
+.mv-btn.on {
+  position: relative;
+  z-index: 1;
+  background: var(--color-highlight);
+  border-color: var(--color-highlight);
+  color: #fff;
+}
+
+.mv-btn[aria-pressed="true"]:hover:not(:disabled),
+.mv-btn.on:hover:not(:disabled) {
+  background: var(--color-highlight);
+  color: #fff;
+}
+
+.mv-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mv-btn:focus-visible,
+select.mv-select:focus-visible {
+  position: relative;
+  z-index: 2;
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
 /* Cards/Panels */
 .panel {
   background: var(--color-bg-secondary);

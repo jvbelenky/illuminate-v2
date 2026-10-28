@@ -108,6 +108,18 @@ export class PlanController {
     this.#pendingCanvas = { run, at: Date.now() };
     this.onNeedCanvas();
   }
+  /** Run a tool that works on the 2D canvas (the edit strip in 3D brings the 2D view up first). */
+  inCanvas = (run: () => void) => this.withCanvas(run);
+  /**
+   * Whether the edit strip has tools for this context: not on reflectance or
+   * the view, not on a wall outside Zones, and on the ceiling only with an item
+   * selected or tiles to move.
+   */
+  get editStripShown(): boolean {
+    if (this.context === 'reflectance' || this.context === 'view') return false;
+    if (this.onWall && !this.onZones) return false;
+    return !(this.onCeiling && !this.selectedCeilingItem && !this.tilesActive);
+  }
   /** A local edit of the current polygon that is invalid, so not applied. */
   dirty = $state(false);
 

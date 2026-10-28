@@ -224,17 +224,21 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
   }
   const modeButton = (mode: 'hand' | 'zoom') => document.querySelector(`button.nav-mode[data-mode="${mode}"]`) as HTMLButtonElement;
 
-  it('the +/-/Fit buttons are gone', async () => {
+  it('the view tools are Pan | Zoom | Fit glyphs, bottom right; no +/- buttons', async () => {
     await mountSized();
     expect(screen.queryByLabelText('Zoom in')).toBeNull();
     expect(screen.queryByLabelText('Zoom out')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Fit' })).toBeNull();
     expect(modeButton('hand').getAttribute('aria-pressed')).toBe('true');
     expect(modeButton('zoom').getAttribute('aria-pressed')).toBe('false');
     expect(modeButton('hand').querySelector('svg')).not.toBeNull();
     expect(modeButton('zoom').querySelector('svg')).not.toBeNull();
-    expect(modeButton('hand').title).not.toBe('');
-    expect(modeButton('zoom').title).not.toBe('');
+    expect(modeButton('hand').title).toBe('Pan (H)');
+    expect(modeButton('zoom').title).toBe('Zoom (Z)');
+    expect(screen.getByRole('button', { name: 'Pan' })).toBe(modeButton('hand'));
+    const fit = screen.getByRole('button', { name: 'Fit' });
+    expect(fit.title).toBe('Fit (F)');
+    // No units select unless the host asks for one
+    expect(document.querySelector('.view-controls select')).toBeNull();
   });
 
   it('the mode persists in userSettings', async () => {

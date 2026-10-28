@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Floor · Ceiling · Walls: which room surface the 2D view shows.
 	import { wallIndex, surfaceName, type Surface } from '$lib/utils/surfaces';
+	import Glyph from '$lib/workspace/Glyph.svelte';
 
 	interface Props {
 		surface: Surface;
@@ -14,59 +15,60 @@
 	const onWall = $derived(wallIndex(surface) !== null);
 </script>
 
-<div class="surface-switcher" role="group" aria-label="Surface">
-	<button type="button" aria-pressed={surface === 'floor'} onclick={() => onSelect('floor')}>Floor</button>
-	<button type="button" aria-pressed={surface === 'ceiling'} onclick={() => onSelect('ceiling')}>Ceiling</button>
-	<select
-		aria-label="Walls"
-		class:on={onWall}
-		value={onWall ? surface : ''}
-		onchange={(e) => {
-			const v = e.currentTarget.value as Surface;
-			if (v) onSelect(v);
-		}}
-	>
-		<option value="" disabled>Walls</option>
-		{#each walls as w (w)}
-			<option value={w}>{surfaceName(w)}</option>
-		{/each}
-	</select>
+<div class="mv-seg surface-switcher" role="group" aria-label="Surface">
+	<button type="button" class="mv-btn" aria-label="Floor" title="Floor" aria-pressed={surface === 'floor'} onclick={() => onSelect('floor')}>
+		<Glyph name="floor" />
+	</button>
+	<button type="button" class="mv-btn" aria-label="Ceiling" title="Ceiling" aria-pressed={surface === 'ceiling'} onclick={() => onSelect('ceiling')}>
+		<Glyph name="ceiling" />
+	</button>
+	<!-- The wall list: a native select laid invisibly over the wall glyph -->
+	<span class="mv-btn walls" class:on={onWall} title={onWall ? surfaceName(surface) : 'Walls'}>
+		<Glyph name="wall" />
+		<Glyph name="chevron" size={12} />
+		<select
+			aria-label="Walls"
+			value={onWall ? surface : ''}
+			onchange={(e) => {
+				const v = e.currentTarget.value as Surface;
+				if (v) onSelect(v);
+			}}
+		>
+			<option value="" disabled>Walls</option>
+			{#each walls as w (w)}
+				<option value={w}>{surfaceName(w)}</option>
+			{/each}
+		</select>
+	</span>
 </div>
 
 <style>
-	.surface-switcher {
-		display: inline-flex;
+	.walls {
+		position: relative;
+		gap: 1px;
+		padding-right: 5px;
 	}
-	button,
-	select {
-		height: 1.9rem;
-		padding: 0 10px;
-		font-size: var(--font-size-sm, var(--font-size-base));
-		font-weight: 600;
-		background: var(--color-bg-tertiary);
-		color: var(--color-text-muted);
-		border: 1px solid var(--color-border);
-		border-radius: 0;
+	.walls select {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		padding: 0;
+		border: 0;
+		opacity: 0;
 		cursor: pointer;
 	}
-	button:first-child {
-		border-radius: var(--radius-sm, 4px) 0 0 var(--radius-sm, 4px);
+	.walls:focus-within {
+		z-index: 2;
+		outline: 2px solid var(--color-accent);
+		outline-offset: -2px;
 	}
-	select {
-		border-left: 0;
-		border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
-	}
-	button + button {
-		border-left: 0;
-	}
-	button:hover,
-	select:hover {
+	.walls:hover {
+		background: var(--color-bg-tertiary);
 		color: var(--color-text);
 	}
-	button[aria-pressed='true'],
-	select.on {
+	.walls.on:hover {
 		background: var(--color-highlight);
-		color: var(--color-bg, #fff);
-		border-color: var(--color-highlight);
+		color: #fff;
 	}
 </style>

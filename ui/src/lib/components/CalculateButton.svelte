@@ -8,14 +8,16 @@
 	import { isMobile } from '$lib/stores/viewport';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
 	import { calculationProgress } from '$lib/stores/calculationProgress';
+	import Glyph from '$lib/workspace/Glyph.svelte';
 
 	interface Props {
 		onCalculated?: () => void;
 		/**
-		 * `floating`: compact button for the 3D view corner / mobile bar.
+		 * `floating`: compact button for the mobile bar.
+		 * `corner`: the main view's top-right corner: Auto, then a 28 px Calculate.
 		 * `sidebar`: full-width button with a spelled-out state line underneath.
 		 */
-		layout?: 'floating' | 'sidebar';
+		layout?: 'floating' | 'corner' | 'sidebar';
 	}
 
 	let { onCalculated, layout = 'floating' }: Props = $props();
@@ -114,6 +116,37 @@
 	}
 </script>
 
+{#if layout === 'corner'}
+<div class="calculate-corner">
+	{#if !$isMobile}
+		<label class="autorecalc-label" title="Recalculate automatically">
+			<input
+				type="checkbox"
+				checked={autorecalculate}
+				onchange={(e) => toggleAutorecalculate(e.currentTarget.checked)}
+				use:enterToggle
+			/>
+			<span>Auto</span>
+		</label>
+	{/if}
+	<button
+		class="calculate-btn"
+		class:needs-calc={needsCalculation}
+		class:up-to-date={!needsCalculation}
+		class:has-error={!!error}
+		class:calculating={isCalculating}
+		onclick={calculate}
+		disabled={isCalculating}
+		title={error || ''}
+	>
+		{#if isCalculating}<span class="spinner inline"></span>{:else}<Glyph name="play" size={14} />{/if}
+		Calculate
+	</button>
+	{#if error}
+		<span class="error-indicator" title={error}>!</span>
+	{/if}
+</div>
+{:else}
 <div class="calculate-wrapper" class:sidebar={layout === 'sidebar'}>
 	<div class="calculate-row">
 		{#if isCalculating && layout === 'floating'}
@@ -155,6 +188,7 @@
 		</label>
 	{/if}
 </div>
+{/if}
 
 {#if budgetError}
 	<BudgetExceededModal {budgetError} onClose={closeBudgetModal} />
@@ -170,6 +204,35 @@
 	.calculate-wrapper.sidebar {
 		display: flex;
 		width: 100%;
+	}
+
+	.calculate-corner {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		height: 28px;
+	}
+	.calculate-corner .autorecalc-label {
+		margin: 0;
+		padding: 0 6px;
+		height: 28px;
+		border-radius: var(--radius-md);
+		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
+	}
+	.calculate-corner .calculate-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		box-sizing: border-box;
+		height: 28px;
+		min-width: 0;
+		padding: 0 12px;
+		font-size: var(--font-size-sm);
+		font-weight: 700;
+		border-width: 1px;
+	}
+	.calculate-corner .calculate-btn.needs-calc:hover:not(:disabled) {
+		transform: none;
 	}
 
 	.calculate-row {
