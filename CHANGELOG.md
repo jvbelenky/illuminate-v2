@@ -41,6 +41,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Undo and redo for scene edits: Ctrl+Z (⌘Z) undoes the last change to the room, lamps, calculation zones, structures, reflectance or the floor-plan image, wherever it was made, and Ctrl+Shift+Z or Ctrl+Y redoes it. The Edit menu shows what will be undone. A deleted lamp, zone or obstacle comes back as it was (a lamp with an uploaded IES file asks for the file again). Text fields keep their own typing undo; loading a project, New and changing units start a fresh history
 
 ### Changed
+- Selection highlight is sky cyan instead of orange, in the 3D view, the floor plan and the editor rows
 - Add lamp and Add zone cards: neutral outline, filled buttons with readable 13 px labels and calm pictograms
 - Add lamp and Add zone cards: neutral outline, filled buttons with readable 13 px labels and calm pictograms
 - Results panel: the inner Results heading is gone (Design Audit moved to the panel's title bar), and Summary and Custom Calculation Zones fold like the other sections
