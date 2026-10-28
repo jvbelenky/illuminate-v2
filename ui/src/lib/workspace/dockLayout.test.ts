@@ -77,10 +77,10 @@ describe('dockLayout', () => {
     expect(swapMain(swapMain(DEFAULT_DOCK))).toEqual(DEFAULT_DOCK);
   });
 
-  it('column widths default to the widest panel in them; Results is a fixed 420', () => {
+  it('column widths default to the widest panel in them; Results is a fixed 400', () => {
     expect(columnWidth(DEFAULT_DOCK, 'left')).toBe(420);
-    expect(columnWidth(DEFAULT_DOCK, 'right')).toBe(420);
-    expect(panelWidth('results')).toBe(420);
+    expect(columnWidth(DEFAULT_DOCK, 'right')).toBe(400);
+    expect(panelWidth('results')).toBe(400);
     expect(panelWidth('mini')).toBe(300);
     expect(columnWidth(movePanel(OLD, 'results', 'left', 1), 'right')).toBe(300);
   });
@@ -132,7 +132,7 @@ describe('dockLayout', () => {
     const l = resizeColumn(resizeColumn(DEFAULT_DOCK, 'right', 350), 'left', 500);
     const r = resetColumnWidth(l, 'right');
     expect(r.widths).toEqual({ left: 500 });
-    expect(columnWidth(r, 'right')).toBe(420);
+    expect(columnWidth(r, 'right')).toBe(400);
     expect(resetColumnWidth(r, 'left')).toEqual(DEFAULT_DOCK);
   });
 

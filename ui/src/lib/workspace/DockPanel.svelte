@@ -57,8 +57,8 @@
 		border-radius: var(--radius-md);
 	}
 	.dock-panel[data-panel='mini']:not(.minimized) {
-		flex: none;
-		aspect-ratio: 4 / 3;
+		flex: 0 1 25%;
+		min-height: 150px;
 	}
 	.dock-panel.minimized {
 		flex: none;
