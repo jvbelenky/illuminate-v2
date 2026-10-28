@@ -115,9 +115,9 @@
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	min-height: 76px;
-	padding: 8px 4px;
-	font-size: var(--font-size-sm);
+	min-height: 68px;
+	padding: 8px 2px;
+	font-size: 13px;
 	font-weight: 500;
 	color: var(--color-text);
 	background: var(--color-btn-fill);
@@ -128,15 +128,39 @@
 	background: var(--color-btn-fill-hover);
 	border-color: transparent;
 }
+.ep-addbtns {
+	container-type: inline-size;
+}
 .ep-addbtns > button.secondary > span {
 	max-width: 100%;
-	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: normal;
+	text-align: center;
 	line-height: 1.2;
 }
 .ep-addbtns > button.secondary svg {
-	width: 32px;
+	width: 28px;
 	height: auto;
 	color: var(--color-text-muted);
+}
+@container (max-width: 299px) {
+	.ep-grid.ep-addbtns {
+		gap: 3px;
+	}
+	.ep-grid.ep-addbtns > button.secondary {
+		padding: 8px 0;
+		font-size: 11px;
+		border-width: 0;
+	}
+}
+@container (min-width: 340px) {
+	.ep-addbtns > button.secondary svg {
+		width: 32px;
+	}
+	.ep-grid.ep-addbtns > button.secondary {
+		min-height: 76px;
+	}
 }
 .ep-addbtns > button.secondary[aria-busy='true'] {
 	opacity: 0.6;

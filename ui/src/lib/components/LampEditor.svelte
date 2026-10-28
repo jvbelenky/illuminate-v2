@@ -873,7 +873,6 @@
 	}
 
 	.placements {
-		grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
 		gap: 6px;
 		margin-top: var(--spacing-md);
 	}

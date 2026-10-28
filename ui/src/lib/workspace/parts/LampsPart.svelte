@@ -124,7 +124,6 @@
 <style>
 	.add-placements {
 		gap: 6px;
-		grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
 	}
 	.dot {
 		width: 9px;

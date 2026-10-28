@@ -268,10 +268,6 @@
 	}
 	.cp-add {
 		gap: 6px;
-		grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
-	}
-	.cp-add > button {
-		min-height: 76px;
 	}
 	.cp-add > button :global(svg) {
 		color: var(--color-warning);
@@ -281,7 +277,6 @@
 	}
 	.cp-add > button > span {
 		color: var(--color-text);
-		font-size: 13px;
 	}
 	.cp-lead {
 		display: inline-flex;
