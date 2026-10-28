@@ -530,7 +530,7 @@ describe('LampEditor', () => {
         const { container, rerender } = render(LampEditor, { props });
         const btn = await screen.findByTitle('Rotate 90° about its axis');
         expect(btn.closest('.sticks')).toBe(container.querySelector('.sticks'));
-        expect(btn.textContent).toContain('90°');
+        expect(btn.textContent?.trim()).toBe('Rotate');
         let angle = 30;
         for (let i = 0; i < 4; i++) {
           await fireEvent.click(btn);
@@ -555,17 +555,21 @@ describe('LampEditor', () => {
         expect(heads).toEqual(['2D', '3D']);
         const sections = container.querySelectorAll('.display-section');
         const [d2, d3] = Array.from(sections) as HTMLElement[];
-        // 2D: web toggle and size; 3D: label, web toggle and size
-        expect(d2.textContent).not.toContain('Show label');
+        // 2D: label, web toggle and size; 3D: label, web toggle and size
+        expect(d2.textContent).toContain('Show label');
+        const label2 = screen.getByLabelText('Show label in 2D') as HTMLInputElement;
+        expect(label2.checked).toBe(true);
+        await fireEvent.click(label2);
+        expect(updateSpy).toHaveBeenLastCalledWith('lamp-1', { show_label_2d: false });
         expect(d3.textContent).toContain('Show label');
         // Distinct accessible names, the same visible text
         expect(screen.getByLabelText('Show photometric web in 2D')).toBeTruthy();
         expect(screen.getByLabelText('Show photometric web in 3D')).toBeTruthy();
-        const web2 = d2.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        const web2 = screen.getByLabelText('Show photometric web in 2D') as HTMLInputElement;
         expect(web2.checked).toBe(true);
         await fireEvent.click(web2);
         expect(updateSpy).toHaveBeenLastCalledWith('lamp-1', { show_photometric_web_2d: false });
-        const web3 = Array.from(d3.querySelectorAll('input[type="checkbox"]')).at(-1) as HTMLInputElement;
+        const web3 = screen.getByLabelText('Show photometric web in 3D') as HTMLInputElement;
         await fireEvent.click(web3);
         expect(updateSpy).toHaveBeenLastCalledWith('lamp-1', { show_photometric_web: false });
 
@@ -648,7 +652,7 @@ describe('LampEditor', () => {
       expect(screen.getByLabelText(/^Rotation/)).toBeTruthy();
 
       await fireEvent.click(display);
-      expect(screen.getByText('Show label')).toBeTruthy();
+      expect(screen.getAllByText('Show label')).toHaveLength(2); expect(screen.getAllByText('Show label')[0]).toBeTruthy();
       expect(screen.getAllByText('Show photometric web')).toHaveLength(2);
     });
 

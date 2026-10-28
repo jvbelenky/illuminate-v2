@@ -29,7 +29,7 @@ import { wallPlaneOutline } from '$lib/utils/planeWorld';
 import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
-export interface Marker { id: string; name: string; x: number; y: number; ax: number; ay: number; enabled: boolean }
+export interface Marker { id: string; name: string; x: number; y: number; ax: number; ay: number; enabled: boolean; /** Draw the name; false only for a lamp with its 2D label off */ label?: boolean }
 
 interface PlanHistory { undo(): void; redo(): void; canUndo: boolean; canRedo: boolean }
 
@@ -323,6 +323,10 @@ export class PlanController {
   readonly selectedFootprint = $derived(this.selectedZone && this.selectedZone.type !== 'point' && zoneHasFootprint(this.selectedZone) && this.zoneOnSurface(this.selectedZone) ? this.selectedZone : null);
   /** The selected plane on the wall showing: its outline is the canvas's polygon there. */
   readonly selectedWallPlane = $derived(this.onWall && this.selectedZone && zoneWallIndex(this.selectedZone) === wallIndex(this.surface) ? this.selectedZone : null);
+  /** The selected plane's or volume's outline is the canvas's polygon (on the floor, the ceiling or its wall): Edit corners has corners to edit. */
+  get zoneCornersEditable(): boolean {
+    return this.onZones && !!(this.selectedFootprint || this.selectedWallPlane);
+  }
   drawKind = $state<'plane' | 'volume' | null>(null);
   /** A Draw that replaces the selected zone's outline, rather than adding a zone. */
   redrawZoneId: string | null = null;
@@ -416,14 +420,14 @@ export class PlanController {
       return lamps.filter((l) => front.has(l.id)).map((l) => {
         const w = toWall(l.x, l.y, l.z, seg);
         const [x, y] = wallToCanvas(w.along, w.up, seg);
-        return { id: l.id, name: l.name || l.id, x, y, ax: x, ay: y, enabled: l.enabled !== false };
+        return { id: l.id, name: l.name || l.id, x, y, ax: x, ay: y, enabled: l.enabled !== false, label: l.show_label_2d !== false };
       });
     }
     return this.floorMarkers();
   });
   private floorMarkers(): Marker[] {
     return this.onLamps
-      ? this.scene().lamps.map((l) => ({ id: l.id, name: l.name || l.id, x: l.x, y: l.y, ax: l.aimx, ay: l.aimy, enabled: l.enabled !== false }))
+      ? this.scene().lamps.map((l) => ({ id: l.id, name: l.name || l.id, x: l.x, y: l.y, ax: l.aimx, ay: l.aimy, enabled: l.enabled !== false, label: l.show_label_2d !== false }))
       : this.onZones
         ? this.userZones.filter((z) => z.type === 'point').map((z) => ({ id: z.id, name: z.name || z.id, x: z.x ?? 0, y: z.y ?? 0, ax: z.aim_x ?? z.x ?? 0, ay: z.aim_y ?? z.y ?? 0, enabled: z.enabled !== false }))
         : [];
@@ -1025,6 +1029,7 @@ export class PlanController {
       }
     }
     this.draft = z ? this.zoneOutline(z) : [];
+    if (this.activeTool === 'corners' && !this.zoneCornersEditable) this.endTool();
   };
   /** A zone picked on the 2D plan: select it and bring its row into view. */
   clickZone = (id: string) => {

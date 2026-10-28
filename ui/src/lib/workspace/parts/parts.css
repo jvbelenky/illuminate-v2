@@ -131,6 +131,37 @@
 .ep-addbtns {
 	container-type: inline-size;
 }
+/* Lamp placement buttons: compact, one-line label, and an outline so they read as buttons on the editor body */
+.ep-grid.ep-addbtns.add-placements > button.secondary,
+.ep-grid.ep-addbtns.placements > button.secondary {
+	gap: 4px;
+	min-height: 52px;
+	padding: 6px 2px;
+	font-size: 13px;
+	border-color: var(--color-border);
+}
+.ep-grid.ep-addbtns.add-placements > button.secondary:hover:not(:disabled),
+.ep-grid.ep-addbtns.placements > button.secondary:hover:not(:disabled) {
+	border-color: var(--color-text-muted);
+}
+@container (max-width: 300px) {
+	.ep-grid.ep-addbtns.add-placements > button.secondary,
+	.ep-grid.ep-addbtns.placements > button.secondary {
+		font-size: 11px;
+		letter-spacing: -0.2px;
+	}
+	.ep-grid.ep-addbtns.add-placements,
+	.ep-grid.ep-addbtns.placements {
+		gap: 4px;
+	}
+}
+.ep-addbtns.add-placements > button.secondary > span,
+.ep-addbtns.placements > button.secondary > span {
+	white-space: nowrap;
+	overflow: visible;
+	text-overflow: clip;
+	line-height: 1.1;
+}
 .ep-addbtns > button.secondary > span {
 	max-width: 100%;
 	overflow: hidden;
