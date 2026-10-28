@@ -419,6 +419,26 @@ describe('project store', () => {
       expect(r.y).toBe(4);
     });
 
+    it('W and L on a pentagon room scale each axis alone, in one undo step', async () => {
+      const { project } = await import('./project');
+      const pent: [number, number][] = [[0, 0], [4, 0], [5, 2], [2, 4], [0, 3]];
+      project.updateRoom({ shape: 'polygon', vertices: pent });
+      vi.advanceTimersByTime(200);
+      const before = get(project).room.vertices!;
+
+      project.updateRoom({ x: get(project).room.x * 2 });
+      vi.advanceTimersByTime(200);
+      let r = get(project).room;
+      expect(r.vertices).toEqual(before.map(([vx, vy]) => [vx * 2, vy]));
+      expect(r.x).toBe(10);
+
+      project.updateRoom({ y: r.y * 0.5 });
+      vi.advanceTimersByTime(200);
+      r = get(project).room;
+      expect(r.vertices).toEqual(before.map(([vx, vy]) => [vx * 2, vy * 0.5]));
+      expect(r.y).toBe(2);
+    });
+
     it('an outline that is an origin rectangle is stored as a rectangle', async () => {
       const { project } = await import('./project');
 
@@ -4135,6 +4155,21 @@ describe('lamp sticking', () => {
     project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [2, 0], [2.5, 2], [0, 2]] });
     await vi.runAllTimersAsync();
     expect(get(lamps)[0]).toMatchObject({ x: r.x - 0.2, y: 1, stick_wall: false });
+  });
+
+  it('W on a polygon room stretches the outline and a wall lamp follows its wall', async () => {
+    server.use(http.post(`${API_BASE}/session/nudge-into-bounds`, () => HttpResponse.json({ lamps: [], zones: [] })));
+    const { project, lamps, room, id } = await stuckLamp();
+    project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
+    await vi.runAllTimersAsync();
+    // The right-hand wall of the tall part, x = 6 (wall 1 runs from (6,0) to (6,2))
+    project.applyPlacement(id, 'horizontal', { x: 5.8, y: 1, z: 2, aimx: 0, aimy: 1, aimz: 2 });
+    await vi.runAllTimersAsync();
+    expect(get(lamps)[0]).toMatchObject({ stick_wall: true, wall_index: 1 });
+    project.updateRoom({ x: 12 });
+    await vi.runAllTimersAsync();
+    expect(get(room).vertices![1]).toEqual([12, 0]);
+    expect(get(lamps)[0]).toMatchObject({ stick_wall: true, wall_index: 1, x: 11.8, y: 1 });
   });
 
   it('a stuck lamp moved into bounds by the backend re-attaches where it lands', async () => {

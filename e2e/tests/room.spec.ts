@@ -84,8 +84,8 @@ test.describe('Polygon rooms', () => {
     await expect(rows).toHaveCount(4);
 
     // Draw a triangle by clicking on the canvas
-    await planTool(page, 'Draw').click();
-    await expect(planTool(page, 'Draw')).toBeDisabled();
+    await planTool(page, 'Draw outline').click();
+    await expect(planTool(page, 'Draw outline')).toBeDisabled();
     const plan = planSvg(page);
     const box = await plan.boundingBox();
     if (!box) throw new Error('plan canvas not visible');
@@ -98,9 +98,9 @@ test.describe('Polygon rooms', () => {
     await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(1);
     await page.keyboard.press('Enter');
     await expect(rows).toHaveCount(3);
-    // A polygon room's size comes from its corners
-    await expect(width).toHaveCount(0);
-    await expect(length).toHaveCount(0);
+    // A polygon room keeps Width and Length (its bounding box)
+    await expect(width).toBeEnabled();
+    await expect(length).toBeEnabled();
     await closePlan(page);
     await expect(page.locator('.summary-panel')).toContainText('3-corner outline');
 
