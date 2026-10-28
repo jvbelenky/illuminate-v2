@@ -393,7 +393,7 @@
 						<circle class="plan-lamp" class:point={ctl.onZones} class:aiming={ctl.onLamps && ctl.activeTool === 'aim'} class:selected={sel} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="{ctl.onLamps ? 'Lamp' : 'Point'} {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} />
 						{#if c.hitPx > c.px * 1.001}<circle class="plan-hit aim" cx={v.ax} cy={-v.ay} r={c.hitPx * 4.5} onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} />{/if}
 						<circle class="plan-aim" class:point={ctl.onZones} class:selected={sel} cx={v.ax} cy={-v.ay} r={c.handleR * 0.75} role="button" tabindex="-1" aria-label="Aim of {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} />
-						<text class="plan-lamp-label" x={v.x + c.handleR * 2.3} y={-v.y + c.px * 4} font-size={c.px * 11}>{m.name}</text>
+						{#if m.label !== false}<text class="plan-lamp-label" x={v.x + c.handleR * 2.3} y={-v.y + c.px * 4} font-size={c.px * 11}>{m.name}</text>{/if}
 					{/each}
 					{#if ctl.marquee}
 						{@const mx = Math.min(ctl.marquee.a[0], ctl.marquee.b[0])}

@@ -83,6 +83,18 @@ describe('PlanPane', () => {
     off.unmount();
   });
 
+  it('draws a lamp name on the plan unless its 2D label is off', async () => {
+    const { container, unmount } = render(Harness, { props: { ...baseProps, lamps: [lamp] as any, context: 'lamps' } });
+    await tick();
+    expect(container.querySelector('text.plan-lamp-label')?.textContent).toBe('Beacon');
+    unmount();
+    const off = render(Harness, { props: { ...baseProps, lamps: [{ ...lamp, show_label_2d: false }] as any, context: 'lamps' } });
+    await tick();
+    expect(off.container.querySelector('circle.plan-lamp')).not.toBeNull();
+    expect(off.container.querySelector('text.plan-lamp-label')).toBeNull();
+    off.unmount();
+  });
+
   it('projects the web on a wall view for a lamp in front of it, and in the mini view', async () => {
     const { container, ctl, unmount } = mount({ lamps: [lamp], context: 'lamps' });
     ctl.setSurface('wall:0');
@@ -103,7 +115,7 @@ describe('PlanPane', () => {
     expect(labels(out.container)).toEqual(['Draw', 'Edit corners']);
     out.unmount();
     const zones = render(Harness, { props: { ...baseProps, context: 'zones' } });
-    expect(labels(zones.container)).toEqual(['Draw', 'Copy', 'Delete']);
+    expect(labels(zones.container)).toEqual(['Draw', 'Edit corners', 'Copy', 'Delete']);
     zones.unmount();
     const obst = render(Harness, { props: { ...baseProps, context: 'obstacles' } });
     expect(labels(obst.container)).toEqual(['Draw', 'Copy', 'Delete']);
@@ -878,6 +890,28 @@ describe('PlanPane', () => {
       expect(id).toBe('zone-9');
       expect(partial.fit_room).toBe(false);
       expect((partial.vertices as unknown[]).length).toBe(4);
+    });
+
+    it('Edit corners: off until a plane is open, then one corner drag reshapes it and the tool is off', async () => {
+      const calls: unknown[][] = [];
+      const { container, ctl } = mount({ calls, zones: [wholePlane] as any, context: 'zones' });
+      const edit = () => screen.getByRole('button', { name: 'Edit corners' }) as HTMLButtonElement;
+      expect(edit().disabled).toBe(true);
+      ctl.selectZone('zone-9');
+      await tick();
+      expect(edit().disabled).toBe(false);
+      await fireEvent.click(edit());
+      expect(edit().getAttribute('aria-pressed')).toBe('true');
+      const plan = stubPlan(container);
+      const handle = container.querySelectorAll('circle.vertex')[2] as SVGCircleElement;
+      const [hx, hy] = px(plan, 6, 4);
+      const [tx, ty] = px(plan, 5, 3);
+      await fireEvent.pointerDown(handle, { clientX: hx, clientY: hy, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: tx, clientY: ty, pointerId: 1 });
+      await fireEvent.pointerUp(plan, { pointerId: 1 });
+      await tick();
+      expect(callsOf(calls, 'updateZone')).toHaveLength(1);
+      expect(edit().getAttribute('aria-pressed')).toBe('false');
     });
 
     it('Place point puts a calc point where you click; dragging its dot aims it', async () => {

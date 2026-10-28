@@ -150,6 +150,7 @@ export interface LampInstance {
   show_label?: boolean;  // Whether to show this lamp's name label in 3D scene
   show_photometric_web?: boolean;  // Whether to show photometric web mesh in 3D scene
   web_size_3d?: number;            // 3D web size multiplier, 0.25-3; undefined = 1
+  show_label_2d?: boolean;  // Whether to draw this lamp's name on the 2D plan; undefined = true
   show_photometric_web_2d?: boolean; // Whether to show the photometric web on the 2D plan; undefined = true
   web_size_2d?: number;            // 2D web size multiplier, 0.25-3; undefined = 1
 

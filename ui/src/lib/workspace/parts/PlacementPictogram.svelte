@@ -33,5 +33,7 @@
 	.placement-pictogram {
 		display: block;
 		flex: none;
+		width: 26px;
+		height: 22px;
 	}
 </style>

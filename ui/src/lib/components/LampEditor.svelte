@@ -566,7 +566,7 @@
 				<input type="checkbox" checked={lamp.stick_wall ?? false} onchange={(e) => setStickWall(e.currentTarget.checked)} />
 				<span>Stick to wall</span>
 			</label>
-			<button type="button" class="secondary rotate90" title="Rotate 90° about its axis" onclick={rotate90}><span aria-hidden="true">⟳</span> 90°</button>
+			<button type="button" class="secondary rotate90" title="Rotate 90° about its axis" onclick={rotate90}>Rotate</button>
 		</div>
 
 		<button type="button" class="ep-disc" aria-expanded={geometryOpen} onclick={() => (geometryOpen = !geometryOpen)}>
@@ -663,6 +663,10 @@
 			<div class="fold-body">
 				<div class="display-section">
 					<span class="display-head">2D</span>
+					<label class="ep-check">
+						<input type="checkbox" aria-label="Show label in 2D" checked={lamp.show_label_2d ?? true} onchange={(e) => update({ show_label_2d: e.currentTarget.checked })} />
+						<span>Show label</span>
+					</label>
 					<label class="ep-check">
 						<input type="checkbox" aria-label="Show photometric web in 2D" checked={lamp.show_photometric_web_2d ?? true} onchange={(e) => update({ show_photometric_web_2d: e.currentTarget.checked })} />
 						<span>Show photometric web</span>
