@@ -38,7 +38,7 @@
 	const followsOutline = $derived((zone.vertices?.length ?? 0) >= 3 || (isPolygonRoom(room) && !!zone.isStandard));
 	const outline = $derived(zone.vertices && zone.vertices.length >= 3 ? zone.vertices : roomVertices(room));
 
-	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, orange=selected
+	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, cyan=selected
 	const pointColor = $derived(
 		sceneItemColor($theme, { disabled: zone.enabled === false, highlighted, selected })
 	);

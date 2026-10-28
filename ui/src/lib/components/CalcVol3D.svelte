@@ -319,7 +319,7 @@
 
 	const isoColors = $derived(isoScale?.colors ?? null);
 
-	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, orange=selected
+	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, cyan=selected
 	const lineColor = $derived(
 		sceneItemColor($theme, { disabled: zone.enabled === false, highlighted, selected })
 	);

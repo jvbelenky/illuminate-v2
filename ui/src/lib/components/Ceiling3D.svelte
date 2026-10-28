@@ -6,7 +6,7 @@
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
 	import { userSettings } from '$lib/stores/settings';
-	import { ceilingColors, roomWireColor, SELECTED_COLOR } from '$lib/utils/sceneColors';
+	import { ceilingColors, roomWireColor, selectedColor } from '$lib/utils/sceneColors';
 	import { roomVertices } from '$lib/utils/roomGeometry';
 	import { fromMeters } from '$lib/utils/unitConversion';
 	import { ceilingDrawing, type DrawnKeepOut, type DrawnPoint } from '$lib/ceiling/ceiling3d';
@@ -67,7 +67,7 @@
 		};
 	});
 
-	const itemColor = (selected: boolean, base: string) => (selected ? SELECTED_COLOR : base);
+	const itemColor = (selected: boolean, base: string) => (selected ? selectedColor($theme) : base);
 </script>
 
 {#if drawing.tiles.length}

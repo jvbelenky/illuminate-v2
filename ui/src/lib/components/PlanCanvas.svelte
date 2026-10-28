@@ -93,7 +93,7 @@
 		draggableBody?: boolean;
 		/** Double-click a corner to remove it, or a wall to add a corner there. */
 		dblClickCorners?: boolean;
-		/** Draw the draft as a selected area (orange tint, dashed), as for a ceiling keep-out area. */
+		/** Draw the draft as a selected area (cyan tint, dashed), as for a ceiling keep-out area. */
 		selectedDraft?: boolean;
 		/** Mark the outline as invalid (red). */
 		invalid?: boolean;
