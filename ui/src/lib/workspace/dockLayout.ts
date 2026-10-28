@@ -15,7 +15,25 @@ export interface DockLayout {
   main: MainView;
   /** Widths the user dragged, per column; a column without one follows its panels. */
   widths?: Partial<Record<DockColumn, number>>;
+  /** Where the mini view floats (px from the workspace's top left); it is then in neither column. */
+  float?: FloatBox | null;
 }
+
+export interface FloatBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface AreaSize {
+  width: number;
+  height: number;
+}
+
+/** A floating mini view's default size (its docked 4:3 size) and smallest size (px). */
+export const FLOAT_DEFAULT = { w: 300, h: 225 };
+export const FLOAT_MIN = { w: 200, h: 150 };
 
 /** How narrow and wide a column can be dragged (px). */
 export const COLUMN_LIMITS: Record<DockColumn, { min: number; max: number }> = {
@@ -51,7 +69,45 @@ function withWidths(l: DockLayout, widths: Partial<Record<DockColumn, number>>):
 
 function fresh(l: DockLayout): DockLayout {
   const next: DockLayout = { left: [...l.left], right: [...l.right], minimized: [...l.minimized], main: l.main };
+  if (l.float) next.float = { ...l.float };
   return l.widths ? withWidths(next, { ...l.widths }) : next;
+}
+
+/** The layout with the mini view docked: no float key. */
+function withoutFloat(l: DockLayout): DockLayout {
+  const { float: _f, ...rest } = l;
+  return rest;
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(Math.max(lo, hi), v));
+}
+
+/** A box kept inside the area: the size first (min, then half the area), then the position. */
+function fitBox(b: FloatBox, area: AreaSize): FloatBox {
+  const w = Math.round(clamp(b.w, FLOAT_MIN.w, area.width / 2));
+  const h = Math.round(clamp(b.h, FLOAT_MIN.h, area.height / 2));
+  return { x: Math.round(clamp(b.x, 0, area.width - w)), y: Math.round(clamp(b.y, 0, area.height - h)), w, h };
+}
+
+/** A box kept inside the area by position only (size untouched). */
+function placeBox(b: FloatBox, area: AreaSize): FloatBox {
+  return { ...b, x: Math.round(clamp(b.x, 0, area.width - b.w)), y: Math.round(clamp(b.y, 0, area.height - b.h)) };
+}
+
+/** A stored float box, or null unless it is four finite numbers (clamped to sane values). */
+function sanitizeFloat(raw: unknown): FloatBox | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const nums = [r.x, r.y, r.w, r.h];
+  if (!nums.every((n) => typeof n === 'number' && Number.isFinite(n))) return null;
+  const [x, y, w, h] = nums as number[];
+  return {
+    x: Math.round(Math.max(0, x)),
+    y: Math.round(Math.max(0, y)),
+    w: Math.round(Math.max(FLOAT_MIN.w, w)),
+    h: Math.round(Math.max(FLOAT_MIN.h, h)),
+  };
 }
 
 /** Stored widths, keeping finite numbers (clamped) and dropping anything else. */
@@ -74,7 +130,11 @@ export function sanitizeDock(raw: unknown): DockLayout {
   if (r.main !== '2d' && r.main !== '3d') return fresh(DEFAULT_DOCK);
   const placed = [...r.left, ...r.right];
   if (!placed.every(isPanelId)) return fresh(DEFAULT_DOCK);
-  if (placed.length !== PANEL_IDS.length || !PANEL_IDS.every((id) => placed.filter((p) => p === id).length === 1)) {
+  // A floating mini view is in neither column; every other panel is in one exactly once
+  const float = r.float === undefined || r.float === null ? null : sanitizeFloat(r.float);
+  if (r.float !== undefined && r.float !== null && !float) return fresh(DEFAULT_DOCK);
+  const expected = float ? PANEL_IDS.filter((id) => id !== 'mini') : PANEL_IDS;
+  if (placed.length !== expected.length || !expected.every((id) => placed.filter((p) => p === id).length === 1)) {
     return fresh(DEFAULT_DOCK);
   }
   if (!r.minimized.every(isPanelId) || new Set(r.minimized).size !== r.minimized.length) return fresh(DEFAULT_DOCK);
@@ -84,12 +144,13 @@ export function sanitizeDock(raw: unknown): DockLayout {
     minimized: [...(r.minimized as DockPanelId[])],
     main: r.main,
   };
+  if (float) layout.float = float;
   return withWidths(layout, sanitizeWidths(r.widths));
 }
 
 /** Move a panel to a column at an index (in that column once the panel is lifted out, clamped). */
 export function movePanel(l: DockLayout, id: DockPanelId, column: DockColumn, index: number): DockLayout {
-  const next = fresh(l);
+  const next = id === 'mini' ? withoutFloat(fresh(l)) : fresh(l);
   next.left = next.left.filter((p) => p !== id);
   next.right = next.right.filter((p) => p !== id);
   const target = next[column];
@@ -145,4 +206,37 @@ export function resetColumnWidth(l: DockLayout, column: DockColumn): DockLayout 
 /** Insertion index for a pointer y, given the vertical midpoints of the panels in a column. */
 export function dropIndex(panelMidYs: number[], y: number): number {
   return panelMidYs.filter((m) => m < y).length;
+}
+
+/** The mini view floating with its top left at (x, y), at its floating size or the default. */
+export function floatPanel(l: DockLayout, x: number, y: number, area?: AreaSize): DockLayout {
+  const next = fresh(l);
+  next.left = next.left.filter((p) => p !== 'mini');
+  next.right = next.right.filter((p) => p !== 'mini');
+  const box = { x: Math.round(x), y: Math.round(y), w: l.float?.w ?? FLOAT_DEFAULT.w, h: l.float?.h ?? FLOAT_DEFAULT.h };
+  next.float = area ? placeBox(box, area) : box;
+  return next;
+}
+
+/** The floating mini view moved to (x, y), kept inside the area (unchanged when docked). */
+export function moveFloat(l: DockLayout, x: number, y: number, area: AreaSize): DockLayout {
+  if (!l.float) return l;
+  return { ...fresh(l), float: placeBox({ ...l.float, x, y }, area) };
+}
+
+/** The floating mini view resized, between its min size and half the area, kept inside it. */
+export function resizeFloat(l: DockLayout, w: number, h: number, area: AreaSize): DockLayout {
+  if (!l.float) return l;
+  return { ...fresh(l), float: fitBox({ ...l.float, w, h }, area) };
+}
+
+/** The floating mini view docked into a column at an index. */
+export function dockFloating(l: DockLayout, column: DockColumn, index: number): DockLayout {
+  return movePanel(l, 'mini', column, index);
+}
+
+/** Where a float box shows in an area of this size: inside it, and no more than half of it. */
+export function floatInArea(b: FloatBox, area: AreaSize | null): FloatBox {
+  if (!area || area.width <= 0 || area.height <= 0) return b;
+  return fitBox(b, area);
 }

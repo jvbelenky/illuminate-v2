@@ -86,4 +86,25 @@ describe('ViewHost', () => {
 		expect(screen.getByTestId('v3d')).toBe(view3d);
 		expect(slotOf('v3d').style.visibility).not.toBe('hidden');
 	});
+
+	test('docking and floating the mini view keeps the same DOM nodes, over its new anchor', async () => {
+		const props = base();
+		const { rerender } = render(Host, props);
+		const slot3d = slotOf('v3d');
+		const view3d = screen.getByTestId('v3d');
+		expect(slot3d.classList.contains('floating')).toBe(false);
+		// The mini anchor is a new element in the floating window
+		await rerender({ ...props, miniAnchor: anchor(500, 326, 300, 199), miniFloating: true });
+		expect(slotOf('v3d')).toBe(slot3d);
+		expect(screen.getByTestId('v3d')).toBe(view3d);
+		expect(slot3d.classList.contains('floating')).toBe(true);
+		expect(slot3d.style.left).toBe('500px');
+		expect(slot3d.style.top).toBe('326px');
+		expect(slotOf('v2d').classList.contains('floating')).toBe(false);
+		await rerender({ ...props, miniAnchor: anchor(900, 26, 300, 225), miniFloating: false });
+		expect(slotOf('v3d')).toBe(slot3d);
+		expect(screen.getByTestId('v3d')).toBe(view3d);
+		expect(slot3d.classList.contains('floating')).toBe(false);
+		expect(slot3d.style.left).toBe('900px');
+	});
 });

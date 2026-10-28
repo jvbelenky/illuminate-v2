@@ -204,3 +204,154 @@ describe('DockArea', () => {
 		expect(container.querySelectorAll('button[aria-label="Swap views"]').length).toBe(1);
 	});
 });
+
+describe('DockArea: a floating mini view', () => {
+	const floating = (f = { x: 100, y: 50, w: 300, h: 225 }, over: Record<string, unknown> = {}) => ({
+		...DEFAULT_DOCK,
+		left: ['editor'],
+		right: ['results'],
+		minimized: [],
+		float: f,
+		...over
+	});
+	const areaEl = (c: HTMLElement) => c.querySelector('.dock-area') as HTMLElement;
+	const floatEl = (c: HTMLElement) => c.querySelector('.dock-float') as HTMLElement;
+
+	function floatGeometry(c: HTMLElement) {
+		rect(areaEl(c), 0, 0, 1200, 600);
+		rect(colEl(c, 'left'), 0, 0, 300, 600);
+		rect(colEl(c, 'right'), 900, 0, 300, 600);
+		rect(panelEl(c, 'editor'), 0, 0, 300, 600);
+		rect(panelEl(c, 'results'), 900, 0, 300, 600);
+	}
+
+	test('a drag of the docked mini bar released over the main view floats it there', async () => {
+		const onChange = vi.fn();
+		const { container } = render(Host, base({ onChange }));
+		mockGeometry(container);
+		rect(areaEl(container), 0, 0, 1200, 600);
+		const bar = container.querySelector('[data-panel=mini] .dock-bar')!;
+		ptr('pointerdown', bar, 1000, 10);
+		ptr('pointermove', bar, 800, 200);
+		ptr('pointermove', bar, 600, 300);
+		await tick();
+		expect(container.querySelector('.dock-drop.on')).toBeNull();
+		ptr('pointerup', bar, 600, 300);
+		expect(onChange).toHaveBeenCalledTimes(1);
+		const l = onChange.mock.calls[0][0];
+		expect(l.right).toEqual(['results']);
+		expect(l.left).toEqual(['editor']);
+		// The grab point stays under the pointer
+		expect(l.float).toEqual({ x: 500, y: 290, w: 300, h: 225 });
+	});
+
+	test('the editor and results do not float', async () => {
+		const onChange = vi.fn();
+		const { container } = render(Host, base({ onChange }));
+		mockGeometry(container);
+		rect(areaEl(container), 0, 0, 1200, 600);
+		const bar = container.querySelector('[data-panel=results] .dock-bar')!;
+		ptr('pointerdown', bar, 1000, 240);
+		ptr('pointermove', bar, 600, 300);
+		ptr('pointerup', bar, 600, 300);
+		expect(onChange).not.toHaveBeenCalled();
+	});
+
+	test('a floating mini view is a window with its bar, out of the columns', () => {
+		const { container } = render(Host, base({ layout: floating() }));
+		const win = floatEl(container);
+		expect(win).not.toBeNull();
+		expect(win.style.left).toBe('100px');
+		expect(win.style.top).toBe('50px');
+		expect(win.style.width).toBe('300px');
+		expect(win.style.height).toBe('225px');
+		expect(win.querySelector('[data-panel=mini] .dock-bar .dock-title')!.textContent).toBe('3D');
+		expect(win.querySelector('button[aria-label="Swap views"]')).not.toBeNull();
+		expect(win.querySelector('button[aria-label="Minimize"]')).not.toBeNull();
+		expect(colEl(container, 'right').querySelector('[data-panel=mini]')).toBeNull();
+		expect(screen.getByTestId('content-mini')).toBeTruthy();
+	});
+
+	test('minimized, it keeps only its bar where it floats', () => {
+		const { container } = render(Host, base({ layout: floating(undefined, { minimized: ['mini'] }) }));
+		const win = floatEl(container);
+		expect(win.style.left).toBe('100px');
+		expect(win.style.height).toBe('');
+		expect(screen.queryByTestId('content-mini')).toBeNull();
+		expect(container.querySelector('.dock-float-resize')).toBeNull();
+	});
+
+	test('dragging the floating bar moves it, live, and stores it on release', async () => {
+		const onChange = vi.fn();
+		const { container } = render(Host, base({ layout: floating(), onChange }));
+		floatGeometry(container);
+		const bar = floatEl(container).querySelector('.dock-bar')!;
+		ptr('pointerdown', bar, 450, 60);
+		ptr('pointermove', bar, 500, 110);
+		ptr('pointermove', bar, 550, 160);
+		await tick();
+		expect(floatEl(container).style.left).toBe('200px');
+		expect(floatEl(container).style.top).toBe('150px');
+		expect(container.querySelector('.dock-ghost')).toBeNull();
+		ptr('pointerup', bar, 550, 160);
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange.mock.calls[0][0].float).toEqual({ x: 200, y: 150, w: 300, h: 225 });
+	});
+
+	test('the clamp holds while moving and for a stored position outside the area', async () => {
+		const onChange = vi.fn();
+		const { container } = render(Host, base({ layout: floating(), onChange }));
+		floatGeometry(container);
+		const bar = floatEl(container).querySelector('.dock-bar')!;
+		ptr('pointerdown', bar, 150, 60);
+		ptr('pointermove', bar, 5000, 5000);
+		ptr('pointerup', bar, 5000, 5000);
+		expect(onChange.mock.calls[0][0].float).toEqual({ x: 900, y: 375, w: 300, h: 225 });
+
+		const far = render(Host, base({ layout: floating({ x: 4000, y: 3000, w: 300, h: 225 }) }));
+		rect(areaEl(far.container), 0, 0, 1200, 600);
+		window.dispatchEvent(new Event('resize'));
+		await tick();
+		expect(floatEl(far.container).style.left).toBe('900px');
+		expect(floatEl(far.container).style.top).toBe('375px');
+	});
+
+	test('a drop of the floating bar onto a column docks it', async () => {
+		const onChange = vi.fn();
+		const { container } = render(Host, base({ layout: floating(), onChange }));
+		floatGeometry(container);
+		const bar = floatEl(container).querySelector('.dock-bar')!;
+		ptr('pointerdown', bar, 150, 60);
+		ptr('pointermove', bar, 600, 300);
+		ptr('pointermove', bar, 150, 500);
+		await tick();
+		expect(container.querySelector('.dock-drop.on')).not.toBeNull();
+		ptr('pointerup', bar, 150, 500);
+		const l = onChange.mock.calls[0][0];
+		expect(l.left).toEqual(['editor', 'mini']);
+		expect(l.float).toBeUndefined();
+	});
+
+	test('the bottom-right corner resizes it, within its limits', async () => {
+		const onChange = vi.fn();
+		const { container } = render(Host, base({ layout: floating(), onChange }));
+		floatGeometry(container);
+		const corner = container.querySelector('.dock-float-resize') as HTMLElement;
+		expect(corner).not.toBeNull();
+		ptr('pointerdown', corner, 400, 275);
+		ptr('pointermove', window, 500, 350);
+		await tick();
+		expect(floatEl(container).style.width).toBe('400px');
+		expect(floatEl(container).style.height).toBe('300px');
+		ptr('pointerup', window, 500, 350);
+		expect(onChange.mock.calls[0][0].float).toEqual({ x: 100, y: 50, w: 400, h: 300 });
+		ptr('pointerdown', corner, 400, 275);
+		ptr('pointermove', window, 0, 0);
+		ptr('pointerup', window, 0, 0);
+		expect(onChange.mock.calls[1][0].float).toEqual({ x: 100, y: 50, w: 200, h: 150 });
+		ptr('pointerdown', corner, 400, 275);
+		ptr('pointermove', window, 4000, 4000);
+		ptr('pointerup', window, 4000, 4000);
+		expect(onChange.mock.calls[2][0].float).toEqual({ x: 100, y: 50, w: 600, h: 300 });
+	});
+});
