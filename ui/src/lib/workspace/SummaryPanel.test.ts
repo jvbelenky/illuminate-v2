@@ -33,7 +33,8 @@ const kv = (label: string) => screen.getByText(label).parentElement?.textContent
 describe('SummaryPanel', () => {
   it('shows Dimensions, Floor area, Volume and Reflections for a box room', () => {
     setup({}, { shape: 'rectangle', enable_reflectance: true, reflectances: { floor: 0.05, ceiling: 0.08, north: 0.08 } });
-    expect(screen.getByRole('heading', { name: 'Summary' })).toBeTruthy();
+    // The panel bar says Summary; the panel itself has no heading
+    expect(screen.queryByRole('heading', { name: 'Summary' })).toBeNull();
     expect(kv('Dimensions')).toContain('24 × 20 × 9 ft');
     expect(kv('Floor area')).toContain('480.0 ft²');
     expect(kv('Volume')).toContain('4,320.0 ft³');

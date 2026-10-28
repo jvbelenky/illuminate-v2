@@ -1,4 +1,4 @@
-import { describe, test, expect, vi } from 'vitest';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { tick } from 'svelte';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import Host from './test/DockAreaHost.svelte';
@@ -38,6 +38,26 @@ function mockGeometry(c: HTMLElement) {
 }
 
 describe('DockArea', () => {
+	// jsdom measures the area as 0 wide, so default widths follow window.innerWidth
+	const innerWidth0 = window.innerWidth;
+	const setWindowWidth = (w: number) => Object.defineProperty(window, 'innerWidth', { value: w, configurable: true, writable: true });
+	beforeEach(() => setWindowWidth(1920));
+	afterEach(() => setWindowWidth(innerWidth0));
+
+	test('default widths follow the window: the editor column 22%, Results 21%', () => {
+		setWindowWidth(1600);
+		const { container } = render(Host, base({ layout: { ...DEFAULT_DOCK } }));
+		expect(colEl(container, 'left').style.width).toBe('352px');
+		expect(colEl(container, 'right').style.width).toBe('336px');
+	});
+
+	test('a narrow window gives the narrowest defaults', () => {
+		setWindowWidth(1200);
+		const { container } = render(Host, base({ layout: { ...DEFAULT_DOCK } }));
+		expect(colEl(container, 'left').style.width).toBe('280px');
+		expect(colEl(container, 'right').style.width).toBe('260px');
+	});
+
 	test('renders panels in their columns in order', () => {
 		const { container } = render(Host, base());
 		const ids = (col: string) =>
@@ -45,7 +65,7 @@ describe('DockArea', () => {
 		expect(ids('left')).toEqual(['editor']);
 		expect(ids('right')).toEqual(['mini', 'results']);
 		expect(screen.getByTestId('main-view')).toBeTruthy();
-		expect(colEl(container, 'left').style.width).toBe('420px');
+		expect(colEl(container, 'left').style.width).toBe('422px');
 	});
 
 	/** The bare Calculate control, checked to sit directly above the Results panel, outside any panel. */
@@ -180,11 +200,11 @@ describe('DockArea', () => {
 		ptr('pointermove', window, 380, 200);
 		await tick();
 		// Live while dragging, stored on release
-		expect(colEl(container, 'left').style.width).toBe('500px');
+		expect(colEl(container, 'left').style.width).toBe('502px');
 		expect(onChange).not.toHaveBeenCalled();
 		ptr('pointerup', window, 380, 200);
 		expect(onChange).toHaveBeenCalledTimes(1);
-		expect(onChange.mock.calls[0][0].widths).toEqual({ left: 500 });
+		expect(onChange.mock.calls[0][0].widths).toEqual({ left: 502 });
 		// The right gutter grows its column as it moves left, within the limits
 		ptr('pointerdown', right, 900, 200);
 		ptr('pointermove', window, 100, 200);
@@ -197,7 +217,7 @@ describe('DockArea', () => {
 		const layout = { ...DEFAULT_DOCK, widths: { left: 450 } };
 		const { container } = render(Host, base({ layout, onChange }));
 		expect(colEl(container, 'left').style.width).toBe('450px');
-		expect(colEl(container, 'right').style.width).toBe('400px');
+		expect(colEl(container, 'right').style.width).toBe('403px');
 		await fireEvent.dblClick(container.querySelector('.dock-gutter[data-column=left]')!);
 		expect(onChange).toHaveBeenCalledTimes(1);
 		expect(onChange.mock.calls[0][0].widths).toBeUndefined();
@@ -208,7 +228,7 @@ describe('DockArea', () => {
 		const { container } = render(Host, base({ onChange }));
 		const left = container.querySelector('.dock-gutter[data-column=left]') as HTMLElement;
 		await fireEvent.keyDown(left, { key: 'ArrowRight' });
-		expect(onChange.mock.calls[0][0].widths).toEqual({ left: 436 });
+		expect(onChange.mock.calls[0][0].widths).toEqual({ left: 438 });
 	});
 
 	test('an empty column has no gutter', () => {

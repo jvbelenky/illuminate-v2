@@ -61,7 +61,7 @@ export function minPanelHeight(id: DockPanelId): number {
 
 /** How narrow and wide a column can be dragged (px). */
 export const COLUMN_LIMITS: Record<DockColumn, { min: number; max: number }> = {
-  left: { min: 320, max: 550 },
+  left: { min: 280, max: 550 },
   right: { min: 260, max: 600 },
 };
 
@@ -268,21 +268,31 @@ export function withMain(l: DockLayout, view: MainView): DockLayout {
   return l.main === view ? l : { ...fresh(l), main: view };
 }
 
-/** A panel's default column width (px): Results keeps one width whether or not results exist. */
-export function panelWidth(id: DockPanelId): number {
-  return id === 'editor' ? 420 : id === 'results' ? 400 : 300;
+/** The window width default widths assume when none is known (px). */
+export const DEFAULT_AREA_WIDTH = 1920;
+
+/**
+ * A panel's default column width (px) in a window `areaWidth` wide: the
+ * editor 22% of it (280–550), Results 21% (260–600), the mini view 300.
+ */
+export function panelWidth(id: DockPanelId, areaWidth = DEFAULT_AREA_WIDTH): number {
+  if (id === 'editor') return Math.round(clamp(0.22 * areaWidth, 280, 550));
+  if (id === 'results') return Math.round(clamp(0.21 * areaWidth, 260, 600));
+  return 300;
 }
 
 /**
  * A column's width: 0 when empty, else the width the user dragged, else the
- * widest of its panels.
+ * default of its editor or Results panel (the wider of the two), else the
+ * mini view's.
  */
-export function columnWidth(l: DockLayout, column: DockColumn): number {
+export function columnWidth(l: DockLayout, column: DockColumn, areaWidth = DEFAULT_AREA_WIDTH): number {
   const ids = l[column];
   if (ids.length === 0) return 0;
   const stored = l.widths?.[column];
   if (stored !== undefined) return clampWidth(column, stored);
-  return clampWidth(column, ids.reduce((w, id) => Math.max(w, panelWidth(id)), 0));
+  const sizing = ids.some(isFiller) ? ids.filter(isFiller) : ids;
+  return clampWidth(column, sizing.reduce((w, id) => Math.max(w, panelWidth(id, areaWidth)), 0));
 }
 
 /** The narrowest the main view is squeezed to before the side columns give way (px). */
