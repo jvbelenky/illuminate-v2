@@ -1200,7 +1200,7 @@
 
 	{#snippet view3d(mini: boolean)}
 		<div class="viewer-host">
-			<RoomViewer bind:this={roomViewer} {mini} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+			<RoomViewer bind:this={roomViewer} {mini} touch={isMobile} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 		</div>
 	{/snippet}
 
@@ -1598,21 +1598,6 @@
 
 	.mobile-view :global(.viewer-container) {
 		border-radius: 0;
-	}
-
-	/* The 3D view's own image buttons stand left of ⤢ (36 px + 8 px gap) */
-	.mobile-view :global(.viewer-actions) {
-		right: calc(var(--spacing-sm) + 44px);
-	}
-
-	/* No edit strip over the phone's 3D view: its tools stay at the bottom */
-	.mobile-view :global(.viewer-container.raised .view-overlay),
-	.mobile-view :global(.viewer-container.raised .proj-toggle) {
-		bottom: var(--spacing-sm);
-	}
-
-	.mobile-view :global(.viewer-container.raised .units-label) {
-		bottom: var(--spacing-md);
 	}
 
 	.mobile-editor {

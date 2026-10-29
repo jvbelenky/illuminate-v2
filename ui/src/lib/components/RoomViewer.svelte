@@ -47,6 +47,8 @@
 		onCaptureApiReady?: (api: SceneCaptureApi) => void;
 		/** The docked mini view: no overlays or actions, and clicks select or pick nothing (orbit and zoom stay). */
 		mini?: boolean;
+		/** The phone's view: touch orbits and the host's Fit resets, so no view pad, projection, units or image buttons. */
+		touch?: boolean;
 		/** A click on room surfaces, in click order (only when no item of the context is under the cursor) */
 		onSurfaceClick?: (surfaces: Surface[]) => void;
 		/** What the pointer is over, for the parent (null when it leaves the room) */
@@ -57,7 +59,7 @@
 		clickContext?: PlanContext | null;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false, onSurfaceClick, onSurfaceHover, viewedSurface = null, clickContext = null }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false, touch = false, onSurfaceClick, onSurfaceHover, viewedSurface = null, clickContext = null }: Props = $props();
 
 	// Drag detection: suppress clicks that follow a drag (orbit/pan). The handlers
 	// stay attached in the mini view (Threlte registers them at creation) and do nothing there.
@@ -303,7 +305,7 @@
 </script>
 
 <div class="viewer-container" class:mini class:raised={clickContext !== null} bind:this={viewerContainer} onpointerdown={handlePointerDown} onpointerup={handlePointerUp} onpointerleave={() => { hover = null; pointerHeld = false; }}>
-	{#if !mini}
+	{#if !mini && !touch}
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 	<ProjectionToggle isOrtho={useOrtho} onclick={handleToggleProjection} />
 	<span class="units-label">Units: {unitLabel($userSettings.units)}</span>
