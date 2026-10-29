@@ -3,6 +3,8 @@
 	import type { ZoneDisplayMode } from '$lib/types/project';
 	import { project } from '$lib/stores/project';
 	import { undoShortcut, redoShortcut } from '$lib/utils/undoKeys';
+	import { UNIT_INFO, LENGTH_UNITS, type LengthUnit } from '$lib/utils/unitConversion';
+	import CalculateButton from './CalculateButton.svelte';
 
 	const history = project.history;
 
@@ -53,6 +55,11 @@
 		globalHeatmapNormalization: boolean;
 		onToggleGlobalHeatmapNormalization: () => void;
 		onResetPanels?: () => void;
+		/** Phone: a calculation started from the top bar finished. */
+		onCalculated?: () => void;
+		/** Phone: the project's length unit, set from the menu. */
+		units?: LengthUnit;
+		onUnitsChange?: (event: Event) => void;
 	}
 
 	let {
@@ -101,7 +108,10 @@
 		onSetAllZonesDisplayMode,
 		globalHeatmapNormalization,
 		onToggleGlobalHeatmapNormalization,
-		onResetPanels
+		onResetPanels,
+		onCalculated,
+		units,
+		onUnitsChange
 	}: Props = $props();
 
 	const colormapFavorites = [
@@ -368,8 +378,8 @@
 <svelte:window onkeydown={handleKeydown} onclick={handleClickOutside} />
 
 {#if isMobile}
-<!-- Mobile menu bar -->
-<nav class="menu-bar">
+<!-- Mobile menu bar: ☰, the file name, Calculate -->
+<nav class="menu-bar mobile">
 	<div class="menu-left">
 		<button class="mobile-hamburger" onclick={toggleMobileMenu} aria-label="Open menu">
 			<svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -402,7 +412,7 @@
 		{/if}
 	</div>
 
-	<div class="menu-right"><a class="app-name" href="https://www.github.com/jvbelenky/illuminate-v2" target="_blank" rel="noopener noreferrer">Illuminate v2</a></div>
+	<div class="menu-calc"><CalculateButton layout="top" {onCalculated} /></div>
 </nav>
 
 <!-- Mobile menu overlay -->
@@ -428,6 +438,17 @@
 				<button class="mobile-quick-btn" onclick={() => mobileAction(onSaveAs)}>Save As</button>
 			</div>
 		</div>
+
+		{#if units && onUnitsChange}
+			<label class="mobile-units">
+				<span>Units</span>
+				<select value={units} onchange={onUnitsChange}>
+					{#each LENGTH_UNITS as u (u)}
+						<option value={u}>{UNIT_INFO[u].label}</option>
+					{/each}
+				</select>
+			</label>
+		{/if}
 
 		<div class="mobile-menu-sections">
 			<!-- Edit -->
@@ -910,3 +931,35 @@
 	<div class="menu-right"><a class="app-name" href="https://www.github.com/jvbelenky/illuminate-v2" target="_blank" rel="noopener noreferrer">Illuminate v2</a></div>
 </nav>
 {/if}
+
+<style>
+	.menu-bar.mobile {
+		gap: 8px;
+	}
+	.menu-bar.mobile .menu-left {
+		flex: none;
+	}
+	.menu-bar.mobile .menu-title {
+		justify-content: flex-start;
+		color: var(--color-text-muted);
+	}
+	.menu-calc {
+		flex: none;
+		display: flex;
+		align-items: center;
+	}
+	.mobile-units {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 12px 16px;
+		border-bottom: 1px solid var(--color-border);
+		font-size: 0.875rem;
+		color: var(--color-text);
+	}
+	.mobile-units select {
+		width: auto;
+		min-width: 150px;
+	}
+</style>

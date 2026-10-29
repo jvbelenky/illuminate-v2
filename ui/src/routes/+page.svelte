@@ -24,11 +24,13 @@
 	import type { PlanActions, PlanScene } from '$lib/plan/planActions';
 	import { PlanController, isTypingTarget } from '$lib/plan/planController.svelte';
 	import PlanPane from '$lib/plan/PlanPane.svelte';
-	import ViewsPane from '$lib/workspace/ViewsPane.svelte';
 	import DockArea from '$lib/workspace/DockArea.svelte';
 	import ViewHost from '$lib/workspace/ViewHost.svelte';
 	import MainViewControls from '$lib/workspace/MainViewControls.svelte';
 	import { cancelPickOffMain, followPickMode } from '$lib/workspace/viewDemands';
+	import { FULL_SCREEN_OFF, followCanvasTool, toggleFullScreen, wantsFullScreen, type FullScreen } from '$lib/workspace/mobileView';
+	import { pushState } from '$app/navigation';
+	import { page } from '$app/state';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
 	import { scrollRowIntoView } from '$lib/workspace/parts/scrollRowIntoView';
@@ -233,9 +235,9 @@
 		untrack(() => plan.setContext(planContext(s.mode, s.stage, s.part)));
 	});
 
-	/** Show the editor column (the Configure tab on a phone). */
+	/** Show the editor column (the Design tab on a phone). */
 	function revealEditor() {
-		if (isMobile) activeMobileTab = 'configure';
+		if (isMobile) activeMobileTab = 'design';
 		else if (dock.minimized.includes('editor')) setDock(toggleMinimized(dock, 'editor'));
 	}
 
@@ -292,14 +294,18 @@
 	// Where the floating mini view shows while it is dragged or resized, and its place in the
 	// stack of floating panels, so its view follows
 	let miniFloat = $state<{ box: FloatBox; z: number } | null>(null);
-	// A flow brings the view it needs to the main view (desktop; the phone shows both):
+	// A flow brings the view it needs to the main view (on a phone, the pinned view):
 	// plan drawing and placing need the 2D canvas, a 3D pick needs the 3D view
 	plan.onNeedCanvas = () => {
-		if (!isMobile) showMain('2d');
+		if (isMobile) mobileMain = '2d';
+		else showMain('2d');
 	};
-	onMount(() => followPickMode(pickMode, () => dock, setDock, () => !isMobile));
+	onMount(() => followPickMode(pickMode, () => (isMobile ? { ...dock, main: mobileMain } : dock), (l) => {
+		if (isMobile) mobileMain = l.main;
+		else setDock(l);
+	}));
 	$effect(() => {
-		if (!isMobile) cancelPickOffMain(dock.main, pickMode);
+		cancelPickOffMain(isMobile ? mobileMain : dock.main, pickMode);
 	});
 
 	let startChooserBusy = $state(false);
@@ -342,8 +348,42 @@
 
 	// Mobile responsive state
 	let isMobile = $state(false);
-	type MobileTab = 'configure' | 'viewer' | 'results';
-	let activeMobileTab = $state<MobileTab>('viewer');
+	type MobileTab = 'design' | 'results';
+	let activeMobileTab = $state<MobileTab>('design');
+	// The Design tab's pinned view: 2D or 3D, and whether it fills the screen
+	let mobileMain = $state<MainView>('2d');
+	let fullView = $state<FullScreen>(FULL_SCREEN_OFF);
+	let roomViewer = $state<RoomViewer | undefined>(undefined);
+
+	/** Enter or leave full screen; entering adds a history entry, so the back button leaves it. */
+	function setFullView(next: FullScreen) {
+		const was = fullView.on;
+		fullView = next;
+		if (next.on && !was) pushState('', { mobileFullView: true });
+		else if (!next.on && was && page.state.mobileFullView) history.back();
+	}
+	// The back button (its history entry popped) leaves full screen
+	$effect(() => {
+		const inHistory = !!page.state.mobileFullView;
+		untrack(() => {
+			if (!inHistory && fullView.on) fullView = FULL_SCREEN_OFF;
+		});
+	});
+	// Drawing or Edit corners takes the view full screen, and gives it back when done
+	let canvasToolWas = false;
+	$effect(() => {
+		const now = wantsFullScreen({ drawing: plan.drawing, activeTool: plan.activeTool });
+		untrack(() => {
+			const was = canvasToolWas;
+			canvasToolWas = now;
+			if (isMobile) setFullView(followCanvasTool(fullView, was, now));
+		});
+	});
+
+	function fitMobileView() {
+		if (mobileMain === '2d') plan.requestFit();
+		else roomViewer?.fitView();
+	}
 
 	function checkMobile() {
 		isMobile = window.innerWidth < 768;
@@ -1032,12 +1072,17 @@
 	// removes its last corner); text fields keep the browser's own text undo.
 	function onGlobalKeydown(event: KeyboardEvent) {
 		handleSaveShortcut(event);
+		// Escape leaves the phone's full-screen view, once no canvas tool or pick is running
+		const leaveFullView = event.key === 'Escape' && isMobile && fullView.on && !$pickMode && !plan.drawing && !plan.activeTool;
 		// Escape cancels the plan's gesture or selection, unless a dialog is open
 		// (the dialog takes that Escape), a 3D pick is in progress (it cancels the
 		// pick) or the key is typed into a field.
 		if (event.key === 'Escape' && !event.defaultPrevented && $workspaceUi.mode === 'editor' && (!$pickMode || plan.pointPick)
 			&& !isTypingTarget(event.target) && !document.querySelector('[role="dialog"][aria-modal="true"]')) {
 			plan.onEscapeKey();
+		}
+		if (leaveFullView && !event.defaultPrevented && !isTypingTarget(event.target) && !document.querySelector('[role="dialog"][aria-modal="true"]')) {
+			setFullView(FULL_SCREEN_OFF);
 		}
 		const action = undoKeyOf(event);
 		if (!action || event.defaultPrevented) return;
@@ -1122,6 +1167,9 @@
 		}}
 		onOpenSettingsDisplay={() => { settingsInitialTab = 'display'; openOrRestore('Default Settings', () => { settingsInitialTab = 'display'; showSettingsModal = true; }); }}
 		onResetPanels={resetPanels}
+		onCalculated={() => (activeMobileTab = 'results')}
+		units={$userSettings.units}
+		onUnitsChange={plan.handleUnitsChange}
 	/>
 
 	{#snippet editorColumn()}
@@ -1146,18 +1194,15 @@
 
 	{#snippet view2d(mini: boolean)}
 		<div class="plan-host" class:mini>
-			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} {mini} toolbar={isMobile} handleEscape={false} />
+			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} {mini} toolbar={false} viewTools={!isMobile} handleEscape={false} />
 		</div>
 	{/snippet}
 
 	{#snippet view3d(mini: boolean)}
 		<div class="viewer-host">
-			<RoomViewer {mini} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+			<RoomViewer bind:this={roomViewer} {mini} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 		</div>
 	{/snippet}
-
-	{#snippet mobileView2d()}{@render view2d(false)}{/snippet}
-	{#snippet mobileView3d()}{@render view3d(false)}{/snippet}
 
 	{#snippet dockPanel(id: DockPanelId)}
 		{#if id === 'editor'}
@@ -1191,19 +1236,22 @@
 	<!-- Main Layout -->
 	{#if isMobile}
 		<div class="app-layout mobile">
-			<!-- Configure panel -->
-			<div class="mobile-panel" class:active={activeMobileTab === 'configure'}>
-				<div class="mobile-panel-scroll" class:editor={$workspaceUi.mode === 'editor'}>
-					{@render editorColumn()}
+			<!-- Design: one view pinned on top (always mounted), the editor scrolling below -->
+			<div class="mobile-design" class:mobile-hidden={activeMobileTab !== 'design'} class:full={fullView.on}>
+				<div class="mobile-view">
+					{#each ['2d', '3d'] as const as v (v)}
+						<div class="view-slot" data-view={v} class:off={v !== mobileMain}>
+							{#if v === '2d'}{@render view2d(false)}{:else}{@render view3d(false)}{/if}
+						</div>
+					{/each}
+					<MainViewControls main={mobileMain} onSelectMain={(v) => (mobileMain = v)} controller={plan} editing={$workspaceUi.mode === 'editor'} touch onFit={fitMobileView} fullScreen={fullView.on} onToggleFullScreen={() => setFullView(toggleFullScreen(fullView))} />
+				</div>
+				<div class="mobile-editor">
+					<div class="mobile-panel-scroll" class:editor={$workspaceUi.mode === 'editor'}>
+						{@render editorColumn()}
+					</div>
 				</div>
 			</div>
-
-			<!-- Views - always mounted -->
-			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
-				<div class="viewer-wrapper">
-					<ViewsPane view2d={mobileView2d} view3d={mobileView3d} />
-				</div>
-			</main>
 
 			<!-- Results panel -->
 			<div class="mobile-panel" class:active={activeMobileTab === 'results'}>
@@ -1212,32 +1260,16 @@
 				</div>
 			</div>
 
-			<!-- Mobile calculate bar (hidden on results tab) -->
-			{#if activeMobileTab !== 'results'}
-				<div class="mobile-calculate-bar">
-					<CalculateButton onCalculated={() => { activeMobileTab = 'results'; }} />
-				</div>
-			{/if}
-
-			<!-- Mobile tab bar -->
 			<nav class="mobile-tab-bar">
-				<button class="mobile-tab" class:active={activeMobileTab === 'configure'} onclick={() => activeMobileTab = 'configure'}>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<circle cx="12" cy="12" r="3"/>
-						<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+				<button class="mobile-tab" class:active={activeMobileTab === 'design'} onclick={() => (activeMobileTab = 'design')}>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+						<path d="M12 20h9"/>
+						<path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
 					</svg>
-					<span>Configure</span>
+					<span>Design</span>
 				</button>
-				<button class="mobile-tab" class:active={activeMobileTab === 'viewer'} onclick={() => activeMobileTab = 'viewer'}>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-						<polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-						<line x1="12" y1="22.08" x2="12" y2="12"/>
-					</svg>
-					<span>Viewer</span>
-				</button>
-				<button class="mobile-tab" class:active={activeMobileTab === 'results'} onclick={() => activeMobileTab = 'results'}>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<button class="mobile-tab" class:active={activeMobileTab === 'results'} onclick={() => (activeMobileTab = 'results')}>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 						<line x1="18" y1="20" x2="18" y2="10"/>
 						<line x1="12" y1="20" x2="12" y2="4"/>
 						<line x1="6" y1="20" x2="6" y2="14"/>
@@ -1410,53 +1442,6 @@
 		overflow: hidden;
 	}
 
-	.viewer-wrapper {
-		flex: 1;
-		min-height: 0;
-		border-radius: var(--radius-lg);
-		overflow: hidden;
-		position: relative;
-		/* Touch gestures here orbit the 3D view, never scroll or zoom the page.
-		   OrbitControls sets this on its own element, but drops it back to auto
-		   when a projection switch remounts the controls, and the overlay buttons
-		   sit outside that element anyway. */
-		touch-action: none;
-		overscroll-behavior: contain;
-	}
-
-	.app-layout.mobile .viewer-wrapper {
-		border-radius: 0;
-	}
-
-	.mobile-calculate-bar {
-		flex-shrink: 0;
-		display: flex;
-		justify-content: center;
-		padding: var(--spacing-xs) var(--spacing-sm);
-		background: var(--color-bg-secondary);
-		border-top: 1px solid var(--color-border);
-	}
-
-	.mobile-calculate-bar :global(.calculate-wrapper) {
-		width: 100%;
-	}
-
-	.mobile-calculate-bar :global(.calculate-row) {
-		width: 100%;
-	}
-
-	.mobile-calculate-bar :global(.calculate-btn) {
-		flex: 1;
-		min-width: 0;
-	}
-
-	.main-content {
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-		min-height: 0;
-	}
-
 	/* --- Desktop: main view and dock --- */
 	.app-layout.desktop {
 		position: relative;
@@ -1555,6 +1540,88 @@
 		position: relative;
 	}
 
+	/* Design: the pinned view over the editor */
+	.mobile-design {
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		background: var(--color-bg);
+	}
+
+	/* Hidden behind Results, at full size, so the views keep theirs */
+	.mobile-design.mobile-hidden {
+		position: absolute;
+		inset: 0;
+		visibility: hidden;
+		pointer-events: none;
+	}
+
+	.mobile-view {
+		position: relative;
+		flex: none;
+		height: 40dvh;
+		min-height: 200px;
+		max-height: 420px;
+		overflow: hidden;
+		background: var(--color-bg-secondary);
+		border-bottom: 1px solid var(--color-border);
+		/* Touch pans, pinches and orbits the view, never scrolls or zooms the page */
+		touch-action: none;
+		overscroll-behavior: contain;
+	}
+
+	/* Full screen: the view fills the space between the top bar and the tabs */
+	.mobile-design.full .mobile-view {
+		flex: 1;
+		height: auto;
+		max-height: none;
+		border-bottom: 0;
+	}
+
+	.mobile-design.full .mobile-editor {
+		display: none;
+	}
+
+	.mobile-view .view-slot {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.mobile-view .view-slot.off {
+		visibility: hidden;
+		pointer-events: none;
+	}
+
+	.mobile-view :global(.viewer-container) {
+		border-radius: 0;
+	}
+
+	/* The 3D view's own image buttons stand left of ⤢ (36 px + 8 px gap) */
+	.mobile-view :global(.viewer-actions) {
+		right: calc(var(--spacing-sm) + 44px);
+	}
+
+	/* No edit strip over the phone's 3D view: its tools stay at the bottom */
+	.mobile-view :global(.viewer-container.raised .view-overlay),
+	.mobile-view :global(.viewer-container.raised .proj-toggle) {
+		bottom: var(--spacing-sm);
+	}
+
+	.mobile-view :global(.viewer-container.raised .units-label) {
+		bottom: var(--spacing-md);
+	}
+
+	.mobile-editor {
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
 	.mobile-panel {
 		display: none;
 		flex-direction: column;
@@ -1589,20 +1656,6 @@
 		height: auto;
 	}
 
-	.app-layout.mobile > .main-content {
-		flex: 1;
-		min-height: 0;
-		z-index: 1;
-	}
-
-	.app-layout.mobile > .main-content.mobile-hidden {
-		position: absolute;
-		width: 0;
-		height: 0;
-		overflow: hidden;
-		visibility: hidden;
-	}
-
 	.mobile-tab-bar {
 		flex-shrink: 0;
 		height: calc(56px + env(safe-area-inset-bottom, 0px));
@@ -1625,7 +1678,7 @@
 		border: none;
 		border-radius: 0;
 		color: var(--color-text-muted);
-		font-size: var(--font-size-xs);
+		font-size: var(--font-size-sm);
 		padding: var(--spacing-xs) 0;
 		cursor: pointer;
 		transition: color 0.15s;
@@ -1636,8 +1689,9 @@
 		color: var(--color-text);
 	}
 
+	/* The tab showing: the selection colour (red is for Calculate) */
 	.mobile-tab.active {
-		color: var(--color-accent);
+		color: var(--color-scene-selected);
 		background: none;
 	}
 

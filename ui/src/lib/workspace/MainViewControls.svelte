@@ -4,6 +4,8 @@
 	// the view tools sit bottom-right inside each view (PlanCanvas, RoomViewer).
 	// The two bottom corners never overlap: when the labelled edit strip does not
 	// fit beside the view tools it shows glyphs only, and wraps if even that is too wide.
+	// On a phone (`touch`): Fit and one surface dropdown top-right, the edit strip
+	// (2D only) scrolling sideways on one row bottom-left, and ⤢ / ⤡ bottom-right.
 	import { untrack } from 'svelte';
 	import PlanEditStrip from '$lib/plan/PlanEditStrip.svelte';
 	import SurfaceSwitcher from '$lib/plan/SurfaceSwitcher.svelte';
@@ -17,9 +19,16 @@
 		controller: PlanController;
 		/** The editor is open (the summary is view-only: no edit strip). */
 		editing: boolean;
+		/** The phone's pinned view: gestures replace the view tools. */
+		touch?: boolean;
+		/** Fit the view showing (touch). */
+		onFit?: () => void;
+		/** The view fills the screen (touch). */
+		fullScreen?: boolean;
+		onToggleFullScreen?: () => void;
 	}
 
-	let { main, onSelectMain, controller, editing }: Props = $props();
+	let { main, onSelectMain, controller, editing, touch = false, onFit, fullScreen = false, onToggleFullScreen }: Props = $props();
 	const ctl = $derived(controller);
 
 	/** Inset of each corner group, and the least gap between the two bottom groups (px). */
@@ -32,7 +41,7 @@
 	let compact = $state(false);
 
 	$effect(() => {
-		if (!root || !editing || typeof ResizeObserver === 'undefined') return;
+		if (touch || !root || !editing || typeof ResizeObserver === 'undefined') return;
 		const el = root;
 		const view = main;
 		// The labelled strip's width, measured while it shows labels, for the tools it had then
@@ -85,11 +94,31 @@
 		<MainViewBar {main} onSelect={onSelectMain} />
 	</div>
 	<div class="corner tr" data-plan-scope>
-		{#if main === '2d'}
+		{#if touch}
+			<button type="button" class="mv-btn view-fit" aria-label="Fit" onclick={() => onFit?.()}>Fit</button>
+			{#if main === '2d'}
+				<SurfaceSwitcher surface={ctl.surface} surfaces={ctl.surfaces} onSelect={ctl.setSurface} compact />
+			{/if}
+		{:else if main === '2d'}
 			<SurfaceSwitcher surface={ctl.surface} surfaces={ctl.surfaces} onSelect={ctl.setSurface} />
 		{/if}
 	</div>
-	{#if editing}
+	{#if touch}
+		{#if editing && main === '2d'}
+			<div class="corner bl strip-scroll" data-plan-scope>
+				<PlanEditStrip controller={ctl} />
+			</div>
+		{/if}
+		<div class="corner br" data-plan-scope>
+			<button
+				type="button"
+				class="mv-btn full-toggle"
+				aria-label={fullScreen ? 'Exit full screen' : 'Full screen view'}
+				title={fullScreen ? 'Exit full screen' : 'Full screen view'}
+				onclick={() => onToggleFullScreen?.()}>{fullScreen ? '⤡' : '⤢'}</button
+			>
+		</div>
+	{:else if editing}
 		<div class="corner bl" data-plan-scope style:max-width={compact && room !== null ? `${Math.max(36, room)}px` : undefined}>
 			<PlanEditStrip controller={ctl} {compact} />
 		</div>
@@ -124,5 +153,26 @@
 	.bl {
 		bottom: 8px;
 		left: 8px;
+	}
+	.br {
+		bottom: 8px;
+		right: 8px;
+	}
+	/* The phone's edit strip: one row, scrolling sideways, clear of ⤢ (36 px + 8 px gap) */
+	.strip-scroll {
+		max-width: calc(100% - 2 * 8px - 44px);
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		scrollbar-width: none;
+		touch-action: pan-x;
+	}
+	.strip-scroll::-webkit-scrollbar {
+		display: none;
+	}
+	.strip-scroll > :global(.plan-toolbar) {
+		flex: none;
+	}
+	.full-toggle {
+		font-size: 18px;
 	}
 </style>

@@ -121,3 +121,51 @@ describe('the 2D view tools corner', () => {
     expect(container.querySelector('select[title="Units"]')).toBeNull();
   });
 });
+
+describe('on a phone (touch)', () => {
+  beforeEach(() => userSettings.update((s) => ({ ...s, planNavMode: 'hand' })));
+
+  const br = (c: HTMLElement) => c.querySelector('.main-view-controls .corner.br') as HTMLElement;
+
+  it('Fit and one surface dropdown top-right, ⤢ bottom-right, the strip bottom-left; no Pan, Zoom, − + or units', async () => {
+    const onFit = vi.fn();
+    const onToggleFullScreen = vi.fn();
+    const { container, ctl } = mount({ controls: '2d', touch: true, context: 'obstacles', onFit, onToggleFullScreen });
+    const tr = corner(container, 'tr');
+    await fireEvent.click(within(tr).getByRole('button', { name: 'Fit' }));
+    expect(onFit).toHaveBeenCalledTimes(1);
+    expect(within(tr).queryByRole('group', { name: 'Surface' })).toBeNull();
+    const surface = within(tr).getByRole('combobox', { name: 'Surface' }) as HTMLSelectElement;
+    expect([...surface.options].map((o) => o.textContent)).toEqual(['Floor', 'Ceiling', 'Wall 1', 'Wall 2', 'Wall 3', 'Wall 4']);
+    expect(tr.textContent).toContain('Floor ▾');
+    await fireEvent.change(surface, { target: { value: 'ceiling' } });
+    expect(ctl.surface).toBe('ceiling');
+
+    expect(container.querySelector('.view-controls')).toBeNull();
+    expect(container.querySelector('select[title="Units"]')).toBeNull();
+    expect(corner(container, 'bl').querySelector('.plan-toolbar.compact')).toBeNull();
+
+    const full = within(br(container)).getByRole('button', { name: 'Full screen view' });
+    expect(full.textContent).toBe('⤢');
+    await fireEvent.click(full);
+    expect(onToggleFullScreen).toHaveBeenCalledTimes(1);
+  });
+
+  it('full screen shows ⤡ to leave it', () => {
+    const { container } = mount({ controls: '2d', touch: true, fullScreen: true, context: 'obstacles' });
+    expect(within(br(container)).getByRole('button', { name: 'Exit full screen' }).textContent).toBe('⤡');
+  });
+
+  it('3D shows only Fit top-right and no edit strip', () => {
+    const { container } = mount({ controls: '3d', mini: true, touch: true, context: 'lamps', lamps: [lamp] });
+    const tr = corner(container, 'tr');
+    expect([...tr.querySelectorAll('button, select')].map((e) => e.getAttribute('aria-label'))).toEqual(['Fit']);
+    expect(corner(container, 'bl')).toBeNull();
+  });
+
+  it('the summary keeps Fit and the dropdown but no edit strip', () => {
+    const { container } = mount({ controls: '2d', touch: true, readonly: true, context: 'obstacles' });
+    expect(within(corner(container, 'tr')).getByRole('combobox', { name: 'Surface' })).toBeTruthy();
+    expect(corner(container, 'bl')).toBeNull();
+  });
+});

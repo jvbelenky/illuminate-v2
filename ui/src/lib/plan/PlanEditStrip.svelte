@@ -2,7 +2,7 @@
 	// The edit tools for the current context, as text buttons. On the desktop it
 	// sits bottom-left of the main view, also while 3D is main: tools that work
 	// on the 2D canvas bring the 2D view up first; Copy and Delete act on the
-	// selection in either view. On a phone it sits under the plan canvas.
+	// selection in either view. On a phone it sits bottom-left of the pinned 2D view, scrolling sideways.
 	import Glyph, { type GlyphName } from '$lib/workspace/Glyph.svelte';
 	import type { PlanController } from './planController.svelte';
 
