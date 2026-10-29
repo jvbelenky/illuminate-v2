@@ -44,9 +44,9 @@
 	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
 	import Glyph from '$lib/workspace/Glyph.svelte';
 	import UnitsSelect from '$lib/workspace/UnitsSelect.svelte';
+	import { fitPlanView, resizePlanView } from '$lib/utils/planFit';
 	import { unitAbbrev, gridCellSize, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
-		polygonBoundingBox,
 		polygonEdgeLengths,
 		edgeMidpoints,
 		edgeInwardNormals,
@@ -125,6 +125,9 @@
 		navControls?: boolean;
 		/** Pixels Fit keeps clear at the top and bottom, for controls drawn over the canvas (the main view's corner controls). */
 		fitInset?: number;
+		/** Fit centres the outline, keeping `fitInsetX` px clear left and right (the phone); otherwise it anchors bottom-left. */
+		fitCentre?: boolean;
+		fitInsetX?: number;
 		/** Show the units select before the view tools; called when it changes. */
 		onUnitsChange?: (event: Event) => void;
 		/** The host's armed tool's cursor, over the Pan or Zoom one ('default' keeps the handles' own). */
@@ -156,6 +159,8 @@
 		ariaLabel = 'Plan canvas',
 		navControls = true,
 		fitInset = 0,
+		fitCentre = false,
+		fitInsetX = 0,
 		underlay,
 		overlay,
 		hud,
@@ -190,30 +195,15 @@
 	// aspect ratio. (x, y) is the bottom-left corner and `size` the shorter side;
 	// zoom and pan move it, Fit resets it.
 	interface View { x: number; y: number; size: number }
-	const FIT_MARGIN = 1.14;
-	/** Canvas width / height, measured; 1 until the canvas has a size. */
-	let aspect = $state(1);
-	/** Canvas height in CSS pixels, measured; 560 until the canvas has a size. */
+	/** Canvas width and height in CSS pixels, measured; 560 x 560 until the canvas has a size. */
+	let canvasW = $state(560);
 	let canvasH = $state(560);
+	/** Canvas width / height. */
+	const aspect = $derived(canvasW / canvasH);
+	// Fit (planFit): bottom-left anchored with `fitInset` px clear top and bottom
+	// (desktop), or centred clear of the insets (phone)
 	function fittedView(points: Vertex[]): View {
-		const pts = points.length >= 2 ? points : [[0, 0], [1, 1]] as Vertex[];
-		const bb = polygonBoundingBox(pts);
-		const w = bb.xMax - bb.xMin;
-		const h = bb.yMax - bb.yMin;
-		// Anchor the window at the outline's bottom-left with a small margin for the
-		// rulers: coordinates can't go negative, so spare space belongs top and right.
-		// The window takes the canvas's shape, so only the difference between the
-		// outline's shape and the canvas's is spare.
-		const pad = Math.max(w, h, 1) * (FIT_MARGIN - 1) / 2;
-		const wp = w + 2 * pad;
-		const hp = h + 2 * pad;
-		// `fitInset` px stay clear at the top and bottom, so the outline height gets the rest of the canvas
-		const inset = Math.min(Math.max(fitInset, 0), canvasH * 0.4);
-		const hNeeded = hp * canvasH / (canvasH - 2 * inset);
-		const short = aspect >= 1 ? Math.max(hNeeded, wp / aspect) : Math.max(wp, hNeeded * aspect);
-		const size = Math.max(short, 1 + 2 * pad);
-		const viewHeight = aspect >= 1 ? size : size / aspect;
-		return { x: bb.xMin - pad, y: bb.yMin - pad - inset * viewHeight / canvasH, size };
+		return fitPlanView(points, { width: canvasW, height: canvasH, insetY: fitInset, insetX: fitInsetX, centre: fitCentre });
 	}
 	/** Draft corners (or the fallback) plus the host's extra points, so Fit shows everything. */
 	function defaultFitPoints(): Vertex[] {
@@ -288,9 +278,9 @@
 	const gridHi = $derived({ x: view.x + span * 4, y: view.y + span * 4 });
 	const viewBox = $derived(`${view.x} ${-(view.y + viewH)} ${viewW} ${viewH}`);
 
-	// Follow the canvas's shape. Until the user pans or zooms, a resize refits;
-	// after that it keeps the view's centre and zoom. A hidden canvas (0 x 0)
-	// keeps its last view.
+	// Follow the canvas's size. Until the user pans or zooms, a resize refits;
+	// after that it keeps the view's centre and zoom (planFit). A hidden canvas
+	// (0 x 0) keeps its last view.
 	$effect(() => {
 		const el = svgEl;
 		if (!el || typeof ResizeObserver === 'undefined') return;
@@ -299,19 +289,12 @@
 			const h = el.clientHeight;
 			if (w < 1 || h < 1) return;
 			shortSide = Math.min(w, h);
+			const prev = { width: canvasW, height: canvasH };
+			canvasW = w;
 			canvasH = h;
-			const next = w / h;
-			if (Math.abs(next - aspect) < 1e-3) return;
-			const cx = view.x + viewW / 2;
-			const cy = view.y + viewH / 2;
-			aspect = next;
-			if (!userMoved && !drawing && !drag) {
-				fitView();
-				return;
-			}
-			const nw = next >= 1 ? view.size * next : view.size;
-			const nh = next >= 1 ? view.size : view.size / next;
-			view = { x: cx - nw / 2, y: cy - nh / 2, size: view.size };
+			const refit = !userMoved && !drawing && !drag;
+			const next = resizePlanView(view, prev, { width: w, height: h }, refit, () => fittedView(defaultFitPoints()));
+			if (next !== view) view = next;
 		};
 		const ro = new ResizeObserver(() => untrack(measure));
 		ro.observe(el);

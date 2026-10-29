@@ -102,6 +102,10 @@
 	});
 	/** Pixels Fit keeps clear top and bottom for the main view's corner controls: 36 px control + 8 px inset. */
 	const FIT_INSET = 52;
+	/** The phone's view (no view tools of its own): Fit centres the room, clear of its corner controls in the summary too, with this much room left and right for the labels. */
+	const phoneFit = $derived(!mini && !viewTools);
+	const FIT_INSET_X = 20;
+	const fitInsetY = $derived(phoneFit ? FIT_INSET : mini || readonly ? 0 : FIT_INSET);
 	let roCanvas = $state<PlanCanvas | null>(null);
 
 	// Fit the room again when the controller asks (another project was opened, a
@@ -170,7 +174,9 @@
 		{@const wv = ctl.wallView}
 		{#if ro}
 			<PlanCanvas
-				fitInset={mini || readonly ? 0 : FIT_INSET}
+				fitInset={fitInsetY}
+				fitCentre={phoneFit}
+				fitInsetX={phoneFit ? FIT_INSET_X : 0}
 				bind:this={roCanvas}
 				navControls={navTools}
 				bind:draft={wallDraft}
@@ -197,7 +203,9 @@
 			</PlanCanvas>
 		{:else}
 			<PlanCanvas
-				fitInset={mini || readonly ? 0 : FIT_INSET}
+				fitInset={fitInsetY}
+				fitCentre={phoneFit}
+				fitInsetX={phoneFit ? FIT_INSET_X : 0}
 				bind:this={ctl.canvas}
 				navControls={navTools}
 				bind:draft={ctl.draft}
@@ -250,7 +258,9 @@
 		{/if}
 	{:else if ro}
 		<PlanCanvas
-			fitInset={mini || readonly ? 0 : FIT_INSET}
+			fitInset={fitInsetY}
+				fitCentre={phoneFit}
+				fitInsetX={phoneFit ? FIT_INSET_X : 0}
 			bind:this={roCanvas}
 			navControls={navTools}
 			bind:draft={roDraft}
@@ -292,7 +302,9 @@
 		</PlanCanvas>
 	{:else}
 		<PlanCanvas
-			fitInset={mini || readonly ? 0 : FIT_INSET}
+			fitInset={fitInsetY}
+				fitCentre={phoneFit}
+				fitInsetX={phoneFit ? FIT_INSET_X : 0}
 			bind:this={ctl.canvas}
 			navControls={navTools}
 			bind:draft={ctl.draft}
