@@ -17,8 +17,9 @@
 		 * `panel`: top of the Results panel: Auto, then a Calculate that fills the row.
 		 * `bar`: compact Calculate for the Results title bar (panel minimized).
 		 * `sidebar`: full-width button with a spelled-out state line underneath.
+		 * `top`: compact Calculate for the phone's top bar.
 		 */
-		layout?: 'floating' | 'panel' | 'bar' | 'sidebar';
+		layout?: 'floating' | 'panel' | 'bar' | 'sidebar' | 'top';
 	}
 
 	let { onCalculated, layout = 'floating' }: Props = $props();
@@ -117,8 +118,8 @@
 	}
 </script>
 
-{#if layout === 'panel' || layout === 'bar'}
-<div class="calculate-corner" class:bar={layout === 'bar'}>
+{#if layout === 'panel' || layout === 'bar' || layout === 'top'}
+<div class="calculate-corner" class:bar={layout === 'bar'} class:top={layout === 'top'}>
 	{#if !$isMobile && layout === 'panel'}
 		<label class="autorecalc-label" title="Recalculate automatically">
 			<input
@@ -226,6 +227,16 @@
 		padding: 0 8px;
 		gap: 4px;
 		font-size: var(--font-size-xs);
+	}
+	.calculate-corner.top {
+		height: 32px;
+	}
+	.calculate-corner.top .calculate-btn {
+		flex: none;
+		height: 32px;
+		padding: 0 12px;
+		gap: 4px;
+		font-size: var(--font-size-sm);
 	}
 	.calculate-corner .autorecalc-label {
 		margin: 0;

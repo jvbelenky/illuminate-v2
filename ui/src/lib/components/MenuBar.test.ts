@@ -147,4 +147,32 @@ describe('MenuBar', () => {
       expect(onResetPanels).toHaveBeenCalled();
     });
   });
+
+  describe('on a phone', () => {
+    const mobile = { ...defaultProps, isMobile: true };
+
+    it('the top bar carries Calculate and the file name, not the app title', () => {
+      render(MenuBar, { props: mobile });
+      expect(screen.getByRole('button', { name: /Calculate/ })).toBeTruthy();
+      expect(screen.getByText('Untitled Project')).toBeTruthy();
+      expect(screen.queryByText('Illuminate v2')).toBeNull();
+    });
+
+    it('the desktop keeps its title', () => {
+      render(MenuBar, { props: defaultProps });
+      expect(screen.getByText('Illuminate v2')).toBeTruthy();
+    });
+
+    it('the menu sets the units, by full name', async () => {
+      const onUnitsChange = vi.fn();
+      render(MenuBar, { props: { ...mobile, units: 'feet', onUnitsChange } });
+      expect(screen.queryByLabelText('Units')).toBeNull();
+      await fireEvent.click(screen.getByLabelText('Open menu'));
+      const select = screen.getByLabelText('Units') as HTMLSelectElement;
+      expect(select.value).toBe('feet');
+      expect([...select.options].map((o) => o.textContent)).toEqual(['meters', 'centimeters', 'millimeters', 'feet', 'inches']);
+      await fireEvent.change(select, { target: { value: 'meters' } });
+      expect(onUnitsChange).toHaveBeenCalled();
+    });
+  });
 });

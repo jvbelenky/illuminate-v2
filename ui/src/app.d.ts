@@ -5,7 +5,10 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			/** The phone's view is full screen (its history entry, so the back button leaves it). */
+			mobileFullView?: boolean;
+		}
 		// interface Platform {}
 	}
 }

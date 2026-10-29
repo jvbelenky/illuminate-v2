@@ -31,9 +31,12 @@
 		handleEscape?: boolean;
 		/** The docked mini view: drawn read-only, no toolbar, no view tools, no keyboard; drag pans and the wheel zooms. */
 		mini?: boolean;
+		/** The canvas's own units select and Pan | Zoom | − + | Fit (off on a phone: touch pans and pinches, and Fit sits with the view's corner controls). */
+		viewTools?: boolean;
 	}
 
-	let { controller, readonly = false, toolbar = true, handleEscape = true, mini = false }: Props = $props();
+	let { controller, readonly = false, toolbar = true, handleEscape = true, mini = false, viewTools = true }: Props = $props();
+	const navTools = $derived(!mini && viewTools);
 
 	// Read-only rendering: the summary, or the mini view
 	const ro = $derived(readonly || mini);
@@ -169,7 +172,7 @@
 			<PlanCanvas
 				fitInset={mini || readonly ? 0 : FIT_INSET}
 				bind:this={roCanvas}
-				navControls={!mini}
+				navControls={navTools}
 				bind:draft={wallDraft}
 				{units}
 				onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
@@ -196,6 +199,7 @@
 			<PlanCanvas
 				fitInset={mini || readonly ? 0 : FIT_INSET}
 				bind:this={ctl.canvas}
+				navControls={navTools}
 				bind:draft={ctl.draft}
 				bind:drawing={ctl.drawing}
 				bind:selectedIndex={ctl.selectedIndex}
@@ -248,7 +252,7 @@
 		<PlanCanvas
 			fitInset={mini || readonly ? 0 : FIT_INSET}
 			bind:this={roCanvas}
-			navControls={!mini}
+			navControls={navTools}
 			bind:draft={roDraft}
 			{units}
 			onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
@@ -290,6 +294,7 @@
 		<PlanCanvas
 			fitInset={mini || readonly ? 0 : FIT_INSET}
 			bind:this={ctl.canvas}
+			navControls={navTools}
 			bind:draft={ctl.draft}
 			bind:drawing={ctl.drawing}
 			bind:selectedIndex={ctl.selectedIndex}

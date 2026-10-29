@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Phone layout: two tabs, Design and Results. Design pins one view (2D or 3D, chosen by its 2D | 3D toggle) above the editor, with Fit and a single surface dropdown top right, the edit strip bottom left (one row, scrolling sideways) and ⤢ to take the view full screen (⤡, Escape or Back leaves it); drawing or Edit corners goes full screen on its own and comes back when done. One finger pans the plan and a pinch zooms, replacing Pan, Zoom and − / +. The top bar reads ☰, the file name and a compact Calculate, which opens Results when it finishes; units moved to the ☰ menu
 - Results defaults to 24% of the window width, at most 420 px (still resizable from 260 to 600 px); View > Reset panel layout restores it
 - Editor panel: the Room, Lamps and Zones tabs, the body and the footer form one card along the panel's own edges at every width, with no inset boxes; the open tab runs into the body with no line under it at any display scale
 - Results looks and sizes as on the single-page layout (its own background, 420 px wide by default); the 3D view starts and resets 30% closer

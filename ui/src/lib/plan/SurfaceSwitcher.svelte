@@ -6,14 +6,31 @@
 		surface: Surface;
 		surfaces: Surface[];
 		onSelect: (s: Surface) => void;
+		/** One dropdown for every surface (the phone's view). */
+		compact?: boolean;
 	}
 
-	let { surface, surfaces, onSelect }: Props = $props();
+	let { surface, surfaces, onSelect, compact = false }: Props = $props();
 
 	const walls = $derived(surfaces.filter((s) => wallIndex(s) !== null));
 	const onWall = $derived(wallIndex(surface) !== null);
 </script>
 
+{#if compact}
+<!-- Every surface in one native select, laid invisibly over its label -->
+<span class="mv-btn surface-pick" title={surfaceName(surface)}>
+	{surfaceName(surface)} ▾
+	<select
+		aria-label="Surface"
+		value={surface}
+		onchange={(e) => onSelect(e.currentTarget.value as Surface)}
+	>
+		{#each surfaces as s (s)}
+			<option value={s}>{surfaceName(s)}</option>
+		{/each}
+	</select>
+</span>
+{:else}
 <div class="mv-seg surface-switcher" role="group" aria-label="Surface">
 	<button type="button" class="mv-btn" aria-pressed={surface === 'floor'} onclick={() => onSelect('floor')}>Floor</button>
 	<button type="button" class="mv-btn" aria-pressed={surface === 'ceiling'} onclick={() => onSelect('ceiling')}>Ceiling</button>
@@ -35,12 +52,18 @@
 		</select>
 	</span>
 </div>
+{/if}
 
 <style>
-	.walls {
+	.walls,
+	.surface-pick {
 		position: relative;
 	}
-	.walls select {
+	.surface-pick {
+		white-space: nowrap;
+	}
+	.walls select,
+	.surface-pick select {
 		position: absolute;
 		inset: 0;
 		width: 100%;
@@ -50,7 +73,8 @@
 		opacity: 0;
 		cursor: pointer;
 	}
-	.walls:focus-within {
+	.walls:focus-within,
+	.surface-pick:focus-within {
 		z-index: 2;
 		outline: 2px solid var(--color-accent);
 		outline-offset: -2px;

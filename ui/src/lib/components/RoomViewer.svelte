@@ -156,6 +156,11 @@
 		}
 	}
 
+	/** Back to the starting view (the front-left isometric), for the phone's Fit. */
+	export function fitView() {
+		handleViewChange('iso-front-left');
+	}
+
 	function handleUserOrbit() {
 		activeView = null;
 		activeViewPreset.set(null);

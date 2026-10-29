@@ -65,6 +65,11 @@
 		/** The controller's hook for a flow that needs the 2D canvas. */
 		onNeedCanvas?: () => void;
 		onSelectMain?: (v: MainView) => void;
+		/** The phone's controls (with `controls`): Fit, one surface dropdown, ⤢; no canvas view tools. */
+		touch?: boolean;
+		onFit?: () => void;
+		fullScreen?: boolean;
+		onToggleFullScreen?: () => void;
 	}
 
 	let {
@@ -95,6 +100,10 @@
 		controls,
 		onNeedCanvas,
 		onSelectMain = () => {},
+		touch = false,
+		onFit,
+		fullScreen = false,
+		onToggleFullScreen,
 	}: Props = $props();
 
 	// svelte-ignore state_referenced_locally
@@ -259,10 +268,10 @@
 <div class="workspace-harness" data-plan-scope>
 	{#if controls}
 		<div class="harness-main" style="position: relative">
-			<MainViewControls main={controls} onSelectMain={onSelectMain} controller={ctl} editing={!readonly} />
+			<MainViewControls main={controls} onSelectMain={onSelectMain} controller={ctl} editing={!readonly} {touch} {onFit} {fullScreen} {onToggleFullScreen} />
 		</div>
 	{/if}
-	<PlanPane controller={ctl} {readonly} {mini} toolbar={!controls} />
+	<PlanPane controller={ctl} {readonly} {mini} toolbar={!controls} viewTools={!touch} />
 	{#if editor}
 		<EditorPanel controller={ctl} {onDone} {onShowReflectanceSettings} {onAddCustomLamp}>
 			{#snippet lampPanel(lamp, close)}
