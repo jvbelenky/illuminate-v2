@@ -58,6 +58,7 @@
 		onItemSelected?: (id: string) => void;
 		/** Render the full EditorPanel beside the pane, driven by workspaceUi. */
 		editor?: boolean;
+		/** Given: Done at the end of the stage tabs, as on a phone. */
 		onDone?: () => void;
 		onShowReflectanceSettings?: () => void;
 		/** Render the desktop's main view controls with this main view (the pane then shows no toolbar of its own). */
@@ -95,7 +96,7 @@
 		onController = () => {},
 		onItemSelected,
 		editor = false,
-		onDone = () => {},
+		onDone,
 		onShowReflectanceSettings = () => {},
 		controls,
 		onNeedCanvas,

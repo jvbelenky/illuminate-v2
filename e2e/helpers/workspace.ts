@@ -43,14 +43,14 @@ export async function openStep(page: Page, stage: Stage, part?: Part): Promise<v
 
 /** Done: back to the read-only summary. */
 export async function finishEditing(page: Page): Promise<void> {
-  await page.locator('.editor-head button.editor-done').click();
+  await page.locator('button.editor-done').click();
   await expect(page.locator('.summary-panel')).toBeVisible();
 }
 
 /** Make sure the read-only summary is showing (Done, if the editor is). */
 export async function showSummary(page: Page): Promise<void> {
   const summary = page.locator('.summary-panel');
-  await expect(summary.or(page.locator('.editor-head button.editor-done'))).toBeVisible({ timeout: 15_000 });
+  await expect(summary.or(page.locator('button.editor-done'))).toBeVisible({ timeout: 15_000 });
   if (!(await summary.isVisible())) await finishEditing(page);
 }
 

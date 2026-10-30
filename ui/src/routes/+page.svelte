@@ -32,6 +32,7 @@
 	import { pushState } from '$app/navigation';
 	import { page } from '$app/state';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
+	import EditorDone from '$lib/workspace/EditorDone.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
 	import { scrollRowIntoView } from '$lib/workspace/parts/scrollRowIntoView';
 	import { DEFAULT_DOCK, sanitizeDock, swapMain, toggleMinimized, type DockLayout, type DockPanelId, type FloatBox, type MainView } from '$lib/workspace/dockLayout';
@@ -897,6 +898,8 @@
 				// Update the frontend store with the loaded state (clears + resumes)
 				project.loadFromApiResponse(response, projectName);
 				loaded = true;
+				// A loaded project starts with no Room part visited
+				workspaceUi.clearVisited();
 				if (summaryAfterLoad) finishEditing();
 				// One pass over the text reads every app-owned block
 				const blocks = readSidecar(text);
@@ -1181,7 +1184,7 @@
 			<div class="editor-host" data-plan-scope>
 				<EditorPanel
 					controller={plan}
-					onDone={finishEditing}
+					onDone={isMobile ? finishEditing : undefined}
 					onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
 					onAddCustomLamp={() => openLampManagerFor('krcl_222', '')}
 					lampPanel={planLampPanel}
@@ -1218,6 +1221,12 @@
 		<button type="button" class="dock-audit" class:has-warnings={$auditProblems.length > 0} aria-label="Design Audit" title="Design Audit" onclick={() => openOrRestore('Design Audit', () => showAuditModal = true)}>
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
 		</button>
+	{/snippet}
+
+	{#snippet dockEditorTools()}
+		{#if $workspaceUi.mode === 'editor'}
+			<EditorDone controller={plan} onDone={finishEditing} />
+		{/if}
 	{/snippet}
 
 	{#snippet dockCalculate()}
@@ -1280,7 +1289,7 @@
 		</div>
 	{:else}
 		<div class="app-layout desktop">
-			<DockArea layout={dock} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} calculate={dockCalculate} resultsTools={dockResultsTools} onMiniFloat={(m) => (miniFloat = m)} />
+			<DockArea layout={dock} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} calculate={dockCalculate} resultsTools={dockResultsTools} editorTools={dockEditorTools} onMiniFloat={(m) => (miniFloat = m)} />
 			<ViewHost main={dock.main} {mainAnchor} {miniAnchor} miniVisible={!dock.minimized.includes('mini')} miniFloating={!!dock.floats?.mini} miniZ={miniFloat?.z} {view2d} {view3d} layoutKey={[dock, miniFloat]} />
 		</div>
 	{/if}

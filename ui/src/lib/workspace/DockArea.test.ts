@@ -106,6 +106,25 @@ describe('DockArea', () => {
 		expect(group.parentElement!.dataset.float).toBe('results');
 	});
 
+	test('Done sits in the Editor title bar before the minimize control, docked or floating, and calls onDone', async () => {
+		for (const layout of [
+			{ ...DEFAULT_DOCK, left: ['editor'], right: ['mini', 'results'], minimized: [] },
+			{ ...DEFAULT_DOCK, left: ['mini'], right: ['results'], minimized: [], floats: { editor: { x: 100, y: 50, w: 280, h: 500 } } }
+		]) {
+			const onEditorDone = vi.fn();
+			const r = render(Host, base({ layout, onEditorDone }));
+			const bar = panelEl(r.container, 'editor').querySelector('.dock-bar') as HTMLElement;
+			const done = bar.querySelector('button.editor-done') as HTMLElement;
+			expect(done?.textContent?.trim()).toBe('Done');
+			expect(done.nextElementSibling?.getAttribute('aria-label')).toBe('Minimize');
+			expect(r.container.querySelectorAll('button.editor-done').length).toBe(1);
+			expect(panelEl(r.container, 'results').querySelector('.editor-done')).toBeNull();
+			await fireEvent.click(done);
+			expect(onEditorDone).toHaveBeenCalledTimes(1);
+			r.unmount();
+		}
+	});
+
 	test('minimize hides content and keeps the bar', () => {
 		const { container } = render(Host, base({ layout: { ...DEFAULT_DOCK, minimized: ['results'] } }));
 		expect(screen.queryByTestId('content-results')).toBeNull();
