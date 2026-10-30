@@ -3,8 +3,9 @@
 	import type { PlanController } from '$lib/plan/planController.svelte';
 	import type { CalcZone, LampInstance, SceneObject } from '$lib/types/project';
 	import { workspaceUi } from '$lib/stores/workspaceUi';
-	import { STAGES, ROOM_PARTS, neighbours, planContext, stageDone, type EditorStage, type RoomPart, type NavStop } from '$lib/workspace/editorNav';
+	import { STAGES, ROOM_PARTS, planContext, stageDone, type EditorStage, type RoomPart } from '$lib/workspace/editorNav';
 	import ReflectanceStep from '$lib/components/ReflectanceStep.svelte';
+	import EditorDone from './EditorDone.svelte';
 	import FloorplanPart from './parts/FloorplanPart.svelte';
 	import StructuresPart from './parts/StructuresPart.svelte';
 	import CeilingPart from './parts/CeilingPart.svelte';
@@ -13,7 +14,8 @@
 
 	interface Props {
 		controller: PlanController;
-		onDone: () => void;
+		/** Given on a phone, where there is no panel bar: Done then sits at the end of the stage tabs. */
+		onDone?: () => void;
 		onShowReflectanceSettings: () => void;
 		onAddCustomLamp?: () => void;
 		lampPanel?: Snippet<[LampInstance, () => void]>;
@@ -26,8 +28,14 @@
 
 	const stage = $derived($workspaceUi.stage);
 	const part = $derived($workspaceUi.part);
-	const nav = $derived(neighbours(stage, stage === 'room' ? part : null));
+	const visited = $derived($workspaceUi.visited);
 	const progress = $derived({ hasOutline: ctl.hasOutline, lamps: ctl.scene().lamps, userZoneCount: ctl.userZones.length });
+
+	// A Room part is done once it has been opened: the one on screen is ticked,
+	// again at once if a new or loaded project clears the ticks under it
+	$effect(() => {
+		if (stage === 'room' && !visited.includes(part)) workspaceUi.visit(part);
+	});
 
 	let bodyEl: HTMLElement | undefined = $state();
 
@@ -40,54 +48,56 @@
 			if (bodyEl) bodyEl.scrollTop = 0;
 		});
 	}
-
-	function goStop(s: NavStop) {
-		go(s.stage, s.part ?? undefined);
-	}
-
-	function done() {
-		ctl.requestLeave(() => onDone());
-	}
 </script>
 
+{#snippet check(size: number)}
+	<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+{/snippet}
+
 <div class="editor-panel">
-	<div class="editor-head">
-		<span>Edit</span>
-		<button type="button" class="editor-done" onclick={done}>Done</button>
-	</div>
-	<div class="editor-stages" role="tablist" aria-label="Stages">
-		{#each STAGES as s (s.id)}
-			<button
-				type="button"
-				role="tab"
-				class="editor-stage"
-				class:on={stage === s.id}
-				data-stage={s.id}
-				aria-selected={stage === s.id}
-				onclick={() => go(s.id)}
-			>
-				{#if stageDone(s.id, progress)}
-					<span class="n done" aria-hidden="true"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg></span>
-				{:else}
-					<span class="n" aria-hidden="true">{s.n}</span>
-				{/if}
-				<span class="lbl">{s.label}</span>
-			</button>
-		{/each}
+	<div class="editor-stages" class:with-done={!!onDone}>
+		<div class="editor-stage-tabs" role="tablist" aria-label="Stages">
+			{#each STAGES as s (s.id)}
+				<button
+					type="button"
+					role="tab"
+					class="editor-stage"
+					class:on={stage === s.id}
+					data-stage={s.id}
+					aria-selected={stage === s.id}
+					onclick={() => go(s.id)}
+				>
+					{#if stageDone(s.id, progress)}
+						<span class="n done" aria-hidden="true">{@render check(11)}</span>
+					{:else}
+						<span class="n" aria-hidden="true">{s.n}</span>
+					{/if}
+					<span class="lbl">{s.label}</span>
+				</button>
+			{/each}
+		</div>
+		{#if onDone}
+			<EditorDone controller={ctl} {onDone} placement="tabs" />
+		{/if}
 	</div>
 	<div class="editor-stagebody">
 		{#if stage === 'room'}
 			<div class="editor-parts" role="tablist" aria-label="Room">
 				{#each ROOM_PARTS as p (p.id)}
+					{@const done = visited.includes(p.id)}
 					<button
 						type="button"
 						role="tab"
 						class="editor-part"
 						class:on={part === p.id}
+						class:visited={done}
 						data-part={p.id}
 						aria-selected={part === p.id}
 						onclick={() => go('room', p.id)}
-					>{p.label}</button>
+					>
+						<span class="dot" class:done aria-hidden="true">{#if done}{@render check(9)}{/if}</span>
+						<span class="lbl">{p.label}</span>
+					</button>
 				{/each}
 			</div>
 		{/if}
@@ -109,20 +119,6 @@
 			{/if}
 		</div>
 	</div>
-	<div class="editor-nav">
-		{#if nav.prev}
-			{@const prev = nav.prev}
-			<button type="button" class="editor-back" onclick={() => goStop(prev)}>← {prev.label}</button>
-		{:else}
-			<span></span>
-		{/if}
-		{#if nav.next}
-			{@const next = nav.next}
-			<button type="button" class="editor-next" onclick={() => goStop(next)}>{next.label} →</button>
-		{:else}
-			<button type="button" class="editor-next editor-done" onclick={done}>Done</button>
-		{/if}
-	</div>
 </div>
 
 <style>
@@ -134,41 +130,29 @@
 		background: var(--color-bg-secondary);
 		container-type: inline-size;
 	}
-	.editor-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 10px 10px 0 14px;
-		font-size: var(--font-size-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--color-text-muted);
-	}
 	button {
 		font: inherit;
 		cursor: pointer;
-	}
-	.editor-done {
-		text-transform: none;
-		letter-spacing: 0;
-		padding: 4px 12px;
-		border-radius: 6px;
-		border: 1px solid var(--color-primary);
-		background: var(--color-primary);
-		color: #fff;
-		font-weight: 600;
-		font-size: var(--font-size-sm);
-	}
-	.editor-done:hover {
-		background: var(--color-primary-hover);
 	}
 	/* The tabs run edge to edge on top of the card, whose sides are the panel's own border.
 	   The row draws the line under the tabs; the open tab covers it and joins the body. */
 	.editor-stages {
 		display: flex;
-		gap: 4px;
+		align-items: flex-end;
+		gap: 6px;
 		padding: 10px 0 0;
 		background: linear-gradient(var(--color-border), var(--color-border)) bottom / 100% 1px no-repeat;
+	}
+	.editor-stage-tabs {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		gap: 4px;
+	}
+	/* On a phone Done closes the row, centred on the tabs */
+	.editor-stages.with-done :global(.editor-done) {
+		align-self: center;
+		margin: 0 6px 0 2px;
 	}
 	/* Number and label on one line at every width */
 	.editor-stage {
@@ -191,7 +175,7 @@
 	.editor-stage:first-child {
 		margin-left: -1px;
 	}
-	.editor-stage:last-child {
+	.editor-stages:not(.with-done) .editor-stage:last-child {
 		margin-right: -1px;
 	}
 	.editor-stage:hover:not(.on) {
@@ -220,7 +204,8 @@
 		border: 1px solid var(--color-border);
 		color: var(--color-text-muted);
 	}
-	.editor-stage .n.done {
+	.editor-stage .n.done,
+	.editor-part .dot.done {
 		background: color-mix(in srgb, var(--color-success) 18%, transparent);
 		border-color: color-mix(in srgb, var(--color-success) 50%, transparent);
 		color: var(--color-success);
@@ -232,7 +217,7 @@
 		font-weight: 600;
 	}
 	@container (max-width: 359px) {
-		.editor-stages {
+		.editor-stage-tabs {
 			gap: 3px;
 		}
 		.editor-stage {
@@ -240,6 +225,7 @@
 			padding: 6px 3px;
 		}
 	}
+	/* Room parts: one row of underline tabs, each with a dot that ticks once the part is opened */
 	.editor-stagebody {
 		flex: 1;
 		min-height: 0;
@@ -250,34 +236,64 @@
 	.editor-parts {
 		display: flex;
 		justify-content: space-between;
-		gap: 6px;
-		padding: 10px 10px 2px;
-		container-type: inline-size;
+		gap: 2px;
+		margin: 0 10px;
+		padding-top: 6px;
+		border-bottom: 1px solid var(--color-border);
 	}
 	.editor-part {
 		flex: 0 1 auto;
 		min-width: 0;
-		padding: 7px 11px;
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		margin-bottom: -1px;
+		padding: 9px 2px 7px;
 		border: 0;
-		border-radius: 14px;
+		border-bottom: 2px solid transparent;
+		border-radius: 0;
 		background: none;
 		color: var(--color-text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-size-sm);
+		line-height: 1.2;
 		white-space: nowrap;
-	}
-	@container (max-width: 300px) {
-		.editor-part {
-			padding: 7px 4px;
-			font-size: 0.72rem;
-		}
 	}
 	.editor-part:hover {
 		color: var(--color-text);
 	}
 	.editor-part.on {
-		background: var(--color-btn-fill);
+		border-bottom-color: var(--color-scene-selected);
 		color: var(--color-text);
 		font-weight: 600;
+	}
+	.editor-part .dot {
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		box-sizing: border-box;
+		border: 1.5px solid var(--color-text-muted);
+	}
+	.editor-part .lbl {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	/* Too narrow for one row at full size: the same tabs in a 2 × 2 grid */
+	@container (max-width: 359px) {
+		.editor-parts {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			column-gap: 10px;
+			margin: 0 6px;
+			padding-top: 2px;
+		}
+		.editor-part {
+			padding: 8px 2px 6px;
+		}
 	}
 	.editor-body {
 		flex: 1;
@@ -289,26 +305,5 @@
 		.editor-body {
 			padding: 12px 6px;
 		}
-	}
-	.editor-nav {
-		display: flex;
-		justify-content: space-between;
-		padding: 10px;
-		background: var(--color-bg-tertiary);
-		border-top: 1px solid var(--color-border);
-	}
-	.editor-back,
-	.editor-next:not(.editor-done) {
-		padding: 6px 12px;
-		border-radius: 6px;
-		border: 1px solid var(--color-border);
-		background: var(--color-btn-fill);
-		color: var(--color-text);
-		font-size: var(--font-size-sm);
-	}
-	.editor-back:hover,
-	.editor-next:not(.editor-done):hover {
-		background: var(--color-btn-fill-hover);
-		border-color: var(--color-primary);
 	}
 </style>

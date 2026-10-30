@@ -19,11 +19,14 @@ beforeEach(() => workspaceUi.reset('editor'));
 afterEach(cleanup);
 
 describe('EditorPanel', () => {
-  it('starts at Room › Floorplan with Back hidden and Next "Structures →"', () => {
+  it('starts at Room › Floorplan with no header row, no footer and no Done of its own', () => {
     const { ctl } = mount();
-    expect(q('.editor-head')?.textContent).toContain('Edit');
+    expect(q('.editor-head')).toBeNull();
+    expect(q('.editor-nav')).toBeNull();
     expect(q('.editor-back')).toBeNull();
-    expect(q('.editor-next')?.textContent?.trim()).toBe('Structures →');
+    expect(q('.editor-next')).toBeNull();
+    expect(q('.editor-done')).toBeNull();
+    expect(screen.queryByText(/→|←/)).toBeNull();
     expect(q('.editor-stage[data-stage="room"]')?.getAttribute('aria-selected')).toBe('true');
     expect(q('.editor-stage[data-stage="room"]')?.textContent).toMatch(/Room/);
     expect(q('.editor-part[data-part="floorplan"]')?.getAttribute('aria-selected')).toBe('true');
@@ -49,15 +52,49 @@ describe('EditorPanel', () => {
     for (const s of ['room', 'lamps', 'zones']) expect(q(`.editor-stage[data-stage="${s}"] .n`)!.classList.contains('done')).toBe(true);
   });
 
-  it('Next and Back walk Floorplan → Structures → Ceiling → Reflectance → Lamps → Zones', async () => {
-    const { ctl } = mount();
-    const seen: string[] = [];
-    for (let i = 0; i < 5; i++) { await click(q('.editor-next')); seen.push(ctl.context); }
-    expect(seen).toEqual(['obstacles', 'ceiling', 'reflectance', 'lamps', 'zones']);
-    expect(q('.editor-back')?.textContent?.trim()).toBe('← Lamps');
-    await click(q('.editor-back'));
-    expect(ctl.context).toBe('lamps');
-    expect(q('.editor-next')?.textContent?.trim()).toBe('Zones →');
+  it('a Room part ticks once opened: Floorplan at once, the others when clicked', async () => {
+    mount();
+    const dot = (p: string) => q(`.editor-part[data-part="${p}"] .dot`)!;
+    expect(dot('floorplan').classList.contains('done')).toBe(true);
+    expect(dot('floorplan').querySelector('svg')).not.toBeNull();
+    for (const p of ['structures', 'ceiling', 'reflectance']) {
+      expect(dot(p).classList.contains('done')).toBe(false);
+      expect(dot(p).querySelector('svg')).toBeNull();
+    }
+    await click(q('.editor-part[data-part="ceiling"]'));
+    expect(dot('ceiling').classList.contains('done')).toBe(true);
+    expect(dot('structures').classList.contains('done')).toBe(false);
+    // Leaving the stage keeps the ticks
+    await click(q('.editor-stage[data-stage="zones"]'));
+    await click(q('.editor-stage[data-stage="room"]'));
+    expect(dot('ceiling').classList.contains('done')).toBe(true);
+    expect(get(workspaceUi).visited).toEqual(['floorplan', 'ceiling']);
+  });
+
+  it('a new or loaded project clears the ticks but for the part on screen', async () => {
+    mount();
+    await click(q('.editor-part[data-part="structures"]'));
+    workspaceUi.reset('editor');
+    await tick();
+    expect(get(workspaceUi).visited).toEqual(['floorplan']);
+    expect(q('.editor-part[data-part="structures"] .dot')!.classList.contains('done')).toBe(false);
+    // Cleared while already on Floorplan (the page resets on start, after the panel mounted)
+    await click(q('.editor-part[data-part="ceiling"]'));
+    await click(q('.editor-part[data-part="floorplan"]'));
+    workspaceUi.reset('editor');
+    await tick();
+    expect(get(workspaceUi).visited).toEqual(['floorplan']);
+    workspaceUi.clearVisited();
+    await tick();
+    expect(get(workspaceUi).visited).toEqual(['floorplan']);
+    expect(q('.editor-part[data-part="floorplan"] .dot')!.classList.contains('done')).toBe(true);
+    expect(q('.editor-part[data-part="ceiling"] .dot')!.classList.contains('done')).toBe(false);
+  });
+
+  it('moving to Lamps ticks nothing more', async () => {
+    mount();
+    await click(q('.editor-stage[data-stage="lamps"]'));
+    expect(get(workspaceUi).visited).toEqual(['floorplan']);
   });
 
   it('stage tabs jump straight to a stage and remember the last Room part', async () => {
@@ -72,14 +109,14 @@ describe('EditorPanel', () => {
     expect(get(workspaceUi).part).toBe('ceiling');
   });
 
-  it('on Zones the Next slot is Done and calls onDone', async () => {
+  it('given onDone (a phone), Done closes the stage-tab row, outside the tablist, and calls it', async () => {
     const onDone = vi.fn();
     mount({ onDone });
-    await click(q('.editor-stage[data-stage="zones"]'));
-    const next = q('.editor-next');
-    expect(next?.textContent?.trim()).toBe('Done');
-    expect(next?.classList.contains('editor-done')).toBe(true);
-    await click(next);
+    const done = q('.editor-stages .editor-done');
+    expect(done?.textContent?.trim()).toBe('Done');
+    expect(done?.closest('[role="tablist"]')).toBeNull();
+    expect(done?.previousElementSibling?.getAttribute('role')).toBe('tablist');
+    await click(done);
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
@@ -90,10 +127,9 @@ describe('EditorPanel', () => {
   }
 
   const leaves: { name: string; start?: string; click: string; moved: () => boolean; done?: boolean }[] = [
-    { name: 'Next', click: '.editor-next', moved: () => get(workspaceUi).part === 'structures' },
     { name: 'a stage tab', click: '.editor-stage[data-stage="lamps"]', moved: () => get(workspaceUi).stage === 'lamps' },
     { name: 'a part pill', click: '.editor-part[data-part="structures"]', moved: () => get(workspaceUi).part === 'structures' },
-    { name: 'the header Done', click: '.editor-head .editor-done', moved: () => false, done: true },
+    { name: 'Done', click: '.editor-done', moved: () => false, done: true },
   ];
 
   describe.each(leaves)('asks before leaving Floorplan with an invalid outline via $name', (c) => {
@@ -134,15 +170,15 @@ describe('EditorPanel', () => {
     });
   });
 
-  it('Back asks too when the invalid draft is on Floorplan reached by a stage tab', async () => {
+  it('a part tab asks too when the invalid draft is on Floorplan reached by a stage tab', async () => {
     const m = mount();
     await click(q('.editor-stage[data-stage="lamps"]'));
     await click(q('.editor-stage[data-stage="room"]'));
-    await click(q('.editor-next'));
-    await click(q('.editor-back'));
+    await click(q('.editor-part[data-part="structures"]'));
+    await click(q('.editor-part[data-part="floorplan"]'));
     expect(m.ctl.context).toBe('outline');
     makeInvalid(m.ctl);
-    await click(q('.editor-next'));
+    await click(q('.editor-part[data-part="structures"]'));
     await click(screen.getByRole('button', { name: 'Keep editing' }));
     expect(get(workspaceUi).part).toBe('floorplan');
   });
@@ -162,11 +198,11 @@ describe('EditorPanel', () => {
     expect(screen.getByRole('tab', { name: 'Room' })).toBeTruthy();
   });
 
-  it('Done in the header also asks before leaving with an invalid outline', async () => {
+  it('Done also asks before leaving with an invalid outline', async () => {
     const onDone = vi.fn();
     const m = mount({ onDone });
     makeInvalid(m.ctl);
-    await click(q('.editor-head .editor-done'));
+    await click(q('.editor-done'));
     expect(onDone).not.toHaveBeenCalled();
     await click(screen.getByRole('button', { name: 'Keep saved outline' }));
     expect(onDone).toHaveBeenCalledTimes(1);

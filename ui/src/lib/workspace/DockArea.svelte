@@ -37,13 +37,17 @@
 		calculate?: Snippet;
 		/** Icon buttons in the Results title bar. */
 		resultsTools?: Snippet;
+		/** Controls in the Editor title bar (its Done). */
+		editorTools?: Snippet;
 		/** Defaults to swapping the main view in the layout. */
 		onSwap?: () => void;
 		/** Where the floating mini view shows right now (live while dragged or resized) and its stacking order. */
 		onMiniFloat?: (m: { box: FloatBox; z: number } | null) => void;
 	}
 
-	let { layout, onChange, titles, panel, main, onSwap, calculate, resultsTools, onMiniFloat }: Props = $props();
+	let { layout, onChange, titles, panel, main, onSwap, calculate, resultsTools, editorTools, onMiniFloat }: Props = $props();
+
+	const toolsFor = (id: DockPanelId) => (id === 'results' ? resultsTools : id === 'editor' ? editorTools : undefined);
 
 	const THRESHOLD = 4;
 	const STEP = 16;
@@ -445,7 +449,7 @@
 					onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
 					onSwap={id === 'mini' ? swap : undefined}
 					onBarPointerDown={(e) => barDown(id, e)}
-					tools={id === 'results' ? resultsTools : undefined}
+					tools={toolsFor(id)}
 				>
 					{@render panel(id)}
 				</DockPanel>
@@ -499,7 +503,7 @@
 					onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
 					onSwap={id === 'mini' ? swap : undefined}
 					onBarPointerDown={(e) => barDown(id, e)}
-					tools={id === 'results' ? resultsTools : undefined}
+					tools={toolsFor(id)}
 				>
 					{@render panel(id)}
 				</DockPanel>

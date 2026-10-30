@@ -107,9 +107,9 @@ test.describe('Guided workspace', () => {
     await expect(row).toHaveCount(1);
   });
 
-  test('Next leads from the floor plan to structures; a drawn one lands in the room at once', async ({ page }) => {
+  test('the Structures tab leads on from the floor plan; a drawn one lands in the room at once', async ({ page }) => {
     await waitForSession(page);
-    await page.locator('.editor-nav .editor-next').click();
+    await page.locator('button.editor-part[data-part="structures"]').click();
     await expect(page.locator('.editor-part[data-part="structures"][aria-selected="true"]')).toBeVisible();
     await planTool(page, 'Draw').click();
     await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(1);
