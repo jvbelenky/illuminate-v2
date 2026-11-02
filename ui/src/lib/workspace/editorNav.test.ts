@@ -5,10 +5,9 @@ describe('editorNav', () => {
   test('planContext maps the open step to what the 2D pane edits', () => {
     expect(planContext('editor', 'room', 'floorplan')).toBe('outline');
     expect(planContext('editor', 'room', 'structures')).toBe('obstacles');
-    expect(planContext('editor', 'room', 'ceiling')).toBe('ceiling');
     expect(planContext('editor', 'room', 'reflectance')).toBe('reflectance');
     expect(planContext('editor', 'lamps', 'floorplan')).toBe('lamps');
-    expect(planContext('editor', 'zones', 'ceiling')).toBe('zones');
+    expect(planContext('editor', 'zones', 'reflectance')).toBe('zones');
     expect(planContext('summary', 'lamps', 'floorplan')).toBe('view');
   });
   test('stageDone: Room with an outline, Lamps with every included lamp modelled, Zones with a zone of your own', () => {

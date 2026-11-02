@@ -16,9 +16,9 @@ describe('workspaceUi', () => {
 
   test('goTo keeps the last Room part while on Lamps', async () => {
     const { workspaceUi } = await import('./workspaceUi');
-    workspaceUi.goTo('room', 'ceiling');
+    workspaceUi.goTo('room', 'reflectance');
     workspaceUi.goTo('lamps');
-    expect(get(workspaceUi)).toEqual({ mode: 'editor', stage: 'lamps', part: 'ceiling', visited: [] });
+    expect(get(workspaceUi)).toEqual({ mode: 'editor', stage: 'lamps', part: 'reflectance', visited: [] });
   });
 
   test('showSummary then showEditor returns to where the user left', async () => {
@@ -61,19 +61,25 @@ describe('workspaceUi', () => {
   });
 
   test('falls back field by field', async () => {
-    sessionStorage.setItem(KEY, JSON.stringify({ mode: 'summary', stage: 'roof', part: 'ceiling' }));
+    sessionStorage.setItem(KEY, JSON.stringify({ mode: 'summary', stage: 'roof', part: 'reflectance' }));
     const { workspaceUi } = await import('./workspaceUi');
-    expect(get(workspaceUi)).toEqual({ mode: 'summary', stage: 'room', part: 'ceiling', visited: [] });
+    expect(get(workspaceUi)).toEqual({ mode: 'summary', stage: 'room', part: 'reflectance', visited: [] });
+  });
+
+  test('a stored Ceiling part (now the ceiling designer, under Tools) falls back to Floorplan', async () => {
+    sessionStorage.setItem(KEY, JSON.stringify({ mode: 'editor', stage: 'room', part: 'ceiling', visited: ['floorplan', 'ceiling'] }));
+    const { workspaceUi } = await import('./workspaceUi');
+    expect(get(workspaceUi)).toEqual({ mode: 'editor', stage: 'room', part: 'floorplan', visited: ['floorplan'] });
   });
 
   test('visit ticks a part once, in tab order, without a store change after', async () => {
     const { workspaceUi } = await import('./workspaceUi');
-    workspaceUi.visit('ceiling');
+    workspaceUi.visit('reflectance');
     workspaceUi.visit('floorplan');
-    expect(get(workspaceUi).visited).toEqual(['floorplan', 'ceiling']);
+    expect(get(workspaceUi).visited).toEqual(['floorplan', 'reflectance']);
     let changes = 0;
     const off = workspaceUi.subscribe(() => changes++);
-    workspaceUi.visit('ceiling');
+    workspaceUi.visit('reflectance');
     off();
     expect(changes).toBe(1);
   });
@@ -91,8 +97,8 @@ describe('workspaceUi', () => {
   });
 
   test('drops unknown stored parts', async () => {
-    sessionStorage.setItem(KEY, JSON.stringify({ ...DEFAULT, visited: ['attic', 'ceiling'] }));
+    sessionStorage.setItem(KEY, JSON.stringify({ ...DEFAULT, visited: ['attic', 'reflectance'] }));
     const { workspaceUi } = await import('./workspaceUi');
-    expect(get(workspaceUi).visited).toEqual(['ceiling']);
+    expect(get(workspaceUi).visited).toEqual(['reflectance']);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { undoKeyOf, inTextField, interceptUndo, setUndoInterceptor } from './undoKeys';
+import { undoKeyOf, inTextField, interceptUndo, setUndoInterceptor, pushUndoInterceptor } from './undoKeys';
 
 function key(k: string, mods: Partial<KeyboardEventInit> = {}, target?: HTMLElement): KeyboardEvent {
   const e = new KeyboardEvent('keydown', { key: k, ...mods });
@@ -37,5 +37,14 @@ describe('interceptor', () => {
     setUndoInterceptor((k) => k === 'undo');
     expect(interceptUndo('undo')).toBe(true);
     expect(interceptUndo('redo')).toBe(false);
+  });
+  it('a pushed interceptor (a plan in a window) is active until removed, then the one under it again', () => {
+    const removeMain = pushUndoInterceptor(() => false);
+    const removeWindow = pushUndoInterceptor(() => true);
+    expect(interceptUndo('undo')).toBe(true);
+    removeWindow();
+    expect(interceptUndo('undo')).toBe(false);
+    removeMain();
+    expect(interceptUndo('undo')).toBe(false);
   });
 });

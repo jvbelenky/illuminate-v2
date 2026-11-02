@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Room › Ceiling: the room height, the tile grid (size and where it starts),
+	// The ceiling designer's list (Tools › Ceiling designer…): the room height, the tile grid (size and where it starts),
 	// Add to ceiling (detectors, vents, sensors, keep-out areas) and the items.
 	// The open item's fields show directly in its row.
 	import './parts.css';

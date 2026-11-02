@@ -37,7 +37,8 @@ export function nextSurface(order: Surface[], current: Surface | null): Surface 
   return i < 0 ? order[0] : order[(i + 1) % order.length];
 }
 
-export type ClickItemType = 'lamp' | 'zone' | 'object';
+/** 'ceiling': a ceiling item, which no context selects (a click opens the ceiling designer). */
+export type ClickItemType = 'lamp' | 'zone' | 'object' | 'ceiling';
 export interface ClickItem { type: ClickItemType; id: string }
 
 /** What lies under the pointer in 3D: items, and surfaces in click order, at client coordinates. */

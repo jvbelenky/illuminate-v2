@@ -41,6 +41,8 @@
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
 		onObjectClick?: (objectId: string) => void;
+		/** A click on a ceiling item: the host opens the ceiling designer on it */
+		onCeilingItemClick?: (id: string) => void;
 		globalValueRange?: { min: number; max: number } | null;
 		isoScaleMap?: Record<string, IsoScale>;
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
@@ -60,7 +62,7 @@
 		clickContext?: PlanContext | null;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false, touch = false, onSurfaceClick, onSurfaceHover, viewedSurface = null, clickContext = null }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, onCeilingItemClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false, touch = false, onSurfaceClick, onSurfaceHover, viewedSurface = null, clickContext = null }: Props = $props();
 
 	// Drag detection: suppress clicks that follow a drag (orbit/pan). The handlers
 	// stay attached in the mini view (Threlte registers them at creation) and do nothing there.
@@ -102,6 +104,12 @@
 			: undefined
 	);
 
+	const wrappedCeilingItemClick = $derived(
+		onCeilingItemClick
+			? (id: string) => { if (!mini && dragDistance <= DRAG_THRESHOLD) onCeilingItemClick(id); }
+			: undefined
+	);
+
 	const wrappedSurfaceClick = $derived(
 		onSurfaceClick
 			? (surfaces: Surface[]) => { if (!mini && dragDistance <= DRAG_THRESHOLD) onSurfaceClick(surfaces); }
@@ -118,6 +126,8 @@
 		if (mini || !hover || pointerHeld || $pickMode || !viewerContainer) return null;
 		const target = chooseClickTarget(hover.items, hover.surfaces, clickContext);
 		if (target?.kind !== 'surface') return null;
+		// Over a ceiling item the click opens the ceiling designer, not the next surface
+		if (onCeilingItemClick && hover.items.some((i) => i.type === 'ceiling')) return null;
 		const surface = nextSurface(target.order, viewedSurface);
 		if (!surface) return null;
 		const rect = viewerContainer.getBoundingClientRect();
@@ -335,7 +345,7 @@
 	</div>
 	{/if}
 	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: true })}>
-		<Scene {room} ceiling={effectiveCeiling} {selectedCeilingId} lamps={effectiveLamps} zones={effectiveZones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} visibleLampIds={effectiveVisibleLampIds} visibleZoneIds={effectiveVisibleZoneIds} visibleObjectIds={effectiveVisibleObjectIds} {labelledObjectIds} {globalValueRange} isoScaleMap={effectiveIsoScaleMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} interactive={!mini} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} onSurfaceClick={wrappedSurfaceClick} onSurfaceHover={handleSurfaceHover} viewedSurface={visibilityOverride ? null : viewedSurface} hoveredSurface={chip?.surface ?? null} />
+		<Scene {room} ceiling={effectiveCeiling} {selectedCeilingId} lamps={effectiveLamps} zones={effectiveZones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} visibleLampIds={effectiveVisibleLampIds} visibleZoneIds={effectiveVisibleZoneIds} visibleObjectIds={effectiveVisibleObjectIds} {labelledObjectIds} {globalValueRange} isoScaleMap={effectiveIsoScaleMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} interactive={!mini} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} onCeilingItemClick={wrappedCeilingItemClick} onSurfaceClick={wrappedSurfaceClick} onSurfaceHover={handleSurfaceHover} viewedSurface={visibilityOverride ? null : viewedSurface} hoveredSurface={chip?.surface ?? null} />
 	</Canvas>
 	{#if chip}
 		<div class="surface-chip" style="left: {chip.x + 14}px; top: {chip.y + 14}px">{chip.text}</div>

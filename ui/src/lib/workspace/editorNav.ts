@@ -1,10 +1,12 @@
 /**
- * Navigation catalogue for the workspace editor: the three stages, the four
- * Room parts, and what the 2D pane edits at each step.
+ * Navigation catalogue for the workspace editor: the three stages, the three
+ * Room parts, and what the 2D pane edits at each step. The ceiling is edited
+ * in its own window (Tools › Ceiling designer…), whose plan is in the
+ * 'ceiling' context.
  */
 
 export type EditorStage = 'room' | 'lamps' | 'zones';
-export type RoomPart = 'floorplan' | 'structures' | 'ceiling' | 'reflectance';
+export type RoomPart = 'floorplan' | 'structures' | 'reflectance';
 export type PlanContext = 'outline' | 'obstacles' | 'ceiling' | 'reflectance' | 'lamps' | 'zones' | 'view';
 export type WorkspaceMode = 'editor' | 'summary';
 
@@ -17,14 +19,12 @@ export const STAGES: { id: EditorStage; label: string; n: number }[] = [
 export const ROOM_PARTS: { id: RoomPart; label: string }[] = [
   { id: 'floorplan', label: 'Floorplan' },
   { id: 'structures', label: 'Structures' },
-  { id: 'ceiling', label: 'Ceiling' },
   { id: 'reflectance', label: 'Reflectance' },
 ];
 
 const ROOM_CONTEXT: Record<RoomPart, PlanContext> = {
   floorplan: 'outline',
   structures: 'obstacles',
-  ceiling: 'ceiling',
   reflectance: 'reflectance',
 };
 

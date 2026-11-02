@@ -3,7 +3,7 @@ import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
 import { setRoomDimensions, getRoomDimension, expandRoomPanel, closePlan, unitsSelect, openGeometry } from '../helpers/room';
 import { openReflectanceModal } from '../helpers/reflections';
-import { openStep, planSvg, planTool } from '../helpers/workspace';
+import { openStep, planSvg, planTool, openCeilingDesigner } from '../helpers/workspace';
 
 test.describe('Room configuration', () => {
   test('edit dimensions, reject invalid values, switch units', async ({ page }) => {
@@ -46,13 +46,15 @@ test.describe('Room configuration', () => {
     }
   });
 
-  test('the Ceiling part sets the room height', async ({ page }) => {
+  test('the ceiling designer sets the room height', async ({ page }) => {
     await waitForSession(page);
-    await openStep(page, 'room', 'ceiling');
-    const height = page.locator('.ceiling-part').getByLabel('Height', { exact: true });
+    const designer = await openCeilingDesigner(page);
+    const height = designer.locator('.ceiling-part').getByLabel('Height', { exact: true });
     await height.click({ clickCount: 3 });
     await height.fill('3.4');
     await height.press('Tab');
+    await designer.locator('.cd-footer').getByRole('button', { name: 'Close' }).click();
+    await expect(designer).toBeHidden();
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Z'))).toBe(3.4);
   });
 });

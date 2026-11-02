@@ -518,6 +518,10 @@ export class PlanController {
   onItemSelected: ((id: string) => void) | undefined;
   /** Paste switches the editor to the pasted item's stage; the host shows it. */
   onNeedContext: ((context: PlanContext) => void) | undefined;
+  /** Before a paste: true when the host takes it instead (a ceiling item goes to the ceiling designer's own plan). */
+  pasteElsewhere: ((content: ClipboardContent) => boolean) | undefined;
+  /** This plan lives in a window (the ceiling designer): its keys count while that window is in front. */
+  inDialog = false;
 
   constructor(opts: { actions: PlanActions; scene: () => PlanScene; history?: PlanHistory; onItemSelected?: (id: string) => void; onNeedContext?: (context: PlanContext) => void }) {
     this.actions = opts.actions;
@@ -863,6 +867,7 @@ export class PlanController {
   /** Ctrl+V: add a copy of the clipboard item(s), select it and open its row; each paste lands one step further on. */
   paste = async () => {
     if (!this.canPaste) return;
+    if (this.pasteElsewhere?.(get(clipboard)!.content)) return;
     const taken = takePaste();
     if (!taken) return;
     const { content, n } = taken;
@@ -908,7 +913,7 @@ export class PlanController {
   // --- Keyboard
 
   onWindowKey = (event: KeyboardEvent) => {
-    if (!planShouldHandleKey(event)) return;
+    if (!planShouldHandleKey(event, this.inDialog)) return;
     // F fits the view, in every context
     if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();

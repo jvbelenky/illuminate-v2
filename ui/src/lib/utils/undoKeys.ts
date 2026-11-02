@@ -35,13 +35,25 @@ export function inTextField(event: KeyboardEvent): boolean {
 /**
  * While a modal is drawing, Ctrl+Z means "remove the last corner". The
  * active interceptor gets the first look and returns true to consume it.
+ * Interceptors stack: the latest one pushed (a plan in a window over the
+ * main view's) is the active one until it is removed.
  */
-let interceptor: ((key: Exclude<UndoKey, null>) => boolean) | null = null;
+type Interceptor = (key: Exclude<UndoKey, null>) => boolean;
+let interceptors: Interceptor[] = [];
 
-export function setUndoInterceptor(fn: ((key: Exclude<UndoKey, null>) => boolean) | null): void {
-  interceptor = fn;
+/** Replace every interceptor with `fn` (none for null). */
+export function setUndoInterceptor(fn: Interceptor | null): void {
+  interceptors = fn ? [fn] : [];
+}
+
+/** Make `fn` the active interceptor; the returned function removes it again. */
+export function pushUndoInterceptor(fn: Interceptor): () => void {
+  interceptors = [...interceptors, fn];
+  return () => {
+    interceptors = interceptors.filter((f) => f !== fn);
+  };
 }
 
 export function interceptUndo(key: Exclude<UndoKey, null>): boolean {
-  return interceptor?.(key) ?? false;
+  return interceptors.at(-1)?.(key) ?? false;
 }

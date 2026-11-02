@@ -93,6 +93,20 @@ describe('MenuBar', () => {
     expect(onSaveAs).toHaveBeenCalled();
   });
 
+  it('Tools › Ceiling designer… opens the ceiling designer (desktop and the phone menu)', async () => {
+    const onShowCeilingDesigner = vi.fn();
+    const { unmount } = render(MenuBar, { props: { ...defaultProps, onShowCeilingDesigner } });
+    await fireEvent.click(screen.getByText('Tools'));
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Ceiling designer…' }));
+    expect(onShowCeilingDesigner).toHaveBeenCalledTimes(1);
+    unmount();
+    render(MenuBar, { props: { ...defaultProps, isMobile: true, onShowCeilingDesigner } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    await fireEvent.click(screen.getByRole('button', { name: /^Tools/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Ceiling designer…' }));
+    expect(onShowCeilingDesigner).toHaveBeenCalledTimes(2);
+  });
+
   it('shows Add Lamp in Edit menu', async () => {
     render(MenuBar, { props: defaultProps });
     await fireEvent.click(screen.getByText('Edit'));

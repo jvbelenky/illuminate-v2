@@ -58,6 +58,8 @@
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
 		onObjectClick?: (objectId: string) => void;
+		/** A click on a ceiling item (detector, vent, sensor or keep-out area) */
+		onCeilingItemClick?: (id: string) => void;
 		/** A click on room surfaces: every surface under the cursor, in click order */
 		onSurfaceClick?: (surfaces: Surface[]) => void;
 		/** What the pointer is over (null when it leaves every surface) */
@@ -70,7 +72,7 @@
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, interactive = true, onLampClick, onZoneClick, onObjectClick, onSurfaceClick, onSurfaceHover, viewedSurface = null, hoveredSurface = null, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, interactive = true, onLampClick, onZoneClick, onObjectClick, onCeilingItemClick, onSurfaceClick, onSurfaceHover, viewedSurface = null, hoveredSurface = null, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -173,7 +175,7 @@
 				const { clickType, clickId } = obj.userData ?? {};
 				if (clickType && clickId) {
 					const key = `${clickType}:${clickId}`;
-					if (!seen.has(key) && (clickType === 'lamp' || clickType === 'zone' || clickType === 'object')) {
+					if (!seen.has(key) && (clickType === 'lamp' || clickType === 'zone' || clickType === 'object' || clickType === 'ceiling')) {
 						seen.add(key);
 						items.push({ type: clickType, id: clickId });
 					}
@@ -195,6 +197,7 @@
 		for (const { type, id } of items) {
 			if (type === 'lamp') onLampClick?.(id);
 			else if (type === 'zone') onZoneClick?.(id);
+			else if (type === 'ceiling') onCeilingItemClick?.(id);
 			else onObjectClick?.(id);
 		}
 		if (surfaces.length) onSurfaceClick?.(surfaces);
@@ -218,7 +221,7 @@
 	// Always the same function while there are click callbacks (Threlte registers
 	// handlers at creation); it ignores clicks while a pick is in progress.
 	const sceneClickHandler = $derived(
-		(onLampClick || onZoneClick || onObjectClick || onSurfaceClick) ? guardedClick(handleSceneClick, () => !!$pickMode) : undefined
+		(onLampClick || onZoneClick || onObjectClick || onCeilingItemClick || onSurfaceClick) ? guardedClick(handleSceneClick, () => !!$pickMode) : undefined
 	);
 	const surfaceClick = (event: any) => sceneClickHandler?.(event);
 
@@ -677,7 +680,7 @@
 
 <!-- Ceiling layout: tiles and items on the ceiling plane -->
 {#if ceiling}
-	<Ceiling3D layout={ceiling} {room} height={roomDims.z} selectedId={selectedCeilingId} />
+	<Ceiling3D layout={ceiling} {room} height={roomDims.z} selectedId={selectedCeilingId} onclick={onCeilingItemClick ? surfaceClick : undefined} />
 {/if}
 
 <!-- Floor grid -->

@@ -21,6 +21,7 @@
 	import AboutModal from '$lib/components/AboutModal.svelte';
 	import CiteModal from '$lib/components/CiteModal.svelte';
 	import ReflectanceSettingsModal from '$lib/components/ReflectanceSettingsModal.svelte';
+	import CeilingDesignerModal from '$lib/ceiling/CeilingDesignerModal.svelte';
 	import type { PlanActions, PlanScene } from '$lib/plan/planActions';
 	import { PlanController, isTypingTarget } from '$lib/plan/planController.svelte';
 	import PlanPane from '$lib/plan/PlanPane.svelte';
@@ -78,6 +79,7 @@
 	let showAboutModal = $state(false);
 	let showCiteModal = $state(false);
 	let showReflectanceSettings = $state(false);
+	let showCeilingDesigner = $state(false);
 	let showAuditModal = $state(false);
 	let advancedSettingsLampId = $state<string | null>(null);
 	let showExploreDataModal = $state(false);
@@ -268,9 +270,35 @@
 			if (c === 'lamps') workspaceUi.goTo('lamps');
 			else if (c === 'zones') workspaceUi.goTo('zones');
 			else if (c === 'obstacles') workspaceUi.goTo('room', 'structures');
-			else if (c === 'ceiling') workspaceUi.goTo('room', 'ceiling');
 		},
 	});
+	// The ceiling designer's own plan, always in the ceiling context: its window
+	// hosts it, beside the main view's (the main plan never edits the ceiling)
+	const ceilingPlan = new PlanController({
+		actions: planActions,
+		scene: () => planScene,
+		onItemSelected: (id) => scrollRowIntoView(id),
+	});
+	ceilingPlan.setContext('ceiling');
+	ceilingPlan.inDialog = true;
+	// Ctrl+V of a ceiling item pastes it in the designer; the designer pastes nothing else
+	ceilingPlan.pasteElsewhere = (c) => c.kind !== 'ceiling';
+	plan.pasteElsewhere = (c) => {
+		if (c.kind !== 'ceiling') return false;
+		openCeilingDesigner();
+		ceilingPlan.paste();
+		return true;
+	};
+	/** Tools › Ceiling designer…, or a ceiling item clicked in the main view (selected in the designer). */
+	function openCeilingDesigner(itemId?: string) {
+		if (itemId) ceilingPlan.selectCeilingItem(itemId);
+		openOrRestore('Ceiling designer', () => (showCeilingDesigner = true));
+	}
+	function closeCeilingDesigner() {
+		showCeilingDesigner = false;
+		ceilingPlan.endTool();
+		ceilingPlan.selectCeilingItem(null);
+	}
 
 	/** Point the plan at what the workspace shows (the summary is view-only). */
 	function syncPlanContext() {
@@ -524,6 +552,8 @@
 	let pendingClickTargets: SceneSelection[] = [];
 	// Room surfaces under the same click, in click order
 	let pendingSurfaces: Surface[] = [];
+	// A ceiling item under the same click: it opens the ceiling designer
+	let pendingCeilingId: string | null = null;
 	let clickBatchTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function handleLampClick(lampId: string) {
@@ -547,6 +577,13 @@
 		}
 	}
 
+	function handleCeilingItemClick(id: string) {
+		pendingCeilingId ??= id;
+		if (!clickBatchTimer) {
+			clickBatchTimer = setTimeout(processClickBatch, 0);
+		}
+	}
+
 	function handleSurfaceClick(surfaces: Surface[]) {
 		pendingSurfaces = surfaces;
 		if (!clickBatchTimer) {
@@ -557,14 +594,21 @@
 	async function processClickBatch() {
 		const clicked = [...pendingClickTargets];
 		const surfaces = pendingSurfaces;
+		const ceilingId = pendingCeilingId;
 		pendingClickTargets = [];
 		pendingSurfaces = [];
+		pendingCeilingId = null;
 		clickBatchTimer = null;
 
 		// The summary is view-only: 3D clicks select nothing there
 		if (get(workspaceUi).mode !== 'editor') return;
 		// Items of the context's kind win; otherwise the click shows the next surface under the cursor
 		const choice = chooseClickTarget(clicked, surfaces, plan.context);
+		// Over a ceiling item (and no item of the context): the ceiling designer opens on it
+		if (ceilingId && choice?.kind !== 'items') {
+			openCeilingDesigner(ceilingId);
+			return;
+		}
 		if (!choice) return;
 		if (choice.kind === 'surface') {
 			const next = nextSurface(choice.order, plan.surface);
@@ -880,6 +924,7 @@
 		workspaceUi.reset('editor');
 		syncPlanContext();
 		plan.resetForNewScene();
+		ceilingPlan.resetForNewScene();
 	}
 
 	/** Each lamp's stick state by id, for the file; null when no lamp is stuck. */
@@ -963,6 +1008,7 @@
 				}
 				// The plan shows the new room: no stale draft, selection or zoom
 				plan.resetForNewScene();
+				ceilingPlan.resetForNewScene();
 				// Re-link embedded custom lamps to library definitions by content hash
 				// (or add project-scoped ones for anything unmatched); passive toast.
 				const createdCustomLamps = await project.linkLoadedCustomLamps();
@@ -1178,6 +1224,7 @@
 		onAddZone={addNewZone}
 		onAddObject={addNewObject}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
+		onShowCeilingDesigner={() => openCeilingDesigner()}
 		onShowLampManager={() => { lampManagerInitialType = null; lampManagerTargetLampId = null; lampManagerEditDefId = null; if (!restoreById('lamp-manager')) showLampManager = true; }}
 		onShowSettings={() => openOrRestore('Default Settings', () => showSettingsModal = true)}
 		onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)}
@@ -1244,13 +1291,13 @@
 
 	{#snippet view2d(mini: boolean)}
 		<div class="plan-host" class:mini>
-			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} {mini} toolbar={false} viewTools={!isMobile} handleEscape={false} />
+			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} {mini} toolbar={false} viewTools={!isMobile} handleEscape={false} onCeilingItemClick={openCeilingDesigner} />
 		</div>
 	{/snippet}
 
 	{#snippet view3d(mini: boolean)}
 		<div class="viewer-host">
-			<RoomViewer bind:this={roomViewer} {mini} touch={isMobile} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+			<RoomViewer bind:this={roomViewer} {mini} touch={isMobile} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={ceilingPlan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onCeilingItemClick={$workspaceUi.mode === 'editor' ? handleCeilingItemClick : undefined} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 		</div>
 	{/snippet}
 
@@ -1377,6 +1424,10 @@
 
 {#if showReflectanceSettings}
 	<ReflectanceSettingsModal onClose={() => showReflectanceSettings = false} />
+{/if}
+
+{#if showCeilingDesigner}
+	<CeilingDesignerModal controller={ceilingPlan} onClose={closeCeilingDesigner} />
 {/if}
 
 {#if showLampManager}

@@ -20,6 +20,8 @@
 		onAddZone: () => void;
 		onAddObject: () => void;
 		onShowReflectanceSettings: () => void;
+		/** Tools › Ceiling designer… */
+		onShowCeilingDesigner?: () => void;
 		onShowLampManager: () => void;
 		onShowSettings: () => void;
 		onShowAudit: () => void;
@@ -74,6 +76,7 @@
 		onAddZone,
 		onAddObject,
 		onShowReflectanceSettings,
+		onShowCeilingDesigner = () => {},
 		onShowLampManager,
 		onShowSettings,
 		onShowAudit,
@@ -583,6 +586,7 @@
 				</button>
 				{#if expandedSection === 'tools'}
 					<div class="mobile-section-items">
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowCeilingDesigner)}>Ceiling designer…</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowExploreData)}>Pathogen Efficacy</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowAudit)}>Design Audit</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowSpectrumViewer)}>Spectrum Viewer</button>
@@ -860,6 +864,10 @@
 			</span>
 			{#if activeMenu === 'tools'}
 				<div class="menu-dropdown" role="menu">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowCeilingDesigner, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowCeilingDesigner)} role="menuitem" tabindex="0">
+						<span>Ceiling designer…</span>
+					</div>
+					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowExploreData, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowExploreData)} role="menuitem" tabindex="0">
 						<span>Pathogen Efficacy</span>
 					</div>
