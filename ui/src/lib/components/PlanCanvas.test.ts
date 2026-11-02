@@ -613,3 +613,87 @@ describe('PlanCanvas typed wall lengths', () => {
     expect(lengthInput()).toBeNull();
   });
 });
+
+describe('PlanCanvas snapping to the room outline', () => {
+  const S = 400;
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const roomOutline: Vertex[] = [[0, 0], [10, 0], [10, 10], [0, 10]];
+  const square: Vertex[] = [[2, 2], [4, 2], [4, 4], [2, 4]];
+
+  async function mountInRoom() {
+    const onEdit = vi.fn();
+    const { container, component } = render(PlanCanvas, {
+      props: { draft: square.map((v) => [...v] as Vertex), units: 'meters', precision: 2, outline: roomOutline, draggableBody: true, onEdit },
+    });
+    const svg = container.querySelector('svg.plan') as SVGSVGElement;
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: S, height: S, right: S, bottom: S, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await resize(svg, S, S);
+    (component as unknown as { fitView: (p: Vertex[]) => void }).fitView(roomOutline);
+    await tick();
+    const v = box(svg);
+    const upp = v.h / S;
+    const client = (x: number, y: number) => ({ clientX: (x - v.x) / upp, clientY: S - (y - v.bottom) / upp });
+    const xs = () => [...svg.querySelectorAll('circle.vertex')].map((c) => Number(c.getAttribute('cx')));
+    const ys = () => [...svg.querySelectorAll('circle.vertex')].map((c) => -Number(c.getAttribute('cy')));
+    return { svg, onEdit, upp, client, xs, ys };
+  }
+
+  it('a body drag near a wall ends flush, with the wall highlighted', async () => {
+    const { svg, onEdit, upp, client, xs } = await mountInRoom();
+    const from = client(3, 3);
+    // The square's right side lands 5 px short of the right wall
+    const to = client(3 + (10 - 5 * upp - 4), 3);
+    await fireEvent.pointerDown(svg, { ...from, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(svg, { ...to, pointerId: 1 });
+    expect(Math.max(...xs())).toBeCloseTo(10, 9);
+    expect(svg.querySelectorAll('line.outline-guide')).toHaveLength(1);
+    await fireEvent.pointerUp(svg, { ...to, pointerId: 1 });
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(Math.max(...xs())).toBeCloseTo(10, 9);
+    expect(svg.querySelectorAll('.outline-guide')).toHaveLength(0);
+  });
+
+  it('in a room corner the shape sits flush to both walls', async () => {
+    const { svg, upp, client, xs, ys } = await mountInRoom();
+    const from = client(3, 3);
+    // Bottom-left corner 4 px right of the left wall and 3 px above the floor
+    const to = client(3 - 2 + 4 * upp, 3 - 2 + 3 * upp);
+    await fireEvent.pointerDown(svg, { ...from, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(svg, { ...to, pointerId: 1 });
+    expect(Math.min(...xs())).toBeCloseTo(0, 9);
+    expect(Math.min(...ys())).toBeCloseTo(0, 9);
+    await fireEvent.pointerUp(svg, { ...to, pointerId: 1 });
+  });
+
+  it('a corner dragged near an outline corner lands on it; Alt leaves it free', async () => {
+    const { svg, upp, client, xs, ys } = await mountInRoom();
+    const corner = screen.getByRole('button', { name: 'Corner 3' });
+    const near = client(10 - 4 * upp, 10 - 3 * upp);
+    await fireEvent.pointerDown(corner, { ...client(4, 4), button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(svg, { ...near, pointerId: 1 });
+    expect(xs()[2]).toBeCloseTo(10, 9);
+    expect(ys()[2]).toBeCloseTo(10, 9);
+    expect(svg.querySelectorAll('circle.outline-guide')).toHaveLength(1);
+    await fireEvent.pointerMove(svg, { ...near, pointerId: 1, altKey: true });
+    expect(xs()[2]).toBeLessThan(10 - 2 * upp);
+    expect(svg.querySelectorAll('.outline-guide')).toHaveLength(0);
+    await fireEvent.pointerUp(svg, { ...near, pointerId: 1 });
+  });
+
+  it('beyond 10 px the outline does not pull', async () => {
+    const { svg, upp, client, xs } = await mountInRoom();
+    const from = client(3, 3);
+    // Right side 14 px short of the wall
+    const to = client(3 + (10 - 14 * upp - 4), 3);
+    await fireEvent.pointerDown(svg, { ...from, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(svg, { ...to, pointerId: 1 });
+    expect(Math.max(...xs())).toBeLessThan(10 - 10 * upp);
+    expect(svg.querySelectorAll('.outline-guide')).toHaveLength(0);
+    await fireEvent.pointerUp(svg, { ...to, pointerId: 1 });
+  });
+});

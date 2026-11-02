@@ -399,10 +399,10 @@ describe('PlanPane', () => {
       await fireEvent.click(plan, { clientX: 100, clientY: 400 });
       await fireEvent.click(plan, { clientX: 300, clientY: 400 });
       const firstX = ctl.fmt(ctl.draft[0][0]);
-      await fireEvent.pointerMove(plan, { clientX: 107, clientY: 250 });
+      await fireEvent.pointerMove(plan, { clientX: 105, clientY: 250 });
       expect(container.querySelector('.cursor-label')?.textContent?.startsWith(firstX + ',')).toBe(true);
       expect(container.querySelectorAll('.guide').length).toBe(1);
-      await fireEvent.click(plan, { clientX: 107, clientY: 250 });
+      await fireEvent.click(plan, { clientX: 105, clientY: 250 });
       await fireEvent.keyDown(plan, { key: 'Enter' });
       expect(container.querySelector('svg.plan.drawing')).toBeNull();
       expect(container.querySelectorAll('.guide').length).toBe(0);
