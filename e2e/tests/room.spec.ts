@@ -136,6 +136,28 @@ test.describe('Polygon rooms', () => {
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Y'))).toBe(4);
   });
 
+  test('double-click a wall to type its length; undo restores it', async ({ page }) => {
+    await waitForSession(page);
+    await expandRoomPanel(page);
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(6);
+    const plan = planSvg(page);
+    // Off the wall's centre, where the "+" handle sits
+    const wall = await plan.getByRole('button', { name: 'Wall 1', exact: true }).boundingBox();
+    if (!wall) throw new Error('bottom wall not visible');
+    await page.mouse.dblclick(wall.x + wall.width * 0.25, wall.y + wall.height / 2);
+    const input = page.getByRole('textbox', { name: 'Wall 1 length' });
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue(/^6(\.0+)?$/);
+    await page.keyboard.type('8');
+    await page.keyboard.press('Enter');
+    await expect(input).toHaveCount(0);
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(8);
+    await expect(plan.locator('circle.vertex')).toHaveCount(4);
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+z');
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(6);
+  });
+
   test('upload a floor plan, calibrate it, save and reload the project', async ({ page }) => {
     await waitForSession(page);
     await expandRoomPanel(page);

@@ -1714,7 +1714,7 @@ describe('PlanPane ceiling context', () => {
     expect(Math.max(...xs)).toBeCloseTo(9, 6);
   });
 
-  it('double-clicking a corner of a keep-out area removes it; double-clicking an edge adds one', async () => {
+  it('double-clicking a corner of a keep-out area removes it; double-clicking an edge types its length', async () => {
     const calls: unknown[][] = [];
     const five = { ...keep, vertices: [[6, 4], [8, 4], [8, 6], [7, 7], [6, 6]] as [number, number][] };
     const { container, ctl } = mountCeiling({ calls, ceiling: { ...ceiling, items: [detector, five] } });
@@ -1728,8 +1728,15 @@ describe('PlanPane ceiling context', () => {
     expect(partial.vertices).toHaveLength(4);
     const [ex, ey] = px(plan, 7, 4);
     await fireEvent.dblClick(screen.getByRole('button', { name: 'Wall 1' }), { clientX: ex, clientY: ey });
+    await tick();
+    const input = screen.getByRole('textbox', { name: 'Wall 1 length' }) as HTMLInputElement;
+    expect(input.value).toMatch(/^2(\.0+)?$/);
+    await fireEvent.input(input, { target: { value: '1.5' } });
+    await fireEvent.keyDown(input, { key: 'Enter' });
     partial = callsOf(calls, 'updateCeilingItem').at(-1)![2] as { vertices: [number, number][] };
-    expect(partial.vertices).toHaveLength(5);
+    // The far corners follow the wall: still four corners, now 1.5 wide
+    expect(partial.vertices).toHaveLength(4);
+    expect(Math.max(...partial.vertices.map((v) => v[0])) - Math.min(...partial.vertices.map((v) => v[0]))).toBeCloseTo(1.5, 6);
     // Corner and edge double-clicks keep their meaning: neither fits the view
     expect(plan.getAttribute('viewBox')).toBe(zoomed);
     // A double-click on empty space fits
