@@ -82,4 +82,29 @@ test.describe('Lamps on the plan', () => {
     await page.keyboard.press('Control+z');
     await expect.poll(() => lampCount(page)).toBe(2);
   });
+
+  test('Ctrl+C then Ctrl+V pastes a copy of the selected lamp, selected; one undo removes it', async ({ page }) => {
+    await waitForSession(page);
+    await openStep(page, 'lamps');
+    const part = page.locator('.lamps-part');
+    const fixture = part.getByLabel('Fixture', { exact: true });
+    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
+    await fixture.selectOption((await fixture.locator('option[value^="preset:"]').first().getAttribute('value'))!);
+    await page.getByRole('group', { name: 'Placement' }).getByRole('button', { name: 'Downlight' }).click();
+    const lampRows = part.locator('.editor-row');
+    await expect(lampRows).toHaveCount(1);
+    await waitForApiIdle(page);
+    const firstId = await part.locator('.editor-row.open').getAttribute('data-id');
+
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+c');
+    await page.keyboard.press('Control+v');
+    await expect(lampRows).toHaveCount(2);
+    await expect(part.locator('.editor-row.open')).not.toHaveAttribute('data-id', firstId!);
+    await waitForApiIdle(page);
+
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+z');
+    await expect.poll(() => lampCount(page)).toBe(1);
+  });
 });

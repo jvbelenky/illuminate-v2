@@ -45,6 +45,12 @@ export interface PlanActions {
   removeCeilingItem: (id: string) => void;
   /** Copy a ceiling item, shifted one tile; returns the copy's id. */
   copyCeilingItem: (id: string) => string | null;
+  /** Paste copied lamps (a snapshot, the originals may be gone), shifted by (dx, dy), as one undo step. */
+  pasteLamps: (lamps: LampInstance[], dx: number, dy: number) => Promise<string[]>;
+  /** Paste a copied zone, shifted by (dx, dy). */
+  pasteZone: (zone: CalcZone, dx: number, dy: number) => Promise<string>;
+  /** Paste a copied ceiling item, `n` tiles along (1 for the first paste); null when the layout is full. */
+  pasteCeilingItem: (item: CeilingItem, n: number) => string | null;
 }
 
 /** The scene as stored, which the plan reads (and never writes directly). */

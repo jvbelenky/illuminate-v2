@@ -7,6 +7,7 @@ import { defaultProject, type CalcZone, type LampInstance, type SceneObject } fr
 import type { Vertex } from '$lib/utils/roomGeometry';
 import { get } from 'svelte/store';
 import { pickMode } from '$lib/stores/pickMode';
+import { clipboard, clearClipboard } from './clipboard';
 
 // The harness defaults: a 6 x 4 m room with a single lamp and a single box obstacle.
 const rect: Vertex[] = [[0, 0], [6, 0], [6, 4], [0, 4]];
@@ -56,6 +57,9 @@ function makeActions(): PlanActions {
     updateCeilingItem: vi.fn(),
     removeCeilingItem: vi.fn(),
     copyCeilingItem: vi.fn(() => 'ceiling-2'),
+    pasteLamps: vi.fn(async () => ['lamp-9']),
+    pasteZone: vi.fn(async () => 'zone-9'),
+    pasteCeilingItem: vi.fn(() => 'ceiling-9'),
   };
 }
 
@@ -974,5 +978,115 @@ describe('structure footprint: Draw footprint and Edit corners', () => {
     ctl.editStructureCorners('object-1');
     ctl.selectObstacle(null);
     expect(ctl.activeTool).toBeNull();
+  });
+});
+
+describe('Ctrl+C / Ctrl+V', () => {
+  const field = (tag: 'input' | 'textarea') => {
+    const el = document.createElement(tag);
+    document.body.appendChild(el);
+    return el;
+  };
+
+  test('Ctrl+C stores a snapshot of the selected lamps; Ctrl+V pastes it, selects the copy and offsets each paste further', async () => {
+    clearClipboard();
+    const { ctl, actions } = make();
+    ctl.setContext('lamps');
+    ctl.selectedLampIds = ['lamp-1'];
+    press(ctl, 'c', document.body, { ctrlKey: true });
+    expect(get(clipboard)?.content).toMatchObject({ kind: 'lamps', lamps: [{ id: 'lamp-1' }] });
+    press(ctl, 'v', document.body, { ctrlKey: true });
+    await tick();
+    expect(actions.pasteLamps).toHaveBeenCalledTimes(1);
+    const first = (actions.pasteLamps as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(first[0][0].id).toBe('lamp-1');
+    expect(ctl.selectedLampIds).toEqual(['lamp-9']);
+    press(ctl, 'v', document.body, { ctrlKey: true });
+    await tick();
+    const second = (actions.pasteLamps as ReturnType<typeof vi.fn>).mock.calls[1];
+    expect(second[1]).toBeCloseTo(first[1] * 2, 9);
+  });
+
+  test('the clipboard holds data, so the original can be deleted before pasting', async () => {
+    clearClipboard();
+    const { ctl, actions } = make();
+    ctl.setContext('lamps');
+    ctl.selectedLampIds = ['lamp-1'];
+    press(ctl, 'c', document.body, { ctrlKey: true });
+    ctl.deleteSelectedLamps();
+    press(ctl, 'v', document.body, { metaKey: true });
+    await tick();
+    expect(actions.pasteLamps).toHaveBeenCalledWith([expect.objectContaining({ id: 'lamp-1', x: 2 })], expect.any(Number), expect.any(Number));
+  });
+
+  test('a structure, a zone and a ceiling item each paste through their own path', async () => {
+    clearClipboard();
+    const { ctl, actions } = make({ zones: [{ id: 'z1', name: 'Z', type: 'point', x: 1, y: 1, z: 1 } as unknown as CalcZone] });
+    ctl.setContext('obstacles');
+    ctl.selectObstacle('object-1');
+    press(ctl, 'c', document.body, { ctrlKey: true });
+    press(ctl, 'v', document.body, { ctrlKey: true });
+    await tick();
+    expect(actions.addObstacle).toHaveBeenCalledTimes(1);
+    ctl.setContext('zones');
+    ctl.selectZone('z1');
+    press(ctl, 'c', document.body, { ctrlKey: true });
+    press(ctl, 'v', document.body, { ctrlKey: true });
+    await tick();
+    expect(actions.pasteZone).toHaveBeenCalledTimes(1);
+    expect(ctl.selectedZoneId).toBe('zone-9');
+  });
+
+  test('pasting from another stage switches to the item\'s stage', async () => {
+    clearClipboard();
+    const { ctl, actions } = make();
+    const seen: string[] = [];
+    ctl.onNeedContext = (c) => seen.push(c);
+    ctl.setContext('lamps');
+    ctl.selectedLampIds = ['lamp-1'];
+    press(ctl, 'c', document.body, { ctrlKey: true });
+    ctl.setContext('obstacles');
+    press(ctl, 'v', document.body, { ctrlKey: true });
+    await tick();
+    expect(seen).toEqual(['lamps']);
+    expect(ctl.context).toBe('lamps');
+    expect(actions.pasteLamps).toHaveBeenCalled();
+  });
+
+  test('nothing selected: Ctrl+C stores nothing and leaves the key alone; nothing copied: Ctrl+V does nothing', () => {
+    clearClipboard();
+    const { ctl, actions } = make();
+    ctl.setContext('lamps');
+    const ev = new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true, cancelable: true });
+    ctl.onWindowKey(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(get(clipboard)).toBeNull();
+    press(ctl, 'v', document.body, { ctrlKey: true });
+    expect(actions.pasteLamps).not.toHaveBeenCalled();
+  });
+
+  test('in a text field the browser keeps its own copy and paste', () => {
+    clearClipboard();
+    const { ctl, actions } = make();
+    ctl.setContext('lamps');
+    ctl.selectedLampIds = ['lamp-1'];
+    for (const tag of ['input', 'textarea'] as const) {
+      const el = field(tag);
+      const ev = new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true, cancelable: true });
+      Object.defineProperty(ev, 'target', { value: el });
+      ctl.onWindowKey(ev);
+      expect(ev.defaultPrevented).toBe(false);
+      el.remove();
+    }
+    expect(get(clipboard)).toBeNull();
+    // With something on the clipboard, Ctrl+V in a field does not paste either
+    press(ctl, 'c', document.body, { ctrlKey: true });
+    const el = field('input');
+    const ev = new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'target', { value: el });
+    ctl.onWindowKey(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(actions.pasteLamps).not.toHaveBeenCalled();
+    el.remove();
   });
 });

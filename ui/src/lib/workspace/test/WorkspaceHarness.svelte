@@ -227,6 +227,27 @@
 			calls.push(['removeCeilingItem', id]);
 			scene.ceiling = { ...scene.ceiling, items: scene.ceiling.items.filter((i) => i.id !== id) };
 		},
+		pasteLamps: async (src, dx, dy) => {
+			calls.push(['pasteLamps', src.map((l) => l.id), dx, dy]);
+			return src.map((l) => {
+				const id = `lamp-${nextId++}`;
+				scene.lamps = [...scene.lamps, { ...l, id, x: l.x + dx, y: l.y + dy, aimx: l.aimx + dx, aimy: l.aimy + dy }];
+				return id;
+			});
+		},
+		pasteZone: async (src, dx, dy) => {
+			calls.push(['pasteZone', src.id, dx, dy]);
+			const newId = `zone-${nextId++}`;
+			scene.zones = [...scene.zones, { ...src, id: newId }];
+			return newId;
+		},
+		pasteCeilingItem: (item, n) => {
+			calls.push(['pasteCeilingItem', item.id, n]);
+			const g = tileGrid(scene.ceiling, scene.vertices, scene.units);
+			const copy = copyInside(item, scene.ceiling, scene.vertices, (g.tw || 0.5) * n, item.kind === 'keep' ? (g.th || 0.5) * n : 0);
+			scene.ceiling = { ...scene.ceiling, items: [...scene.ceiling.items, copy] };
+			return copy.id;
+		},
 		copyCeilingItem: (id) => {
 			calls.push(['copyCeilingItem', id]);
 			const src = scene.ceiling.items.find((i) => i.id === id)!;

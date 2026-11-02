@@ -3674,17 +3674,23 @@ function createProjectStore() {
 
     /** Copy an item one tile along (a keep-out area one tile along and up); returns the copy's id (null when the layout is full). */
     copyCeilingItem(id: string): string | null {
-      const p = get({ subscribe });
-      const layout = p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT;
+      const layout = get({ subscribe }).ceilingLayout ?? DEFAULT_CEILING_LAYOUT;
       const item = layout.items.find((i) => i.id === id);
       if (!item) return id;
+      return this.pasteCeilingItem(item, 1, 'Copy ceiling item');
+    },
+
+    /** Add a copy of an item (a snapshot, its original may be gone), `n` tiles along; null when the layout is full. */
+    pasteCeilingItem(item: CeilingItem, n = 1, label = 'Paste ceiling item'): string | null {
+      const p = get({ subscribe });
+      const layout = p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT;
       if (layout.items.length >= MAX_CEILING_ITEMS) return null;
       const units = get(userSettings).units;
       const g = tileGrid(layout, roomVertices(p.room), units);
       const step = unitSnap(units) * 2;
-      // One tile along, or another way when that would leave the room
-      const copy = copyCeilingItemInside(item, layout, roomVertices(p.room), g.tw || step, item.kind === 'keep' ? g.th || step : 0);
-      history.record('Copy ceiling item');
+      // n tiles along, or another way when that would leave the room
+      const copy = copyCeilingItemInside(item, layout, roomVertices(p.room), (g.tw || step) * n, item.kind === 'keep' ? (g.th || step) * n : 0);
+      history.record(label);
       setCeiling((l) => ({ ...l, items: [...l.items, copy] }));
       return copy.id;
     },

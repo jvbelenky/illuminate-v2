@@ -191,6 +191,42 @@
 		updateCeilingItem: (id, partial) => project.updateCeilingItem(id, partial),
 		removeCeilingItem: (id) => project.removeCeilingItem(id),
 		copyCeilingItem: (id) => project.copyCeilingItem(id),
+		pasteLamps: (src, dx, dy) => project.history.batch('Paste lamps', async () => {
+			const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+			const out: string[] = [];
+			for (const l of src) {
+				let newId: string;
+				if (get(lamps).some((x) => x.id === l.id)) {
+					// Still there: copy it, photometry and all
+					newId = await project.copyLamp(l.id);
+				} else {
+					const { id: _id, ...rest } = l;
+					newId = await project.addLamp({ ...rest, name: `${l.name || 'Lamp'} (Copy)` });
+					if (l.custom_lamp_id) await project.applyCustomLamp(newId, l.custom_lamp_id);
+				}
+				project.updateLamp(newId, { x: r6(l.x + dx), y: r6(l.y + dy), aimx: r6(l.aimx + dx), aimy: r6(l.aimy + dy) });
+				out.push(newId);
+			}
+			return out;
+		}),
+		pasteZone: (src, dx, dy) => project.history.batch('Paste zone', async () => {
+			let newId: string;
+			if ($zones.some((z) => z.id === src.id)) {
+				newId = await project.copyZone(src.id);
+			} else {
+				const { id: _id, isStandard: _std, ...rest } = src;
+				newId = await project.addZone({ ...newZoneFromSettings(src.type), ...rest, name: `${src.name || 'Zone'} (Copy)` });
+			}
+			const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+			if (src.type === 'point') {
+				project.updateZone(newId, { x: r6((src.x ?? 0) + dx), y: r6((src.y ?? 0) + dy), aim_x: r6((src.aim_x ?? 0) + dx), aim_y: r6((src.aim_y ?? 0) + dy) });
+			} else if (zoneHasFootprint(src)) {
+				const moved = zoneFootprint(src).map(([x, y]) => [r6(x + dx), r6(y + dy)] as [number, number]);
+				project.updateZone(newId, { ...footprintGeometry(src.type, moved), fit_room: false });
+			}
+			return newId;
+		}),
+		pasteCeilingItem: (item, n) => project.pasteCeilingItem(item, n),
 	};
 
 	const planImage = $derived($room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null);
@@ -223,7 +259,18 @@
 		get ceiling() { return $ceilingLayout; },
 	};
 	// A 2D select, add or copy brings the item's editor row into view
-	const plan = new PlanController({ actions: planActions, scene: () => planScene, onItemSelected: (id) => scrollRowIntoView(id) });
+	const plan = new PlanController({
+		actions: planActions,
+		scene: () => planScene,
+		onItemSelected: (id) => scrollRowIntoView(id),
+		// A paste from another stage shows the pasted item's editor
+		onNeedContext: (c) => {
+			if (c === 'lamps') workspaceUi.goTo('lamps');
+			else if (c === 'zones') workspaceUi.goTo('zones');
+			else if (c === 'obstacles') workspaceUi.goTo('room', 'structures');
+			else if (c === 'ceiling') workspaceUi.goTo('room', 'ceiling');
+		},
+	});
 
 	/** Point the plan at what the workspace shows (the summary is view-only). */
 	function syncPlanContext() {
