@@ -108,9 +108,8 @@
 						aria-selected={part === p.id}
 						onclick={() => go('room', p.id)}
 					>
-						<span class="lbl"
-							>{p.label}{#if done}<span class="badge" aria-hidden="true">{@render check(8)}</span>{/if}</span
-						>
+						<span class="tick" class:done aria-hidden="true">{#if done}{@render check(10)}{/if}</span>
+						<span class="lbl">{p.label}</span>
 					</button>
 				{/each}
 			</div>
@@ -268,42 +267,43 @@
 		flex: none;
 		display: flex;
 		align-items: center;
-		/* The badge rides over the label's top-right corner, above its last lowercase letters, so it takes no width */
-		padding: 9px 3px 6px 2px;
+		gap: 4px;
+		padding: 8px 2px 6px;
 		border: 0;
 		border-bottom: 2px solid transparent;
 		border-radius: 0;
 		background: none;
 		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
+		font-size: 13px;
 		line-height: 1.2;
 		white-space: nowrap;
 	}
 	.editor-part:hover {
 		color: var(--color-text);
 	}
-	/* Not bold: the row keeps one width whichever part is open */
+	/* Not bold: bold would add 4 px to a row that already needs sideways scroll */
 	.editor-part.on {
 		border-bottom-color: var(--color-scene-selected);
 		color: var(--color-text);
 	}
-	.editor-part .lbl {
-		position: relative;
-	}
-	/* A notification-style badge: filled green, the tick cut out in the panel colour, over the label's top-right corner */
-	.editor-part .badge {
-		position: absolute;
-		top: -8px;
-		right: -3px;
+	/* The circle before the label, as the stage tabs': empty until the part is opened, then the green tick */
+	.editor-part .tick {
+		flex: none;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 12px;
-		height: 12px;
+		width: 16px;
+		height: 16px;
 		border-radius: 50%;
-		background: var(--color-success);
-		color: var(--color-bg-secondary);
-		pointer-events: none;
+		box-sizing: border-box;
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		color: var(--color-text-muted);
+	}
+	.editor-part .tick.done {
+		background: color-mix(in srgb, var(--color-success) 18%, transparent);
+		border-color: color-mix(in srgb, var(--color-success) 50%, transparent);
+		color: var(--color-success);
 	}
 	@container (min-width: 340px) {
 		.editor-parts {

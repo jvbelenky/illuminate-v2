@@ -116,7 +116,7 @@
 		gap: var(--spacing-xs);
 		padding: var(--spacing-sm);
 		background: var(--color-bg-tertiary);
-		border: 1px solid var(--color-accent);
+		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 	}
 	.all-name {

@@ -60,12 +60,17 @@ describe('EditorPanel', () => {
     expect(row.querySelector('.dot')).toBeNull();
   });
 
-  it('a Room part ticks once opened: a corner badge on Floorplan at once, the others when clicked', async () => {
+  it('a Room part ticks once opened: a filled circle before the label on Floorplan at once, the others when clicked', async () => {
     mount();
-    const badge = (p: string) => q(`.editor-part[data-part="${p}"] .lbl .badge`);
+    const badge = (p: string) => q(`.editor-part[data-part="${p}"] .tick.done`);
     expect(badge('floorplan')).not.toBeNull();
     expect(badge('floorplan')!.querySelector('svg')).not.toBeNull();
     for (const p of ['structures', 'ceiling', 'reflectance']) expect(badge(p)).toBeNull();
+    for (const p of ['floorplan', 'structures']) {
+      const kids = [...q(`.editor-part[data-part="${p}"]`)!.children];
+      expect(kids[0].classList.contains('tick')).toBe(true);
+      expect(kids[1].classList.contains('lbl')).toBe(true);
+    }
     await click(q('.editor-part[data-part="ceiling"]'));
     expect(badge('ceiling')).not.toBeNull();
     expect(badge('structures')).toBeNull();
@@ -78,7 +83,7 @@ describe('EditorPanel', () => {
 
   it('a new or loaded project clears the ticks but for the part on screen', async () => {
     mount();
-    const badge = (p: string) => q(`.editor-part[data-part="${p}"] .badge`);
+    const badge = (p: string) => q(`.editor-part[data-part="${p}"] .tick.done`);
     await click(q('.editor-part[data-part="structures"]'));
     workspaceUi.reset('editor');
     await tick();
