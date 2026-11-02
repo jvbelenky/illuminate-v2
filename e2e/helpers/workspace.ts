@@ -1,7 +1,7 @@
 import { type Locator, type Page, expect } from '@playwright/test';
 
 export type Stage = 'room' | 'lamps' | 'zones';
-export type Part = 'floorplan' | 'structures' | 'ceiling' | 'reflectance';
+export type Part = 'floorplan' | 'structures' | 'reflectance';
 
 /** The 2D plan canvas (the main view's, not the docked mini view's). */
 export function planSvg(page: Page): Locator {
@@ -39,6 +39,26 @@ export async function openStep(page: Page, stage: Stage, part?: Part): Promise<v
     await partTab.click();
     await expect(partTab).toHaveAttribute('aria-selected', 'true');
   }
+}
+
+/** The ceiling designer's window. */
+export function ceilingDesigner(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Ceiling designer' });
+}
+
+/** The ceiling designer's own plan canvas. */
+export function designerPlan(page: Page): Locator {
+  return ceilingDesigner(page).locator('.cd-plan svg.plan');
+}
+
+/** Tools › Ceiling designer… */
+export async function openCeilingDesigner(page: Page): Promise<Locator> {
+  const tools = page.locator('.menu-bar-item').filter({ hasText: 'Tools' }).locator('span[role="button"]');
+  await tools.click();
+  await page.getByRole('menuitem', { name: 'Ceiling designer…' }).click();
+  const designer = ceilingDesigner(page);
+  await expect(designer.locator('.ceiling-part')).toBeVisible();
+  return designer;
 }
 
 /** Done: back to the read-only summary. */

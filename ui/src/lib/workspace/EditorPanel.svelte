@@ -8,7 +8,6 @@
 	import EditorDone from './EditorDone.svelte';
 	import FloorplanPart from './parts/FloorplanPart.svelte';
 	import StructuresPart from './parts/StructuresPart.svelte';
-	import CeilingPart from './parts/CeilingPart.svelte';
 	import LampsPart from './parts/LampsPart.svelte';
 	import ZonesPart from './parts/ZonesPart.svelte';
 
@@ -120,8 +119,6 @@
 					<FloorplanPart controller={ctl} />
 				{:else if part === 'structures'}
 					<StructuresPart controller={ctl} {objectPanel} />
-				{:else if part === 'ceiling'}
-					<CeilingPart controller={ctl} />
 				{:else}
 					<ReflectanceStep {onShowReflectanceSettings} onHover={(s) => (ctl.hoveredSurface = s)} />
 				{/if}

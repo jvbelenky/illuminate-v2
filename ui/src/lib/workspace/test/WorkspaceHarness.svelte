@@ -13,6 +13,7 @@
 	import LampsPart from '$lib/workspace/parts/LampsPart.svelte';
 	import ZonesPart from '$lib/workspace/parts/ZonesPart.svelte';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
+	import CeilingDesignerModal from '$lib/ceiling/CeilingDesignerModal.svelte';
 	import MainViewControls from '$lib/workspace/MainViewControls.svelte';
 	import type { MainView } from '$lib/workspace/dockLayout';
 	import { workspaceUi } from '$lib/stores/workspaceUi';
@@ -71,6 +72,12 @@
 		onFit?: () => void;
 		fullScreen?: boolean;
 		onToggleFullScreen?: () => void;
+		/** Also open the ceiling designer, on a second controller of its own (as the page does). */
+		designer?: boolean;
+		onDesignerController?: (ctl: PlanController) => void;
+		onCloseDesigner?: () => void;
+		/** The main pane's link from a ceiling item to the designer. */
+		onCeilingItemClick?: (id: string) => void;
 	}
 
 	let {
@@ -105,6 +112,10 @@
 		onFit,
 		fullScreen = false,
 		onToggleFullScreen,
+		designer = false,
+		onDesignerController = () => {},
+		onCloseDesigner = () => {},
+		onCeilingItemClick,
 	}: Props = $props();
 
 	// svelte-ignore state_referenced_locally
@@ -285,6 +296,12 @@
 	ctl.onNeedCanvas = onNeedCanvas;
 	// svelte-ignore state_referenced_locally
 	onController(ctl);
+	// The ceiling designer's own plan
+	const designerCtl = new PlanController({ actions, scene: () => sceneView });
+	designerCtl.setContext('ceiling');
+	designerCtl.inDialog = true;
+	// svelte-ignore state_referenced_locally
+	onDesignerController(designerCtl);
 </script>
 
 <div class="workspace-harness" data-plan-scope>
@@ -293,7 +310,7 @@
 			<MainViewControls main={controls} onSelectMain={onSelectMain} controller={ctl} editing={!readonly} {touch} {onFit} {fullScreen} {onToggleFullScreen} />
 		</div>
 	{/if}
-	<PlanPane controller={ctl} {readonly} {mini} toolbar={!controls} viewTools={!touch} />
+	<PlanPane controller={ctl} {readonly} {mini} toolbar={!controls} viewTools={!touch} {onCeilingItemClick} />
 	{#if editor}
 		<EditorPanel controller={ctl} {onDone} {onShowReflectanceSettings} {onAddCustomLamp}>
 			{#snippet lampPanel(lamp, close)}
@@ -324,3 +341,6 @@
 		</ZonesPart>
 	{/if}
 </div>
+{#if designer}
+	<CeilingDesignerModal controller={designerCtl} onClose={onCloseDesigner} />
+{/if}

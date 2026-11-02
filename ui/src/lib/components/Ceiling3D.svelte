@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The ceiling layout in the 3D view: tile lines, detectors (discs), vents
 	// (squares), sensors (cones) and keep-out areas (translucent red). Planning
-	// only: nothing here is picked or edited, and nothing reaches the calculation.
+	// only: nothing here is edited (a click opens the ceiling designer) and
+	// nothing reaches the calculation.
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
@@ -19,9 +20,14 @@
 		/** Ceiling height in the project's units */
 		height: number;
 		selectedId?: string | null;
+		/** The scene's click handler: an item's mesh carries `clickType: 'ceiling'` for it. */
+		onclick?: (event: any) => void;
 	}
 
-	let { layout, room, height, selectedId = null }: Props = $props();
+	let { layout, room, height, selectedId = null, onclick }: Props = $props();
+	const pickable = (ref: any) => {
+		if (onclick) ref.cursor = 'pointer';
+	};
 
 	const units = $derived($userSettings.units);
 	const outline = $derived(roomVertices(room));
@@ -78,7 +84,7 @@
 {/if}
 
 {#each keepOuts as k, i (k.id)}
-	<T.Mesh position.y={itemY} rotation.x={-Math.PI / 2} renderOrder={1}>
+	<T.Mesh position.y={itemY} rotation.x={-Math.PI / 2} renderOrder={1} {onclick} userData={{ clickType: 'ceiling', clickId: k.id }} oncreate={pickable}>
 		<T is={keepFill[i]} />
 		<T.MeshBasicMaterial color={itemColor(k.id === selectedId, colors.keepOut)} transparent opacity={k.id === selectedId ? 0.35 : 0.22} side={THREE.DoubleSide} depthWrite={false} />
 	</T.Mesh>
@@ -91,18 +97,18 @@
 {#each points as p (p.id)}
 	{@const color = itemColor(p.id === selectedId, colors.point)}
 	{#if p.kind === 'smoke'}
-		<T.Mesh position={[p.x, itemY, -p.y]} rotation.x={-Math.PI / 2} renderOrder={2}>
+		<T.Mesh position={[p.x, itemY, -p.y]} rotation.x={-Math.PI / 2} renderOrder={2} {onclick} userData={{ clickType: 'ceiling', clickId: p.id }} oncreate={pickable}>
 			<T.CircleGeometry args={[p.size / 2, 24]} />
 			<T.MeshBasicMaterial {color} side={THREE.DoubleSide} />
 		</T.Mesh>
 	{:else if p.kind === 'vent'}
-		<T.Mesh position={[p.x, itemY, -p.y]} rotation.x={-Math.PI / 2} renderOrder={2}>
+		<T.Mesh position={[p.x, itemY, -p.y]} rotation.x={-Math.PI / 2} renderOrder={2} {onclick} userData={{ clickType: 'ceiling', clickId: p.id }} oncreate={pickable}>
 			<T.PlaneGeometry args={[p.size, p.size]} />
 			<T.MeshBasicMaterial {color} side={THREE.DoubleSide} />
 		</T.Mesh>
 	{:else}
 		<!-- Sensor: a cone hanging from the ceiling, point down -->
-		<T.Mesh position={[p.x, itemY - p.size / 2, -p.y]} rotation.x={Math.PI} renderOrder={2}>
+		<T.Mesh position={[p.x, itemY - p.size / 2, -p.y]} rotation.x={Math.PI} renderOrder={2} {onclick} userData={{ clickType: 'ceiling', clickId: p.id }} oncreate={pickable}>
 			<T.ConeGeometry args={[p.size / 2, p.size, 16]} />
 			<T.MeshBasicMaterial {color} />
 		</T.Mesh>
