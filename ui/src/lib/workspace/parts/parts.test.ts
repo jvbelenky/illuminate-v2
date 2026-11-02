@@ -678,7 +678,7 @@ describe('Ceiling part', () => {
     expect(screen.getAllByLabelText(/^Corner \d [XY]$/)).toHaveLength(8);
     expect(screen.queryByRole('button', { name: /Geometry/ })).toBeNull();
     // Reference starts at Centre; Width keeps the middle fixed
-    expect((screen.getByLabelText('Reference') as HTMLSelectElement).value).toBe('centre');
+    expect(screen.getByRole('radio', { name: 'Centre' }).getAttribute('aria-checked')).toBe('true');
     const w = screen.getByLabelText('Width') as HTMLInputElement;
     w.value = '3';
     await fireEvent.change(w);
@@ -732,9 +732,9 @@ describe('Shape geometry fields', () => {
     await fireEvent.click(main('ceiling-2'));
     expect((screen.getByLabelText('X') as HTMLInputElement).value).toBe('2');
     expect((screen.getByLabelText('Y') as HTMLInputElement).value).toBe('1.5');
-    await fireEvent.change(screen.getByLabelText('Reference'), { target: { value: 'corner' } });
+    await fireEvent.click(screen.getByRole('radio', { name: 'Bottom-left corner' }));
     expect((screen.getByLabelText('X') as HTMLInputElement).value).toBe('1');
-    await fireEvent.change(screen.getByLabelText('Reference'), { target: { value: 'centre' } });
+    await fireEvent.click(screen.getByRole('radio', { name: 'Centre' }));
     const len = screen.getByLabelText('Length') as HTMLInputElement;
     len.value = '2';
     await fireEvent.change(len);

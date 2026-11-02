@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Structures and ceiling keep-out areas: the Reference select is now a small glyph of the shape with five targets, its four corners and its centre (the chosen one filled cyan); X/Y show that point and Width or Length changes keep it fixed. The glyph is in the shape's own frame, so it does not turn with Rotation
 - Item row eye and calculator toggles in the editor no longer use red outlines: off is dimmed, hover uses the shared fill, focus shows the cyan ring.
 - Copy and Delete at the foot of every open item editor in the left panel (structures, lamps, your own zones, ceiling items), the same actions as the edit strip and the keys: the copy opens, and undo brings a deleted item back. The open structure's editor reads Box or Polygon, N corners, with Draw footprint (redraws its footprint on the 2D view, keeping its bottom and top; Escape cancels) and Edit corners; the Structures edit strip has Edit corners too. Floorplan: the floor plan image (Upload, then opacity, Set scale…, Move image and Remove once loaded) sits on its own card below the outline
 - Undo and Redo buttons at the left of the main view's bottom-right tools (2D and 3D, in the summary and the editor), and before Fit in the phone's pinned view; each is greyed out when there is nothing to undo or redo; when the 2D view is narrow the units select there reads m, cm, mm, ft or in so the edit strip still fits beside the tools

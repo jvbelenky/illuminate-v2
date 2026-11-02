@@ -1,12 +1,14 @@
 <script lang="ts">
-	// A footprint's geometry: X/Y of its reference point (its own corner or its
-	// middle), Width and Length along its own sides (the reference point stays
+	// A footprint's geometry: X/Y of its reference point (one of its own corners
+	// or its middle, picked on a glyph), Width and Length along its own sides (the reference point stays
 	// put), Rotation, and the corner table. Every change hands back the whole
 	// polygon and yaw through onChange. Used for keep-out areas, structures and
 	// calc zones (which name their axes, drop Rotation, or show it read-only).
 	import { roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
 	import { validatePolygon, type Vertex } from '$lib/utils/roomGeometry';
-	import { moveReference, referencePoint, resizeShape, rotateShape, shapeSize, type ReferenceMode } from './shapeGeometry';
+	import {
+		moveReference, normaliseReference, referencePoint, resizeShape, rotateShape, shapeSize, REFERENCE_MODES, type ReferenceMode,
+	} from './shapeGeometry';
 
 	interface Props {
 		vertices: Vertex[];
@@ -36,7 +38,27 @@
 		axes = ['X', 'Y'], sizes = ['Width', 'Length'], rotatable = true, readonly = false,
 	}: Props = $props();
 
-	const ref = $derived(referencePoint(vertices, yaw, reference));
+	const mode = $derived(normaliseReference(reference));
+	const ref = $derived(referencePoint(vertices, yaw, mode));
+
+	/**
+	 * Each target's dot in the 52 px glyph (the outline runs 8..44), and its 24 px
+	 * hit box's corner: the corner boxes sit in the glyph's corners, the centre box
+	 * over the middle, so every box's own middle belongs to it alone.
+	 */
+	const DOTS: Record<ReferenceMode, [number, number]> = {
+		'corner-tl': [8, 8], 'corner-tr': [44, 8], centre: [26, 26], 'corner-bl': [8, 44], 'corner-br': [44, 44],
+	};
+	const hitOrigin = (v: number) => Math.min(Math.max(v - 12, 0), 28);
+	let pickerButtons: HTMLButtonElement[] = $state([]);
+
+	/** Arrows step through the five targets (focus only; Enter or Space picks). */
+	function pickerKey(event: KeyboardEvent, i: number) {
+		const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
+		if (!step) return;
+		event.preventDefault();
+		pickerButtons[(i + step + REFERENCE_MODES.length) % REFERENCE_MODES.length]?.focus();
+	}
 	const size = $derived(shapeSize(vertices, yaw));
 	const shown = (v: number) => roundToUnit(v, units);
 
@@ -60,14 +82,14 @@
 	function setReference(axis: 0 | 1, event: Event) {
 		const v = read(event, ref[axis]);
 		if (v === null || v === shown(ref[axis])) return;
-		apply(event, moveReference(vertices, yaw, reference, axis, v), yaw, ref[axis]);
+		apply(event, moveReference(vertices, yaw, mode, axis, v), yaw, ref[axis]);
 	}
 
 	function setSize(which: 'width' | 'length', event: Event) {
 		const current = size[which];
 		const v = read(event, current, (x) => Number.isFinite(x) && x > 0);
 		if (v === null || v === shown(current)) return;
-		apply(event, resizeShape(vertices, yaw, reference, which, v), yaw, current);
+		apply(event, resizeShape(vertices, yaw, mode, which, v), yaw, current);
 	}
 
 	function setRotation(event: Event) {
@@ -101,13 +123,31 @@
 	<div class="sg-row">
 		<label class="sg-dim"><span>{axes[0]}</span><input type="number" step="any" aria-label={axes[0]} value={shown(ref[0])} disabled={readonly} onchange={(e) => setReference(0, e)} /></label>
 		<label class="sg-dim"><span>{axes[1]}</span><input type="number" step="any" aria-label={axes[1]} value={shown(ref[1])} disabled={readonly} onchange={(e) => setReference(1, e)} /></label>
-		<label class="sg-dim">
+		<div class="sg-dim">
 			<span>Reference</span>
-			<select aria-label="Reference" value={reference} onchange={(e) => onReferenceChange((e.currentTarget as HTMLSelectElement).value as ReferenceMode)}>
-				<option value="corner">Corner</option>
-				<option value="centre">Centre</option>
-			</select>
-		</label>
+			<div class="sg-ref" role="radiogroup" aria-label="Reference">
+				<span class="sg-ref-outline" aria-hidden="true"></span>
+				{#each REFERENCE_MODES as r, i (r.mode)}
+					{@const [dx, dy] = DOTS[r.mode]}
+					{@const ox = hitOrigin(dx)}
+					{@const oy = hitOrigin(dy)}
+					<button
+						type="button"
+						class="sg-ref-target"
+						class:selected={mode === r.mode}
+						role="radio"
+						aria-checked={mode === r.mode}
+						aria-label={r.label}
+						title={r.label}
+						data-mode={r.mode}
+						style="left: {ox}px; top: {oy}px; z-index: {r.mode === 'centre' ? 2 : 1}"
+						bind:this={pickerButtons[i]}
+						onclick={() => { if (r.mode !== mode) onReferenceChange(r.mode); }}
+						onkeydown={(e) => pickerKey(e, i)}
+					><span class="sg-ref-dot" style="left: {dx - ox}px; top: {dy - oy}px"></span></button>
+				{/each}
+			</div>
+		</div>
 	</div>
 	<div class="sg-row">
 		<label class="sg-dim"><span>{sizes[0]}</span><input type="number" step="any" min="0" aria-label={sizes[0]} value={shown(size.width)} disabled={readonly} onchange={(e) => setSize('width', e)} /></label>
@@ -159,16 +199,58 @@
 		color: var(--color-text-muted);
 	}
 	.sg-dim input,
-	.sg-dim select,
 	.sg-corner input {
 		width: 100%;
 		min-width: 0;
 		height: 28px;
 		box-sizing: border-box;
 	}
-	.sg-dim select {
-		padding: 0 4px;
-		font-size: var(--font-size-xs);
+	.sg-ref {
+		position: relative;
+		width: 52px;
+		height: 52px;
+		flex: none;
+	}
+	.sg-ref-outline {
+		position: absolute;
+		inset: 8px;
+		border: 1.5px solid var(--color-text-muted);
+		border-radius: 2px;
+		pointer-events: none;
+	}
+	.sg-ref-target {
+		position: absolute;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		margin: 0;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+	}
+	.sg-ref-dot {
+		position: absolute;
+		width: 9px;
+		height: 9px;
+		margin: -4.5px 0 0 -4.5px;
+		box-sizing: border-box;
+		border-radius: 50%;
+		border: 1.5px solid var(--color-text-muted);
+		background: transparent;
+		pointer-events: none;
+	}
+	.sg-ref-target:hover .sg-ref-dot {
+		border-color: var(--color-text);
+	}
+	.sg-ref-target.selected .sg-ref-dot {
+		border-color: var(--color-scene-selected);
+		background: var(--color-scene-selected);
+	}
+	.sg-ref-target:focus-visible {
+		outline: none;
+	}
+	.sg-ref-target:focus-visible .sg-ref-dot {
+		box-shadow: 0 0 0 2px var(--color-scene-selected);
 	}
 	.sg-corners {
 		display: flex;
