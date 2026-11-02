@@ -12,6 +12,7 @@ describe('buildExploreZoneOptions', () => {
     { id: 'SkinLimits', name: 'Skin Dose (8 Hours)', type: 'plane', dose: true },
     { id: 'EyeLimits', name: 'Eye Dose (8 Hours)', type: 'plane', dose: true },
     { id: 'bench', name: 'Bench', type: 'plane' },
+    { id: 'counter', name: 'Counter', type: 'plane', dose: true },
     { id: 'off', name: 'Off', type: 'plane', enabled: false },
   ];
 
@@ -19,7 +20,7 @@ describe('buildExploreZoneOptions', () => {
     expect(buildExploreZoneOptions(zones, undefined)).toEqual([]);
   });
 
-  it('includes dose-mode planes, converted back to µW/cm²', () => {
+  it('leaves out the skin and eye safety zones; keeps the room volume and custom zones', () => {
     const opts = buildExploreZoneOptions(zones, {
       WholeRoomFluence: result('WholeRoomFluence', 5),
       SkinLimits: result('SkinLimits', 28.8, { doseAtCalcTime: true, hoursAtCalcTime: 8 }),
@@ -27,10 +28,17 @@ describe('buildExploreZoneOptions', () => {
       bench: result('bench', 2),
       off: result('off', 3),
     });
-    expect(opts.map(o => o.id)).toEqual(['WholeRoomFluence', 'SkinLimits', 'bench']);
+    expect(opts.map(o => o.id)).toEqual(['WholeRoomFluence', 'bench']);
+  });
+
+  it('includes dose-mode planes, converted back to µW/cm²', () => {
+    const opts = buildExploreZoneOptions(zones, {
+      counter: result('counter', 28.8, { doseAtCalcTime: true, hoursAtCalcTime: 8 }),
+    });
+    expect(opts.map(o => o.id)).toEqual(['counter']);
     // 28.8 mJ/cm² over 8 h = 28.8 / (3.6 * 8) = 1 µW/cm²
-    expect(opts[1].meanFluence).toBeCloseTo(1);
-    expect(opts[1].zoneType).toBe('plane');
+    expect(opts[0].meanFluence).toBeCloseTo(1);
+    expect(opts[0].zoneType).toBe('plane');
   });
 
   it('skips zones without a mean', () => {

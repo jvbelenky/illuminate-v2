@@ -67,6 +67,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Undo and redo for scene edits: Ctrl+Z (⌘Z) undoes the last change to the room, lamps, calculation zones, structures, reflectance or the floor-plan image, wherever it was made, and Ctrl+Shift+Z or Ctrl+Y redoes it. The Edit menu shows what will be undone. A deleted lamp, zone or obstacle comes back as it was (a lamp with an uploaded IES file asks for the file again). Text fields keep their own typing undo; loading a project, New and changing units start a fresh history
 
 ### Changed
+- Pathogen efficacy: the skin and eye safety zones no longer appear among the zones to explore; Surfaces lists only your own surface zones
 - The edit strip at the bottom-left of the 2D and 3D views is text buttons (Copy, Move, Aim, Delete, Draw); the active stage tab has no red outline; Add to ceiling buttons are larger and easier to read, and the Ceiling header no longer has its own eye
 - The lamp editor's placement buttons match the Add lamp card and have space below the Stick toggles; Add lamp and Add zone icons are larger; secondary buttons, including the editor footer's back and next, use a fill that stands out from the panel behind them
 - Selection highlight is sky cyan instead of orange, in the 3D view, the floor plan and the editor rows

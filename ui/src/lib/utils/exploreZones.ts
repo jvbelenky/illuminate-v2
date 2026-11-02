@@ -3,6 +3,8 @@ import { doseConversionFactor } from './calculations';
 
 export type ExploreZoneType = 'plane' | 'volume' | 'point';
 
+const SAFETY_ZONE_IDS = new Set(['SkinLimits', 'EyeLimits']);
+
 export interface ExploreZoneOption {
   id: string;
   name: string;
@@ -15,9 +17,9 @@ export interface ExploreZoneOption {
  * Zones the data explorer can derive survival/eACH numbers from.
  *
  * Dose-mode zones are included with their mean converted back to µW/cm², so a
- * surface plane left in dose mode (the usual setup for surfaces, and SkinLimits)
- * is still selectable. EyeLimits is left out: its values are field-of-view
- * limited eye exposure, not the irradiance a surface receives.
+ * surface plane left in dose mode (the usual setup for surfaces) is still
+ * selectable. The skin and eye safety zones are left out: they measure exposure
+ * against limits, not a surface whose pathogens are being inactivated.
  */
 export function buildExploreZoneOptions(
   zones: CalcZone[],
@@ -26,7 +28,7 @@ export function buildExploreZoneOptions(
   if (!resultZones) return [];
   const options: ExploreZoneOption[] = [];
   for (const z of zones) {
-    if (z.enabled === false || z.id === 'EyeLimits') continue;
+    if (z.enabled === false || SAFETY_ZONE_IDS.has(z.id)) continue;
     const result = resultZones[z.id];
     const mean = result?.statistics?.mean;
     if (mean == null) continue;
