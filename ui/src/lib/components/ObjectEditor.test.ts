@@ -87,8 +87,8 @@ describe('ObjectEditor', () => {
     const spy = vi.spyOn(project, 'updateObject').mockImplementation(() => {});
     const { rerender } = renderEditor();
     await openGeometry();
-    expect((screen.getByLabelText('Reference') as HTMLSelectElement).value).toBe('centre');
-    await fireEvent.change(screen.getByLabelText('Reference'), { target: { value: 'corner' } });
+    expect(screen.getByRole('radio', { name: 'Centre' }).getAttribute('aria-checked')).toBe('true');
+    await fireEvent.click(screen.getByRole('radio', { name: 'Bottom-left corner' }));
     expect(num('X')).toBeCloseTo(1.4, 6);
     expect(num('Y')).toBeCloseTo(2.7, 6);
 
