@@ -8,6 +8,7 @@
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import type { CeilingLayout } from '$lib/ceiling/ceilingLayout';
 	import ProjectionToggle from './ProjectionToggle.svelte';
+	import UndoRedo from '$lib/workspace/UndoRedo.svelte';
 	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
 	import { unitLabel } from '$lib/utils/unitConversion';
@@ -310,6 +311,7 @@
 	<ProjectionToggle isOrtho={useOrtho} onclick={handleToggleProjection} />
 	<span class="units-label">Units: {unitLabel($userSettings.units)}</span>
 	<div class="viewer-actions">
+		<UndoRedo />
 		<button class="viewer-action-btn" title="Open in new window" onclick={previewImage}>
 			<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
 				<path d="M11 3h6v6" />
@@ -400,6 +402,18 @@
 		z-index: 10;
 		display: flex;
 		gap: 4px;
+	}
+
+	/* Undo | Redo in the same frosted fill as the buttons beside them */
+	.viewer-actions :global(.undo-redo) {
+		margin-right: 4px;
+	}
+	.viewer-actions :global(.undo-redo .mv-btn) {
+		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
+		backdrop-filter: blur(4px);
+	}
+	.viewer-actions :global(.undo-redo .mv-btn:hover:not(:disabled)) {
+		background: var(--color-bg-secondary);
 	}
 
 	.viewer-action-btn {

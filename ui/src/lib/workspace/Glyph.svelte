@@ -23,7 +23,9 @@
 		ortho: '<rect x="4" y="7" width="10" height="10"/><path d="M14 7l6-2v10l-6 2M4 7l6-2h10"/>',
 		external: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
 		download: '<path d="M12 4v11M7 10l5 5 5-5M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>',
-		chevron: '<path d="M7 10l5 5 5-5"/>'
+		chevron: '<path d="M7 10l5 5 5-5"/>',
+		undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+		redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>'
 	} as const;
 
 	export type GlyphName = keyof typeof GLYPHS;

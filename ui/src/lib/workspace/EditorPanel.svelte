@@ -38,6 +38,19 @@
 	});
 
 	let bodyEl: HTMLElement | undefined = $state();
+	let partsEl: HTMLElement | undefined = $state();
+
+	// Too narrow for the row: it scrolls sideways, keeping the open part in view
+	$effect(() => {
+		const row = partsEl;
+		const open = part;
+		if (!row) return;
+		const tab = row.querySelector<HTMLElement>(`[data-part="${open}"]`);
+		if (!tab) return;
+		const right = tab.offsetLeft + tab.offsetWidth;
+		if (tab.offsetLeft < row.scrollLeft) row.scrollLeft = tab.offsetLeft;
+		else if (right > row.scrollLeft + row.clientWidth) row.scrollLeft = right - row.clientWidth;
+	});
 
 	/** Go to a stop, asking first if an invalid outline is on screen. */
 	function go(nextStage: EditorStage, nextPart?: RoomPart) {
@@ -82,7 +95,7 @@
 	</div>
 	<div class="editor-stagebody">
 		{#if stage === 'room'}
-			<div class="editor-parts" role="tablist" aria-label="Room">
+			<div class="editor-parts" role="tablist" aria-label="Room" bind:this={partsEl}>
 				{#each ROOM_PARTS as p (p.id)}
 					{@const done = visited.includes(p.id)}
 					<button
@@ -95,8 +108,9 @@
 						aria-selected={part === p.id}
 						onclick={() => go('room', p.id)}
 					>
-						<span class="dot" class:done aria-hidden="true">{#if done}{@render check(9)}{/if}</span>
-						<span class="lbl">{p.label}</span>
+						<span class="lbl"
+							>{p.label}{#if done}<span class="badge" aria-hidden="true">{@render check(8)}</span>{/if}</span
+						>
 					</button>
 				{/each}
 			</div>
@@ -204,8 +218,7 @@
 		border: 1px solid var(--color-border);
 		color: var(--color-text-muted);
 	}
-	.editor-stage .n.done,
-	.editor-part .dot.done {
+	.editor-stage .n.done {
 		background: color-mix(in srgb, var(--color-success) 18%, transparent);
 		border-color: color-mix(in srgb, var(--color-success) 50%, transparent);
 		color: var(--color-success);
@@ -225,7 +238,7 @@
 			padding: 6px 3px;
 		}
 	}
-	/* Room parts: one row of underline tabs, each with a dot that ticks once the part is opened */
+	/* Room parts: one row of underline tabs; a part once opened wears a green tick on its label's corner */
 	.editor-stagebody {
 		flex: 1;
 		min-height: 0;
@@ -233,22 +246,30 @@
 		flex-direction: column;
 		background: var(--color-bg-tertiary);
 	}
+	/* Never wraps: below its natural width the row scrolls sideways with no scrollbar */
 	.editor-parts {
+		position: relative;
 		display: flex;
 		justify-content: space-between;
-		gap: 2px;
-		margin: 0 10px;
-		padding-top: 6px;
-		border-bottom: 1px solid var(--color-border);
+		gap: 1px;
+		margin: 0 4px;
+		padding-top: 4px;
+		/* The line under the tabs, drawn inside the box so the scroll clip keeps it; the open tab's underline covers it */
+		box-shadow: inset 0 -1px var(--color-border);
+		overflow-x: auto;
+		overflow-y: hidden;
+		scrollbar-width: none;
+		overscroll-behavior-x: contain;
+	}
+	.editor-parts::-webkit-scrollbar {
+		display: none;
 	}
 	.editor-part {
-		flex: 0 1 auto;
-		min-width: 0;
+		flex: none;
 		display: flex;
 		align-items: center;
-		gap: 5px;
-		margin-bottom: -1px;
-		padding: 9px 2px 7px;
+		/* The badge rides over the label's top-right corner, above its last lowercase letters, so it takes no width */
+		padding: 9px 3px 6px 2px;
 		border: 0;
 		border-bottom: 2px solid transparent;
 		border-radius: 0;
@@ -261,38 +282,32 @@
 	.editor-part:hover {
 		color: var(--color-text);
 	}
+	/* Not bold: the row keeps one width whichever part is open */
 	.editor-part.on {
 		border-bottom-color: var(--color-scene-selected);
 		color: var(--color-text);
-		font-weight: 600;
 	}
-	.editor-part .dot {
-		flex: none;
+	.editor-part .lbl {
+		position: relative;
+	}
+	/* A notification-style badge: filled green, the tick cut out in the panel colour, over the label's top-right corner */
+	.editor-part .badge {
+		position: absolute;
+		top: -8px;
+		right: -3px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 14px;
-		height: 14px;
+		width: 12px;
+		height: 12px;
 		border-radius: 50%;
-		box-sizing: border-box;
-		border: 1.5px solid var(--color-text-muted);
+		background: var(--color-success);
+		color: var(--color-bg-secondary);
+		pointer-events: none;
 	}
-	.editor-part .lbl {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	/* Too narrow for one row at full size: the same tabs in a 2 × 2 grid */
-	@container (max-width: 359px) {
+	@container (min-width: 340px) {
 		.editor-parts {
-			display: grid;
-			grid-template-columns: 1fr 1fr;
-			column-gap: 10px;
-			margin: 0 6px;
-			padding-top: 2px;
-		}
-		.editor-part {
-			padding: 8px 2px 6px;
+			margin: 0 10px;
 		}
 	}
 	.editor-body {

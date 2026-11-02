@@ -44,6 +44,7 @@
 	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
 	import Glyph from '$lib/workspace/Glyph.svelte';
 	import UnitsSelect from '$lib/workspace/UnitsSelect.svelte';
+	import UndoRedo from '$lib/workspace/UndoRedo.svelte';
 	import { fitPlanView, resizePlanView } from '$lib/utils/planFit';
 	import { unitAbbrev, gridCellSize, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
@@ -1255,6 +1256,7 @@
 </svg>
 {#if navControls}
 <div class="view-controls">
+	<UndoRedo />
 	{#if onUnitsChange}<UnitsSelect {units} onchange={onUnitsChange} />{/if}
 	<div class="mv-seg" role="group" aria-label="View">
 		<button type="button" class="mv-btn nav-mode" data-mode="hand" aria-pressed={navMode === 'hand'} aria-label="Pan" title="Pan (H)" onclick={() => setNavMode('hand')}>
@@ -1285,7 +1287,7 @@
 		min-height: 0;
 		display: flex;
 	}
-	/* Units and the view tools: bottom right, on the main view's 8 px inset */
+	/* Undo | Redo, units and the view tools: bottom right, on the main view's 8 px inset */
 	.view-controls {
 		position: absolute;
 		right: 8px;

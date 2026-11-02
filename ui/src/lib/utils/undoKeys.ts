@@ -7,6 +7,8 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 
 export const undoShortcut = isMac ? '⌘Z' : 'Ctrl+Z';
 export const redoShortcut = isMac ? '⇧⌘Z' : 'Ctrl+Y';
+/** Redo's shortcut as the view's Redo button names it (Ctrl+Y works too). */
+export const redoShiftShortcut = isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z';
 
 export type UndoKey = 'undo' | 'redo' | null;
 

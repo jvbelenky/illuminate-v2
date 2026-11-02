@@ -764,6 +764,12 @@ select.mv-select:hover {
   color: #fff;
 }
 
+/* Disabled keeps its own fill under the pointer (not the global button:hover red) */
+.mv-btn:disabled:not([aria-pressed="true"]):not(.on) {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+}
+
 .mv-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
