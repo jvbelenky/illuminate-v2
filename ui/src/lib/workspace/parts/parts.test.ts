@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/svelte';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import Harness from '$lib/workspace/test/WorkspaceHarness.svelte';
 import type { PlanController } from '$lib/plan/planController.svelte';
@@ -72,10 +72,30 @@ describe('Floorplan part', () => {
     expect(document.querySelector('input[type="file"]')).not.toBeNull();
   });
 
-  it('Draw outline sits above Upload floor plan image, below a divider', () => {
+  it('Draw outline sits below a divider; Upload floor plan image is on its own card after the outline', () => {
     mount({ part: 'floorplan' });
     const buttons = [...document.querySelectorAll('.plan-actions button')].map((b) => b.textContent?.trim());
-    expect(buttons).toEqual(['Draw outline', 'Upload floor plan image']);
+    expect(buttons).toEqual(['Draw outline']);
+    const card = screen.getByRole('region', { name: 'Floor plan image' });
+    expect(card.classList.contains('ep-addcard')).toBe(true);
+    // No heading: the card itself is the separation
+    expect(card.querySelector('h3')).toBeNull();
+    expect(screen.queryByText('Floor plan image')).toBeNull();
+    expect(card.contains(screen.getByRole('button', { name: 'Upload floor plan image' }))).toBe(true);
+    expect(card.querySelector('input[type="file"]')).not.toBeNull();
+    const geometry = screen.getByRole('button', { name: /Geometry/ });
+    expect(geometry.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // No image: the card holds the upload alone
+    expect(card.querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('with an image loaded, its controls are on the card', () => {
+    const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+    const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+    mount({ part: 'floorplan', floorplan: placement, image });
+    const card = screen.getByRole('region', { name: 'Floor plan image' });
+    for (const name of ['Upload floor plan image', 'Set scale…', 'Move image', 'Remove']) expect(within(card).getByRole('button', { name })).toBeTruthy();
+    expect(card.contains(screen.getByLabelText('Reference image opacity'))).toBe(true);
   });
 
   it('Geometry holds only the corners', async () => {
@@ -296,7 +316,7 @@ describe('Lamps part', () => {
     expect(row('b').classList.contains('selected')).toBe(true);
   });
 
-  it("the lamp panel needs no footer: the row header closes it, and the ribbon's Delete and the Delete key remove the lamp", async () => {
+  it("the row header closes the lamp panel, and the strip's Delete and the Delete key remove the lamp", async () => {
     const calls: unknown[][] = [];
     const two = [{ ...lamp, id: 'a', name: 'A' }, { ...lamp, id: 'b', name: 'B' }];
     const { container } = mount({ part: 'lamps', calls, lamps: two });
@@ -308,7 +328,7 @@ describe('Lamps part', () => {
     expect(container.querySelector('.stub-lamp-panel')).toBeNull();
 
     await fireEvent.click(main('a'));
-    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await fireEvent.click(within(container.querySelector('.plan-toolbar') as HTMLElement).getByRole('button', { name: 'Delete' }));
     expect(callsOf(calls, 'removeLamp')).toEqual([['removeLamp', 'a']]);
     await tick();
     expect(row('a')).toBeNull();
@@ -730,5 +750,142 @@ describe('Shape geometry fields', () => {
     const rx = partial.vertices.map((v) => v[0]);
     // 2 wide, 2 long about (2, 1.5): still 2 across after a quarter turn
     expect(Math.max(...rx) - Math.min(...rx)).toBeCloseTo(2, 6);
+  });
+});
+
+/** The open row's Copy / Delete footer. */
+function rowActions(id: string) {
+  const el = row(id).querySelector('.item-actions') as HTMLElement;
+  expect(el).not.toBeNull();
+  return within(el);
+}
+
+describe('Copy and Delete in every item editor', () => {
+  it('a structure: the shape line with Draw footprint and Edit corners, then Copy and Delete at the foot', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'structures', calls, objects: [box] });
+    await fireEvent.click(main('object-9'));
+    const r = row('object-9');
+    expect(r.querySelector('.structure-shape')?.textContent).toMatch(/Box/);
+    const draw = within(r).getByRole('button', { name: 'Draw footprint' });
+    const corners = within(r).getByRole('button', { name: 'Edit corners' });
+    expect(draw.getAttribute('aria-pressed')).toBe('false');
+    // Copy and Delete come after the editor panel
+    const panel = r.querySelector('.stub-object-panel') as HTMLElement;
+    expect(panel.compareDocumentPosition(r.querySelector('.item-actions')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(rowActions('object-9').getByRole('button', { name: 'Copy' })).toBeTruthy();
+    expect(rowActions('object-9').getByRole('button', { name: 'Delete' })).toBeTruthy();
+    // Draw footprint arms drawing for this structure and shows pressed
+    await fireEvent.click(draw);
+    await tick();
+    expect(ctl.drawing).toBe(true);
+    expect(ctl.redrawObstacleId).toBe('object-9');
+    expect(within(row('object-9')).getByRole('button', { name: 'Draw footprint' }).getAttribute('aria-pressed')).toBe('true');
+    ctl.cancelDraw();
+    await tick();
+    expect(ctl.drawing).toBe(false);
+    // Edit corners arms the corner tool
+    await fireEvent.click(corners);
+    expect(ctl.activeTool).toBe('corners');
+    expect(within(row('object-9')).getByRole('button', { name: 'Edit corners' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('a polygon structure reads Polygon, N corners', async () => {
+    const poly = { ...box, shape: 'extrusion' as const, vertices: [[-1, -1], [1, -1], [1, 1], [0, 2], [-1, 1]] as [number, number][] };
+    mount({ part: 'structures', objects: [poly] });
+    await fireEvent.click(main('object-9'));
+    expect(row('object-9').querySelector('.structure-shape')?.textContent).toMatch(/Polygon, 5 corners/);
+  });
+
+  it('a structure: a finished Draw footprint replaces its footprint', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'structures', calls, objects: [box] });
+    await fireEvent.click(main('object-9'));
+    await fireEvent.click(within(row('object-9')).getByRole('button', { name: 'Draw footprint' }));
+    ctl.draft = [[1, 1], [4, 1], [4, 3], [1, 3]];
+    ctl.drawing = false;
+    await ctl.onDrawEnd(true);
+    await tick();
+    expect(callsOf(calls, 'addObstacle')).toHaveLength(0);
+    const updates = callsOf(calls, 'updateObstacle');
+    expect(updates).toHaveLength(1);
+    expect(updates[0][1]).toBe('object-9');
+    expect(updates[0][2]).toMatchObject({ shape: 'extrusion', x: 2.5, y: 2, yaw: 0 });
+    await tick();
+    expect(row('object-9').querySelector('.structure-shape')?.textContent).toMatch(/Polygon, 4 corners/);
+  });
+
+  it('a structure: Copy duplicates it and opens the copy; Delete removes it', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'structures', calls, objects: [box] });
+    await fireEvent.click(main('object-9'));
+    await fireEvent.click(rowActions('object-9').getByRole('button', { name: 'Copy' }));
+    await tick();
+    expect(callsOf(calls, 'addObstacle')).toHaveLength(1);
+    expect(ctl.selectedId).toBe('object-1');
+    expect(row('object-1').classList.contains('open')).toBe(true);
+    await fireEvent.click(rowActions('object-1').getByRole('button', { name: 'Delete' }));
+    await tick();
+    expect(callsOf(calls, 'removeObstacle')).toEqual([['removeObstacle', 'object-1']]);
+    expect(row('object-1')).toBeNull();
+    expect(ctl.selectedId).toBeNull();
+  });
+
+  it('a lamp: Copy copies it alone and opens the copy; Delete removes it', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'lamps', calls, lamps: [{ ...lamp, id: 'a', name: 'A' }] });
+    await fireEvent.click(main('a'));
+    const panel = row('a').querySelector('.stub-lamp-panel') as HTMLElement;
+    expect(panel.compareDocumentPosition(row('a').querySelector('.item-actions')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await fireEvent.click(rowActions('a').getByRole('button', { name: 'Copy' }));
+    await tick();
+    expect(callsOf(calls, 'copyLamps')).toHaveLength(1);
+    expect((callsOf(calls, 'copyLamps')[0][1] as string[])).toEqual(['a']);
+    const copyId = ctl.selectedLampId!;
+    expect(copyId).not.toBe('a');
+    expect(row(copyId).classList.contains('open')).toBe(true);
+    await fireEvent.click(rowActions(copyId).getByRole('button', { name: 'Delete' }));
+    await tick();
+    expect(callsOf(calls, 'removeLamp')).toEqual([['removeLamp', copyId]]);
+    expect(row(copyId)).toBeNull();
+  });
+
+  it('a zone: Copy copies it and opens the copy; Delete removes it; standard zones have neither', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'zones', calls, zones: [standard, wholePlane] });
+    await fireEvent.click(main('zone-9'));
+    await fireEvent.click(rowActions('zone-9').getByRole('button', { name: 'Copy' }));
+    await tick();
+    expect(callsOf(calls, 'copyZone')).toHaveLength(1);
+    const copyId = ctl.selectedZoneId!;
+    expect(copyId).not.toBe('zone-9');
+    expect(row(copyId).classList.contains('open')).toBe(true);
+    await fireEvent.click(rowActions(copyId).getByRole('button', { name: 'Delete' }));
+    await tick();
+    expect(callsOf(calls, 'removeZone')).toEqual([['removeZone', copyId]]);
+    expect(row(copyId)).toBeNull();
+    ctl.selectZone('WholeRoomFluence');
+    await tick();
+    await tick();
+    expect(row('WholeRoomFluence').classList.contains('open')).toBe(true);
+    expect(row('WholeRoomFluence').querySelector('.item-actions')).toBeNull();
+  });
+
+  it('a ceiling item: Copy copies it and opens the copy; Delete removes it', async () => {
+    const calls: unknown[][] = [];
+    const detector = { id: 'ceiling-1', kind: 'smoke' as const, name: 'Hall detector', x: 3, y: 2 };
+    const ceiling = { tileSize: 'none' as const, align: 'tl' as const, offset: [0, 0] as [number, number], ceilingShown: true, tilesShown: true, itemsShown: true, items: [detector] };
+    const { ctl } = mount({ part: 'ceiling', calls, ceiling });
+    await fireEvent.click(main('ceiling-1'));
+    await fireEvent.click(rowActions('ceiling-1').getByRole('button', { name: 'Copy' }));
+    await tick();
+    expect(callsOf(calls, 'copyCeilingItem')).toEqual([['copyCeilingItem', 'ceiling-1']]);
+    const copyId = ctl.selectedCeilingId!;
+    expect(copyId).not.toBe('ceiling-1');
+    expect(row(copyId).classList.contains('open')).toBe(true);
+    await fireEvent.click(rowActions(copyId).getByRole('button', { name: 'Delete' }));
+    await tick();
+    expect(callsOf(calls, 'removeCeilingItem')).toEqual([['removeCeilingItem', copyId]]);
+    expect(row(copyId)).toBeNull();
   });
 });

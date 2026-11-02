@@ -45,6 +45,7 @@
 			const none = !ctl.selected || ctl.drawing;
 			return [
 				{ label: 'Draw', glyph: 'pen', onclick: () => (ctl.drawing ? ctl.stopObstacleDraw() : ctl.startObstacleDraw()), pressed: ctl.drawing },
+				{ label: 'Edit corners', glyph: 'corners', onclick: () => ctl.inCanvas(() => ctl.toggleTool('corners')), disabled: !ctl.structureCornersEditable || ctl.drawing, pressed: ctl.activeTool === 'corners' },
 				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.duplicateSelected, disabled: none },
 				{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelected, disabled: none }
 			];

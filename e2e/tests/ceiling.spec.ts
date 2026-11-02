@@ -59,6 +59,23 @@ test.describe('Ceiling designer', () => {
     expect(await itemXY(page)).toEqual(moved);
     await expect(planSvg(page).getByRole('button', { name: 'Keep-out area 1' })).toBeVisible();
   });
+
+  test("the item editor's Copy opens the copy and Delete removes it; undo brings it back", async ({ page }) => {
+    await waitForSession(page);
+    await openStep(page, 'room', 'ceiling');
+    const part = page.locator('.ceiling-part');
+    await part.getByRole('button', { name: 'Detector', exact: true }).click();
+    const open = part.locator('.editor-row.open');
+    await expect(open).toHaveAttribute('data-id', 'ceiling-1');
+    await open.locator('.item-actions').getByRole('button', { name: 'Copy', exact: true }).click();
+    await expect(part.locator('.editor-row')).toHaveCount(2);
+    await expect(open).not.toHaveAttribute('data-id', 'ceiling-1');
+    await open.locator('.item-actions').getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(part.locator('.editor-row')).toHaveCount(1);
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+z');
+    await expect(part.locator('.editor-row')).toHaveCount(2);
+  });
 });
 
 test.describe('Main view corners', () => {

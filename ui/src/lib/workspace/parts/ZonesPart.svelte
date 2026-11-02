@@ -3,6 +3,7 @@
 	// away (a checkbox and, while on, their rows). The open zone carries its editor.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
+	import ItemActions from './ItemActions.svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import { untrack, type Snippet } from 'svelte';
@@ -47,6 +48,16 @@
 
 	function deselect() {
 		ctl.selectZone(null);
+	}
+
+	/** Copy or delete this row's zone: the strip's and the keys' actions, on it. */
+	function copyZone(id: string) {
+		if (ctl.selectedZoneId !== id) ctl.selectZone(id);
+		ctl.copySelectedZone();
+	}
+	function deleteZone(id: string) {
+		if (ctl.selectedZoneId !== id) ctl.selectZone(id);
+		ctl.deleteSelectedZone();
 	}
 
 	/** Standard eye height (1.8 m) in the project's units, as the zone editor's head-height preset does. */
@@ -121,6 +132,7 @@
 			>
 				{#snippet lead()}<CalcTypeIllustration type={iconOf(z)} size={16} />{/snippet}
 				{#if zonePanel}{@render zonePanel(z, deselect)}{/if}
+				<ItemActions onCopy={() => copyZone(z.id)} onDelete={() => deleteZone(z.id)} disabled={ctl.drawing || ctl.placing} />
 			</ItemRow>
 		{/each}
 	</div>

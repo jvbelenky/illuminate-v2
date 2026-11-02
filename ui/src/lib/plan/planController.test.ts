@@ -893,3 +893,86 @@ describe('one-shot edit-strip tools', () => {
     expect(ctl.activeTool).toBeNull();
   });
 });
+
+describe('structure footprint: Draw footprint and Edit corners', () => {
+  // A fake canvas that tracks drawing the way PlanCanvas does
+  function drawCanvas(ctl: PlanController) {
+    let before: Vertex[] = [];
+    return {
+      startDraw: vi.fn(() => { before = ctl.draft; ctl.draft = []; ctl.drawing = true; }),
+      cancelDraw: vi.fn(() => { if (!ctl.drawing) return; ctl.draft = before; ctl.drawing = false; ctl.onDrawEnd(false); }),
+      focus: vi.fn(),
+      isDragging: () => false,
+    } as any;
+  }
+
+  test('Draw footprint redraws this structure: footprint and yaw from the drawing, bottom and top kept', async () => {
+    const { ctl, actions } = make();
+    ctl.setContext('obstacles');
+    ctl.canvas = drawCanvas(ctl);
+    ctl.startObstacleRedraw('object-1');
+    expect(ctl.selectedId).toBe('object-1');
+    expect(ctl.drawing).toBe(true);
+    expect(ctl.redrawObstacleId).toBe('object-1');
+    ctl.draft = [[1, 1], [4, 1], [4, 3], [2, 3]];
+    ctl.drawing = false;
+    await ctl.onDrawEnd(true);
+    expect(actions.addObstacle).not.toHaveBeenCalled();
+    expect(actions.updateObstacle).toHaveBeenCalledTimes(1);
+    const [id, partial] = vi.mocked(actions.updateObstacle).mock.calls[0];
+    expect(id).toBe('object-1');
+    expect(partial).toMatchObject({ shape: 'extrusion', yaw: 0 });
+    expect(partial).not.toHaveProperty('z');
+    expect(partial).not.toHaveProperty('height');
+    expect((partial as { vertices: Vertex[] }).vertices).toHaveLength(4);
+    expect(ctl.redrawObstacleId).toBeNull();
+    expect(ctl.selectedId).toBe('object-1');
+  });
+
+  test('Draw footprint again, or Escape, cancels and leaves the structure as it was', () => {
+    const { ctl, actions } = make();
+    ctl.setContext('obstacles');
+    ctl.canvas = drawCanvas(ctl);
+    ctl.startObstacleRedraw('object-1');
+    ctl.startObstacleRedraw('object-1');
+    expect(ctl.drawing).toBe(false);
+    expect(ctl.redrawObstacleId).toBeNull();
+    ctl.startObstacleRedraw('object-1');
+    expect(ctl.onEscapeKey()).toBe(true);
+    expect(ctl.drawing).toBe(false);
+    expect(ctl.redrawObstacleId).toBeNull();
+    expect(ctl.draft.length).toBeGreaterThanOrEqual(3);
+    expect(actions.updateObstacle).not.toHaveBeenCalled();
+  });
+
+  test('Draw footprint with the 2D view away asks for it first', () => {
+    const { ctl } = make();
+    ctl.setContext('obstacles');
+    const onNeedCanvas = vi.fn();
+    ctl.onNeedCanvas = onNeedCanvas;
+    ctl.startObstacleRedraw('object-1');
+    expect(onNeedCanvas).toHaveBeenCalledTimes(1);
+  });
+
+  test('Edit corners arms the corner tool for the selected structure; one edit reshapes it and ends the tool', () => {
+    const { ctl, actions } = make();
+    ctl.setContext('obstacles');
+    ctl.canvas = drawCanvas(ctl);
+    expect(ctl.structureCornersEditable).toBe(false);
+    ctl.editStructureCorners('object-1');
+    expect(ctl.selectedId).toBe('object-1');
+    expect(ctl.structureCornersEditable).toBe(true);
+    expect(ctl.activeTool).toBe('corners');
+    ctl.draft = [[1, 1], [2.5, 1], [2, 2], [1, 2]];
+    ctl.onCanvasEdit();
+    expect(actions.updateObstacle).toHaveBeenCalledTimes(1);
+    expect(ctl.activeTool).toBeNull();
+    // Again cancels; deselecting drops it
+    ctl.editStructureCorners('object-1');
+    ctl.editStructureCorners('object-1');
+    expect(ctl.activeTool).toBeNull();
+    ctl.editStructureCorners('object-1');
+    ctl.selectObstacle(null);
+    expect(ctl.activeTool).toBeNull();
+  });
+});

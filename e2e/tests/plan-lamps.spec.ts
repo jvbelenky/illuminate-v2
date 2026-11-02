@@ -54,4 +54,32 @@ test.describe('Lamps on the plan', () => {
     await expect.poll(() => lampCount(page)).toBe(2);
     guard.assertClean();
   });
+
+  test("the lamp editor's Copy opens the copy and Delete removes it; undo brings it back", async ({ page }) => {
+    await waitForSession(page);
+    await openStep(page, 'lamps');
+    const part = page.locator('.lamps-part');
+    const fixture = part.getByLabel('Fixture', { exact: true });
+    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
+    await fixture.selectOption((await fixture.locator('option[value^="preset:"]').first().getAttribute('value'))!);
+    await page.getByRole('group', { name: 'Placement' }).getByRole('button', { name: 'Downlight' }).click();
+    const lampRows = part.locator('.editor-row');
+    await expect(lampRows).toHaveCount(1);
+    await waitForApiIdle(page);
+    const open = part.locator('.editor-row.open');
+    const firstId = await open.getAttribute('data-id');
+
+    await open.locator('.item-actions').getByRole('button', { name: 'Copy', exact: true }).click();
+    await expect(lampRows).toHaveCount(2);
+    await expect(open).not.toHaveAttribute('data-id', firstId!);
+    await waitForApiIdle(page);
+
+    await open.locator('.item-actions').getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(lampRows).toHaveCount(1);
+    await waitForApiIdle(page);
+
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+z');
+    await expect.poll(() => lampCount(page)).toBe(2);
+  });
 });
