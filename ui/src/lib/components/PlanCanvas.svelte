@@ -55,6 +55,7 @@
 		snapTo,
 		angleBetweenDeg,
 		snapSegmentDirection, pointInPolygon } from '$lib/utils/roomGeometry';
+	import { setSegmentLength, parseLengthInput } from '$lib/plan/segmentLength';
 
 	// A plan-view canvas for drawing and editing a polygon in room coordinates:
 	// viewport (fit / pan / zoom), grid with rulers, light grid and corner
@@ -92,7 +93,7 @@
 		onShapeClick?: (id: string, event: PointerEvent) => void;
 		/** A pointer-down inside the draft moves it whole (instead of panning). */
 		draggableBody?: boolean;
-		/** Double-click a corner to remove it, or a wall to add a corner there. */
+		/** Double-click a corner to remove it. */
 		dblClickCorners?: boolean;
 		/** Draw the draft as a selected area (cyan tint, dashed), as for a ceiling keep-out area. */
 		selectedDraft?: boolean;
@@ -185,6 +186,9 @@
 	/** A corner, wall or body drag; `restore` is the draft to put back if it is cancelled (before a midpoint insert). */
 	let drag = $state<{ kind: 'vertex' | 'edge' | 'body'; index: number; startPointer: Vertex; startDraft: Vertex[]; restore: Vertex[] } | null>(null);
 	let svgEl = $state<SVGSVGElement | undefined>(undefined);
+	/** A wall length being typed (double-click a wall or its label). */
+	let lengthEdit = $state<{ index: number; text: string; invalid: boolean } | null>(null);
+	let lengthInputEl = $state<HTMLInputElement | undefined>(undefined);
 
 	const unit = $derived(unitAbbrev(units));
 	const edgeLengths = $derived(draft.length >= 2 ? polygonEdgeLengths(draft) : []);
@@ -552,6 +556,8 @@
 	const ZOOM_BOX_MIN_PX = 4;
 	const pannable = $derived(tool === 'edit' && !drawing);
 	const editing = $derived(tool === 'edit');
+	/** Wall lengths can be typed where the host takes edits. */
+	const lengthTyping = $derived(!!onEdit && editing && !drawing && draft.length >= 3);
 	// The host took the press as its own background drag (the Lamps box select, Move grid)
 	let hostDragging = false;
 
@@ -808,6 +814,7 @@
 		event.preventDefault();
 		event.stopPropagation();
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+		lengthEdit = null;
 		const start = draft.map((v) => [v[0], v[1]] as Vertex);
 		drag = { kind, index, startPointer: pointerToRoom(event), startDraft: start, restore: restore ?? start };
 		selectedIndex = kind === 'vertex' ? index : -1;
@@ -988,22 +995,55 @@
 		removeVertex(index);
 	}
 
-	/** Double-click on a wall: add a corner there, on the wall under the pointer. */
+	/** Double-click on a wall or its length label: type its length (corners are added with the "+" handles). */
 	function onEdgeDblClick(event: MouseEvent, edgeIndex: number) {
-		if (!dblClickCorners || !editing || drawing || draft.length < 3) return;
+		if (!lengthTyping) return;
 		event.preventDefault();
 		event.stopPropagation();
-		const a = draft[edgeIndex];
-		const b = draft[(edgeIndex + 1) % draft.length];
-		const p = pointerToRoom(event);
-		const dx = b[0] - a[0], dy = b[1] - a[1];
-		const len2 = dx * dx + dy * dy;
-		const t = len2 > 0 ? Math.min(0.95, Math.max(0.05, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0.5;
-		const next = draft.map((v) => [v[0], v[1]] as Vertex);
-		next.splice(edgeIndex + 1, 0, [roundToUnit(a[0] + dx * t, units), roundToUnit(a[1] + dy * t, units)]);
+		lengthEdit = { index: edgeIndex, text: fmt(edgeLengths[edgeIndex]), invalid: false };
+		tick().then(() => {
+			lengthInputEl?.focus();
+			lengthInputEl?.select();
+		});
+	}
+
+	/** A press on a length label stays there, so its double-click reaches it. */
+	function onLabelPointerDown(event: PointerEvent) {
+		if (!lengthTyping || event.button !== 0 || spaceHeld) return;
+		event.stopPropagation();
+	}
+
+	/** Apply the typed length: vertex i+1 and i+2 move along the wall (segmentLength). Invalid input stays open. */
+	function applyLengthEdit() {
+		const edit = lengthEdit;
+		if (!edit) return;
+		const length = parseLengthInput(edit.text, units);
+		const next = length === null || edit.index >= draft.length ? null : setSegmentLength(draft, edit.index, length);
+		if (!next) {
+			edit.invalid = true;
+			return;
+		}
+		lengthEdit = null;
+		svgEl?.focus();
+		if (sameDraft(next, draft)) return;
 		draft = next;
-		selectedIndex = edgeIndex + 1;
 		onEdit?.();
+	}
+
+	function cancelLengthEdit() {
+		lengthEdit = null;
+		svgEl?.focus();
+	}
+
+	function onLengthKeyDown(event: KeyboardEvent) {
+		event.stopPropagation();
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			applyLengthEdit();
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			cancelLengthEdit();
+		}
 	}
 
 	export function removeVertex(index: number) {
@@ -1170,7 +1210,10 @@
 			<line x1={x1} y1={y1} x2={x2} y2={y2} class="edge-hit" stroke-width={hitPx * 10}
 				role="button" tabindex="-1" aria-label="Wall {i + 1}"
 				onpointerdown={(e) => beginDrag(e, 'edge', i)} ondblclick={(e) => onEdgeDblClick(e, i)} />
-			<text x={lx} y={ly + px * 4} class="edge-label" font-size={px * 11} text-anchor="middle">{fmt(edgeLengths[i])}</text>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<text x={lx} y={ly + px * 4} class="edge-label" class:typeable={lengthTyping} class:editing-length={lengthEdit?.index === i}
+				font-size={px * 11} text-anchor="middle"
+				onpointerdown={onLabelPointerDown} ondblclick={(e) => onEdgeDblClick(e, i)}>{fmt(edgeLengths[i])}</text>
 		{/each}
 	{/if}
 
@@ -1288,6 +1331,27 @@
 </div>
 {/if}
 {#if hud}{@render hud(ctx)}{/if}
+{#if lengthEdit && lengthTyping && lengthEdit.index < draft.length}
+	{@const i = lengthEdit.index}
+	{@const [nx, ny] = inwardNormals[i]}
+	{@const [sx, sy] = toScreen(midpoints[i][0] + nx * px * 20, midpoints[i][1] + ny * px * 20)}
+	<input
+		bind:this={lengthInputEl}
+		class="length-input"
+		class:invalid={lengthEdit.invalid}
+		style="left: {sx}px; top: {sy}px"
+		type="text"
+		inputmode="decimal"
+		autocomplete="off"
+		spellcheck="false"
+		aria-label="Wall {i + 1} length"
+		aria-invalid={lengthEdit.invalid}
+		bind:value={lengthEdit.text}
+		oninput={() => { if (lengthEdit) lengthEdit.invalid = false; }}
+		onkeydown={onLengthKeyDown}
+		onblur={applyLengthEdit}
+	/>
+{/if}
 </div>
 
 <style>
@@ -1395,6 +1459,38 @@
 	}
 	.edge-label {
 		fill: var(--color-text);
+	}
+	.edge-label.typeable {
+		pointer-events: auto;
+		cursor: text;
+	}
+	.edge-label.editing-length {
+		visibility: hidden;
+	}
+	/* A wall length being typed, over its label */
+	.length-input {
+		position: absolute;
+		z-index: 5;
+		transform: translate(-50%, -50%);
+		width: 9ch;
+		padding: 3px 6px;
+		font: 13px var(--font-mono, monospace);
+		text-align: center;
+		color: var(--color-text);
+		background: var(--color-bg);
+		border: 1px solid var(--color-border);
+		border-radius: 4px;
+		outline: none;
+		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+	}
+	.length-input:focus {
+		border-color: var(--color-scene-selected);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-scene-selected) 45%, transparent);
+	}
+	.length-input.invalid {
+		border-color: var(--color-error, #e5484d);
+		background: color-mix(in srgb, var(--color-error, #e5484d) 14%, var(--color-bg));
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-error, #e5484d) 40%, transparent);
 	}
 	.context-outline {
 		fill: var(--color-text-muted);

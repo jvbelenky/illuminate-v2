@@ -526,3 +526,90 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
     expect(svg.getAttribute('style')).toMatch(/touch-action:\s*none/);
   });
 });
+
+describe('PlanCanvas typed wall lengths', () => {
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  function mountEditable(props: Record<string, unknown> = {}) {
+    const onEdit = vi.fn();
+    const { container } = render(PlanCanvas, { props: { draft: room.map((v) => [...v] as Vertex), units: 'meters', precision: 2, onEdit, ...props } });
+    const svg = container.querySelector('svg.plan') as SVGSVGElement;
+    const points = () => svg.querySelector('polygon.outline')!.getAttribute('points');
+    return { svg, container, onEdit, points };
+  }
+  const lengthInput = () => screen.queryByRole('textbox', { name: /Wall \d+ length/ }) as HTMLInputElement | null;
+
+  it('double-click a wall opens its length, selected; Enter applies it', async () => {
+    const { onEdit, points } = mountEditable();
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Wall 1' }));
+    await tick();
+    const input = lengthInput()!;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe('4.00');
+    expect(document.activeElement).toBe(input);
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(4);
+    await fireEvent.input(input, { target: { value: '5' } });
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(lengthInput()).toBeNull();
+    expect(points()).toBe('0,0 5,0 5,-6 0,-6');
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    // A double-click on a wall no longer adds a corner (the "+" handles do)
+    expect(document.querySelectorAll('circle.vertex')).toHaveLength(4);
+  });
+
+  it('the length label opens it too, and takes units', async () => {
+    const { container, points } = mountEditable();
+    const label = [...container.querySelectorAll('text.edge-label')].find((t) => t.textContent === '6.00')!;
+    await fireEvent.dblClick(label);
+    await tick();
+    const input = lengthInput()!;
+    expect(input.getAttribute('aria-label')).toBe('Wall 2 length');
+    await fireEvent.input(input, { target: { value: '500cm' } });
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(points()).toBe('0,0 4,0 4,-5 0,-5');
+  });
+
+  it('Escape cancels without an edit', async () => {
+    const { onEdit, points } = mountEditable();
+    const before = points();
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Wall 1' }));
+    await tick();
+    const input = lengthInput()!;
+    await fireEvent.input(input, { target: { value: '9' } });
+    await fireEvent.keyDown(input, { key: 'Escape' });
+    expect(lengthInput()).toBeNull();
+    expect(points()).toBe(before);
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it('an invalid length stays open, marked invalid', async () => {
+    const { onEdit, points } = mountEditable();
+    const before = points();
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Wall 3' }));
+    await tick();
+    const input = lengthInput()!;
+    // 9 m on the top wall pushes corners below zero
+    for (const bad of ['0', 'abc', '-1', '9']) {
+      await fireEvent.input(input, { target: { value: bad } });
+      expect(input.classList.contains('invalid')).toBe(false);
+      await fireEvent.keyDown(input, { key: 'Enter' });
+      expect(lengthInput()).toBe(input);
+      expect(input.classList.contains('invalid')).toBe(true);
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+    }
+    expect(points()).toBe(before);
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it('read-only canvases (no onEdit) do not open it', async () => {
+    mountEditable({ onEdit: undefined });
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Wall 1' }));
+    await tick();
+    expect(lengthInput()).toBeNull();
+  });
+});
