@@ -1,4 +1,5 @@
 import { tick } from 'svelte';
+import { get } from 'svelte/store';
 import type PlanCanvas from '$lib/components/PlanCanvas.svelte';
 import type { CanvasTool, PlanShape } from '$lib/components/PlanCanvas.svelte';
 import type { CalcZone, FloorPlanPlacement, LampInstance } from '$lib/types/project';
@@ -6,7 +7,7 @@ import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { PlanContext } from '$lib/workspace/editorNav';
 import type { PlanActions, PlanScene } from './planActions';
-import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry } from '$lib/utils/obstacleDrafts';
+import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry, type ObstacleDraft } from '$lib/utils/obstacleDrafts';
 import { zoneHasFootprint, zoneFootprint, footprintGeometry as zoneFootprintGeometry } from '$lib/utils/zoneFootprint';
 import { displayDimension } from '$lib/utils/formatting';
 import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
@@ -22,6 +23,7 @@ import {
 import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
+import { clipboard, setClipboard, takePaste, type ClipboardContent } from './clipboard';
 import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, zoneWallIndex, toWall, fromWall, type Surface, type WallSegment } from '$lib/utils/surfaces';
 import { pickMode, type PickRequest } from '$lib/stores/pickMode';
 import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels, wallToCanvas, canvasToWall, unprojectLampMove, unprojectStructureMove } from './wallProjection';
@@ -514,12 +516,15 @@ export class PlanController {
    * made from the editor rows themselves do not call it.
    */
   onItemSelected: ((id: string) => void) | undefined;
+  /** Paste switches the editor to the pasted item's stage; the host shows it. */
+  onNeedContext: ((context: PlanContext) => void) | undefined;
 
-  constructor(opts: { actions: PlanActions; scene: () => PlanScene; history?: PlanHistory; onItemSelected?: (id: string) => void }) {
+  constructor(opts: { actions: PlanActions; scene: () => PlanScene; history?: PlanHistory; onItemSelected?: (id: string) => void; onNeedContext?: (context: PlanContext) => void }) {
     this.actions = opts.actions;
     this.scene = opts.scene;
     this.history = opts.history;
     this.onItemSelected = opts.onItemSelected;
+    this.onNeedContext = opts.onNeedContext;
     this.draft = clone(opts.scene().vertices);
   }
 
@@ -825,6 +830,74 @@ export class PlanController {
       console.error('Failed to copy obstacle:', e);
     }
   };
+  // --- Clipboard (Ctrl+C / Ctrl+V)
+
+  /** The selection in this context as clipboard content, or null. */
+  private selectionForClipboard(): ClipboardContent | null {
+    if (this.drawing || this.placing) return null;
+    if (this.onLamps) {
+      const ids = this.liveLampIds;
+      const lamps = this.scene().lamps.filter((l) => ids.includes(l.id));
+      return lamps.length ? { kind: 'lamps', lamps: $state.snapshot(lamps) as LampInstance[] } : null;
+    }
+    if (this.onZones) return this.selectedZone ? { kind: 'zone', zone: $state.snapshot(this.selectedZone) as CalcZone } : null;
+    if (this.onObstacles) return this.selected ? { kind: 'object', draft: $state.snapshot(this.selected) as ObstacleDraft } : null;
+    if (this.onCeiling) return this.selectedCeilingItem ? { kind: 'ceiling', item: $state.snapshot(this.selectedCeilingItem) as CeilingItem } : null;
+    return null;
+  }
+  /** Something is selected that Copy can take. */
+  get canCopy(): boolean {
+    return this.selectionForClipboard() !== null;
+  }
+  /** The clipboard holds something and nothing is mid-draw. */
+  get canPaste(): boolean {
+    return !this.drawing && !this.placing && get(clipboard) !== null;
+  }
+  /** Ctrl+C: store a snapshot of the selected item(s). False (and nothing stored) with no selection. */
+  copyToClipboard = (): boolean => {
+    const content = this.selectionForClipboard();
+    if (!content) return false;
+    setClipboard(content);
+    return true;
+  };
+  /** Ctrl+V: add a copy of the clipboard item(s), select it and open its row; each paste lands one step further on. */
+  paste = async () => {
+    if (!this.canPaste) return;
+    const taken = takePaste();
+    if (!taken) return;
+    const { content, n } = taken;
+    const context: PlanContext = content.kind === 'lamps' ? 'lamps' : content.kind === 'zone' ? 'zones' : content.kind === 'object' ? 'obstacles' : 'ceiling';
+    if (this.context !== context) {
+      this.setContext(context);
+      this.onNeedContext?.(context);
+    }
+    const off = this.snapStep * 2 * n;
+    try {
+      if (content.kind === 'lamps') {
+        this.selectedLampIds = await this.actions.pasteLamps(content.lamps, off, off);
+        if (this.selectedLampIds.length) this.onItemSelected?.(this.selectedLampIds[0]);
+      } else if (content.kind === 'zone') {
+        const id = await this.actions.pasteZone(content.zone, off, off);
+        this.selectZone(null);
+        this.selectedZoneId = id;
+        this.onItemSelected?.(id);
+      } else if (content.kind === 'object') {
+        const copy = duplicateDraft(content.draft, off, this.obstacles);
+        const id = await this.actions.addObstacle(objectFromDraft(copy));
+        this.selectObstacle(null);
+        this.selectedId = id;
+        this.onItemSelected?.(id);
+      } else {
+        const id = this.actions.pasteCeilingItem(content.item, n);
+        if (id) {
+          this.selectCeilingItem(id);
+          this.onItemSelected?.(id);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to paste:', e);
+    }
+  };
   deleteSelected = () => {
     if (!this.selected?.id || this.drawing) return;
     const id = this.selected.id;
@@ -846,6 +919,19 @@ export class PlanController {
       event.preventDefault();
       this.stepSurface(event.key === ']' ? 1 : -1);
       return;
+    }
+    // Ctrl/Cmd+C takes the selection, Ctrl/Cmd+V pastes it, in any context
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+      const k = event.key.toLowerCase();
+      if (k === 'c' && this.copyToClipboard()) {
+        event.preventDefault();
+        return;
+      }
+      if (k === 'v' && this.canPaste) {
+        event.preventDefault();
+        this.paste();
+        return;
+      }
     }
     // A plane selected on its wall in Zones can be deleted or copied there (no nudges)
     if (this.onWall && this.onZones && this.selectedWallPlane && !this.drawing && !this.placing) {
