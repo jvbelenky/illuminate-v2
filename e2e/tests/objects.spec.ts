@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
 import { waitForApiIdle } from '../helpers/network';
-import { finishEditing, planTool, showMain } from '../helpers/workspace';
+import { clickPlan, finishEditing, planTool, showMain } from '../helpers/workspace';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
 import {
@@ -211,6 +211,63 @@ test.describe('Objects (obstacles)', () => {
     await addObject(page);
     expect((await getObjectsFromBackend(page)).map((o) => o.id).sort()).toEqual(['object-1', 'object-2', 'object-3']);
   });
+  test("the structure editor's Copy opens the copy, Delete removes it, and undo brings it back", async ({ page }) => {
+    await addObject(page);
+    await setObjectField(page, 'top', 1.5);
+    const actions = page.locator('.structures-part .editor-row.open .item-actions');
+    await actions.getByRole('button', { name: 'Copy', exact: true }).click();
+    await expect.poll(() => objectCount(page)).toBe(2);
+    await waitForApiIdle(page);
+    const backend = await getObjectsFromBackend(page);
+    expect(backend.map((o) => o.id).sort()).toEqual(['object-1', 'object-2']);
+    expect(backend.find((o) => o.id === 'object-2')!.height).toBeCloseTo(1.5, 6);
+    // The copy is the open item
+    await expect(page.locator('.structures-part .editor-row.open')).toHaveAttribute('data-id', 'object-2');
+
+    await actions.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect.poll(() => objectCount(page)).toBe(1);
+    await waitForApiIdle(page);
+    expect((await getObjectsFromBackend(page)).map((o) => o.id)).toEqual(['object-1']);
+
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+z');
+    await expect.poll(() => objectCount(page)).toBe(2);
+    await waitForApiIdle(page);
+    expect((await getObjectsFromBackend(page)).map((o) => o.id).sort()).toEqual(['object-1', 'object-2']);
+  });
+
+  test("the structure editor's Draw footprint redraws the footprint, keeping its bottom and top", async ({ page }) => {
+    await addObject(page);
+    await setObjectField(page, 'top', 1.2);
+    const row = page.locator('.structures-part .editor-row.open');
+    await expect(row.locator('.structure-shape')).toContainText('Box');
+    const draw = row.getByRole('button', { name: 'Draw footprint' });
+    await draw.click();
+    await expect(draw).toHaveAttribute('aria-pressed', 'true');
+    // Escape cancels
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(0);
+    await expect(draw).toHaveAttribute('aria-pressed', 'false');
+
+    await draw.click();
+    await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(1);
+    await clickPlan(page, [[0.2, 0.8], [0.6, 0.8], [0.6, 0.55], [0.4, 0.55], [0.4, 0.3], [0.2, 0.3]], { close: true });
+    await expect.poll(async () => (await getObjectsFromBackend(page))[0]?.shape).toBe('extrusion');
+    const [o] = await getObjectsFromBackend(page);
+    expect(await objectCount(page)).toBe(1);
+    expect(o.vertices).toHaveLength(6);
+    expect(o.yaw).toBe(0);
+    expect(o.z).toBeCloseTo(0, 6);
+    expect(o.height).toBeCloseTo(1.2, 6);
+    await expect(row.locator('.structure-shape')).toContainText('Polygon, 6 corners');
+
+    // Edit corners arms the corner tool, in the editor and the strip alike
+    await row.getByRole('button', { name: 'Edit corners' }).click();
+    await expect(planTool(page, 'Edit corners')).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+    await expect(planTool(page, 'Edit corners')).toHaveAttribute('aria-pressed', 'false');
+  });
+
   test('draw an L-shaped object on the plan canvas', async ({ page }) => {
     // Six corners of an L, well apart so snapping cannot merge them
     await drawObject(page, [[0.2, 0.8], [0.6, 0.8], [0.6, 0.55], [0.4, 0.55], [0.4, 0.3], [0.2, 0.3]]);

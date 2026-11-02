@@ -4,6 +4,7 @@
 	// The open item's fields show directly in its row.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
+	import ItemActions from './ItemActions.svelte';
 	import ShapeGeometryFields from './ShapeGeometryFields.svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import type { ReferenceMode } from './shapeGeometry';
@@ -89,6 +90,16 @@
 
 	function toggleOpen(it: CeilingItem, open: boolean) {
 		ctl.selectCeilingItem(open ? null : it.id);
+	}
+
+	/** Copy or delete this row's item: the strip's and the keys' actions, on it. */
+	function copyItem(id: string) {
+		if (ctl.selectedCeilingId !== id) ctl.selectCeilingItem(id);
+		ctl.copySelectedCeilingItem();
+	}
+	function deleteItem(id: string) {
+		if (ctl.selectedCeilingId !== id) ctl.selectCeilingItem(id);
+		ctl.deleteSelectedCeilingItem();
 	}
 </script>
 
@@ -201,6 +212,7 @@
 						</label>
 					</div>
 				{/if}
+				<ItemActions onCopy={() => copyItem(it.id)} onDelete={() => deleteItem(it.id)} disabled={ctl.drawing} copyDisabled={ctl.ceilingFull} />
 			</ItemRow>
 		{/each}
 	</div>

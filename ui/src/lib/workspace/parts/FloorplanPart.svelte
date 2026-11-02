@@ -80,41 +80,7 @@
 
 	<div class="plan-actions">
 		<button type="button" class="secondary plan-btn" disabled={ctl.drawing} onclick={ctl.requestNewOutline}>Draw outline</button>
-		<button type="button" class="secondary plan-btn" disabled={ctl.decoding} onclick={() => fileInput?.click()}>{ctl.decoding ? 'Reading…' : 'Upload floor plan image'}</button>
-		<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileInput} hidden />
 	</div>
-
-	{#if ctl.placement || ctl.imageError}
-		<div class="reference-panel">
-			{#if ctl.imageError}
-				<p class="ep-error" role="alert">{ctl.imageError}</p>
-			{/if}
-			{#if ctl.imageMissing}
-				<span class="ep-chip">Image missing</span>
-			{:else if ctl.placement}
-				<div class="reference-meta">{ctl.imageFileName ?? 'Saved image'} · {ctl.placement.widthPx}×{ctl.placement.heightPx} px</div>
-				{#if ctl.pdfPageCount > 1}
-					<label class="reference-row">
-						<span>Page</span>
-						<select value={ctl.pdfPage} onchange={(e) => ctl.changePdfPage(Number((e.currentTarget as HTMLSelectElement).value))} aria-label="PDF page">
-							{#each Array.from({ length: ctl.pdfPageCount }, (_, i) => i + 1) as n}
-								<option value={n}>{n} of {ctl.pdfPageCount}</option>
-							{/each}
-						</select>
-					</label>
-				{/if}
-				<label class="reference-row">
-					<span>Opacity</span>
-					<input type="range" min="0.1" max="1" step="0.05" value={ctl.placement.opacity} oninput={(e) => ctl.setOpacity(Number((e.currentTarget as HTMLInputElement).value))} onchange={ctl.commitOpacity} aria-label="Reference image opacity" />
-				</label>
-			{/if}
-			{#if ctl.placement}
-				<button type="button" class="secondary set-scale-btn" class:active={ctl.tool === 'custom'} aria-pressed={ctl.tool === 'custom'} disabled={ctl.drawing} onclick={ctl.startSetScale}>Set scale…</button>
-				<button type="button" class="secondary remove-image-btn" onclick={ctl.removeImage}>Remove</button>
-			{/if}
-		</div>
-	{/if}
-
 
 	<button type="button" class="ep-disc" aria-expanded={geometryOpen} onclick={() => (geometryOpen = !geometryOpen)}>
 		<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
@@ -141,6 +107,46 @@
 			<button type="button" class="secondary add-vertex-btn" disabled={ctl.drawing || ctl.draft.length < 2} onclick={ctl.addVertex}>Add corner</button>
 		</div>
 	{/if}
+
+	<section class="ep-addcard image-card" aria-label="Floor plan image">
+		<button type="button" class="secondary plan-btn" disabled={ctl.decoding} onclick={() => fileInput?.click()}>{ctl.decoding ? 'Reading…' : 'Upload floor plan image'}</button>
+		<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileInput} hidden />
+		{#if ctl.placement || ctl.imageError}
+			<div class="reference-panel">
+				{#if ctl.imageError}
+					<p class="ep-error" role="alert">{ctl.imageError}</p>
+				{/if}
+				{#if ctl.imageMissing}
+					<span class="ep-chip">Image missing</span>
+				{:else if ctl.placement}
+					<div class="reference-meta">{ctl.imageFileName ?? 'Saved image'} · {ctl.placement.widthPx}×{ctl.placement.heightPx} px</div>
+					{#if ctl.pdfPageCount > 1}
+						<label class="reference-row">
+							<span>Page</span>
+							<select value={ctl.pdfPage} onchange={(e) => ctl.changePdfPage(Number((e.currentTarget as HTMLSelectElement).value))} aria-label="PDF page">
+								{#each Array.from({ length: ctl.pdfPageCount }, (_, i) => i + 1) as n}
+									<option value={n}>{n} of {ctl.pdfPageCount}</option>
+								{/each}
+							</select>
+						</label>
+					{/if}
+					<label class="reference-row">
+						<span>Opacity</span>
+						<input type="range" min="0.1" max="1" step="0.05" value={ctl.placement.opacity} oninput={(e) => ctl.setOpacity(Number((e.currentTarget as HTMLInputElement).value))} onchange={ctl.commitOpacity} aria-label="Reference image opacity" />
+					</label>
+				{/if}
+				{#if ctl.placement}
+					<div class="image-tools">
+						<button type="button" class="secondary set-scale-btn" class:active={ctl.tool === 'custom'} aria-pressed={ctl.tool === 'custom'} disabled={ctl.drawing} onclick={ctl.startSetScale}>Set scale…</button>
+						{#if ctl.hasImage}
+							<button type="button" class="secondary move-image-btn" class:active={ctl.activeTool === 'image'} aria-pressed={ctl.activeTool === 'image'} disabled={ctl.drawing} onclick={() => ctl.inCanvas(() => ctl.toggleTool('image'))}>Move image</button>
+						{/if}
+						<button type="button" class="secondary remove-image-btn" onclick={ctl.removeImage}>Remove</button>
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</section>
 </div>
 
 <style>
@@ -222,14 +228,47 @@
 		background: var(--color-btn-fill-hover);
 		border-color: transparent;
 	}
+	/* The floor plan image card: below the outline, on its own fill */
+	.image-card {
+		margin-top: var(--spacing-sm);
+	}
+	.image-card button.secondary {
+		padding: 6px 12px;
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		color: var(--color-text);
+		background: var(--color-btn-fill);
+		border: 1px solid transparent;
+		border-radius: var(--radius-md);
+	}
+	.image-card button.secondary:hover:not(:disabled) {
+		background: var(--color-btn-fill-hover);
+		border-color: transparent;
+	}
+	.image-card .plan-btn {
+		width: 100%;
+	}
 	.reference-panel {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: var(--spacing-xs) 0;
-		border-top: 1px solid var(--color-border);
-		border-bottom: 1px solid var(--color-border);
-		font-size: var(--font-size-xs);
+		gap: 6px;
+		font-size: var(--font-size-sm);
+	}
+	/* Set scale and Move image side by side; Remove (and a lone button) the full width */
+	.image-tools {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--spacing-sm);
+	}
+	.image-tools > button {
+		min-width: 0;
+		margin: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.image-tools > button:last-child:nth-child(odd) {
+		grid-column: 1 / -1;
 	}
 	.reference-meta {
 		color: var(--color-text-muted);
@@ -244,17 +283,17 @@
 		gap: var(--spacing-xs);
 		margin: 0;
 	}
+	.reference-row > span {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
 	.reference-row input[type='range'] {
 		width: 100%;
 	}
-	.set-scale-btn.active {
-		border-color: var(--color-primary);
-		color: var(--color-primary);
-	}
-
-	.remove-image-btn {
-		width: 100%;
-		margin-top: 2px;
+	.image-card button.secondary.active,
+	.image-card button.secondary.active:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-scene-selected) 22%, var(--color-btn-fill));
+		border-color: var(--color-scene-selected);
 	}
 	.vertex-table {
 		display: flex;

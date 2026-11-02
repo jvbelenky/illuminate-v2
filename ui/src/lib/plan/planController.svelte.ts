@@ -692,6 +692,48 @@ export class PlanController {
     const o = id ? this.obstacles.find((x) => x.id === id) : null;
     // A wall view edits no footprint (its canvas is in wall coordinates)
     this.draft = o && !this.onWall ? clone(o.vertices) : [];
+    if (this.activeTool === 'corners' && this.onObstacles && !this.structureCornersEditable) this.endTool();
+  };
+
+  /** The selected structure's footprint is the canvas's polygon: Edit corners has corners to edit. */
+  get structureCornersEditable(): boolean {
+    return this.onObstacles && !!this.selected && !this.onWall;
+  }
+  /** The structure whose footprint the Draw in progress replaces (null: a Draw adds one). */
+  redrawObstacleId = $state<string | null>(null);
+
+  /**
+   * Draw footprint: redraw this structure's footprint on the 2D view (bottom and
+   * top stay; the footprint and yaw come from the drawing). Again, or Escape, cancels.
+   */
+  startObstacleRedraw = (id: string) => {
+    if (this.drawing) {
+      const same = this.redrawObstacleId === id;
+      this.canvas?.cancelDraw();
+      if (same) return;
+    }
+    this.withCanvas(() => {
+      if (this.onWall) this.setSurface('floor');
+      this.endTool();
+      if (this.selectedId !== id || this.dirty) this.selectObstacle(id);
+      if (!this.selected) return;
+      this.redrawObstacleId = id;
+      this.canvas?.startDraw();
+    });
+  };
+
+  /** Edit corners for this structure's footprint: select it and arm the one-shot corner tool (again cancels). */
+  editStructureCorners = (id: string) => {
+    this.withCanvas(() => {
+      if (this.activeTool === 'corners') {
+        this.endTool();
+        return;
+      }
+      if (this.drawing) return;
+      if (this.onWall) this.setSurface('floor');
+      if (this.selectedId !== id) this.selectObstacle(id);
+      if (this.structureCornersEditable) this.toggleTool('corners');
+    });
   };
 
   /** A structure picked on the 2D plan: select it and bring its row into view. */
@@ -705,6 +747,7 @@ export class PlanController {
     this.withCanvas(() => {
       this.endTool();
       this.selectObstacle(null);
+      this.redrawObstacleId = null;
       this.canvas?.startDraw();
     });
   };
@@ -735,12 +778,19 @@ export class PlanController {
       }
       return;
     }
+    const redrawObstacle = this.redrawObstacleId;
+    this.redrawObstacleId = null;
     if (!committed || this.draft.length < 3) return;
     if (this.onOutline) {
       this.commitDraft();
       return;
     }
     if (!this.onObstacles) return;
+    if (redrawObstacle) {
+      // The structure takes the drawn footprint; its bottom and top stay
+      if (this.scene().objects.some((o) => o.id === redrawObstacle)) this.actions.updateObstacle(redrawObstacle, footprintGeometry(this.draft));
+      return;
+    }
     // The new obstacle is selected and editable; Draw is one click away for the next
     const d = draftFromPolygon(this.draft, this.scene().roomZ, this.obstacles);
     try {

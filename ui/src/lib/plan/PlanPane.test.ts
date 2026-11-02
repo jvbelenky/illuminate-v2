@@ -118,7 +118,7 @@ describe('PlanPane', () => {
     expect(labels(zones.container)).toEqual(['Draw', 'Edit corners', 'Copy', 'Delete']);
     zones.unmount();
     const obst = render(Harness, { props: { ...baseProps, context: 'obstacles' } });
-    expect(labels(obst.container)).toEqual(['Draw', 'Copy', 'Delete']);
+    expect(labels(obst.container)).toEqual(['Draw', 'Edit corners', 'Copy', 'Delete']);
     obst.unmount();
     const ceil = render(Harness, { props: { ...baseProps, context: 'ceiling' } });
     expect(labels(ceil.container)).toEqual(['Move grid']);

@@ -3,6 +3,7 @@
 	// exactly one lamp selected, its row opens onto the lamp editor.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
+	import ItemActions from './ItemActions.svelte';
 	import PlacementPictogram from './PlacementPictogram.svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import type { Snippet } from 'svelte';
@@ -55,6 +56,16 @@
 	function fixtureName(l: LampInstance): string {
 		const key = fixtureKeyOf(l);
 		return fixtures.find((f) => f.key === key)?.label ?? '';
+	}
+
+	/** Copy or delete this row's lamp: the strip's and the keys' actions, on it alone. */
+	function copyLamp(id: string) {
+		if (ctl.selectedLampId !== id) ctl.selectLamp(id);
+		ctl.copySelectedLamps();
+	}
+	function deleteLamp(id: string) {
+		if (ctl.selectedLampId !== id) ctl.selectLamp(id);
+		ctl.deleteSelectedLamps();
 	}
 
 	function wavelengthTitle(l: LampInstance): string {
@@ -116,6 +127,7 @@
 					<span class="dot" style:background={l.enabled === false ? DISABLED_COLOR : lampColor(l)} title={wavelengthTitle(l)} role="img" aria-label={wavelengthTitle(l)}></span>
 				{/snippet}
 				{#if lampPanel}{@render lampPanel(l, () => ctl.selectLamp(null))}{/if}
+				<ItemActions onCopy={() => copyLamp(l.id)} onDelete={() => deleteLamp(l.id)} />
 			</ItemRow>
 		{/each}
 	</div>

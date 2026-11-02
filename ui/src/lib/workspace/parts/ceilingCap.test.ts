@@ -42,7 +42,11 @@ describe('ceiling item cap', () => {
     ctl.selectCeilingItem('ceiling-1');
     await tick();
     await fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
-    await fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    // The strip's Copy and the open row's Copy (greyed out)
+    const copies = screen.getAllByRole('button', { name: 'Copy' }) as HTMLButtonElement[];
+    expect(copies).toHaveLength(2);
+    expect(copies.some((b) => b.closest('.item-actions') && b.disabled)).toBe(true);
+    for (const b of copies) await fireEvent.click(b);
     expect(calls.filter((c) => c[0] === 'copyCeilingItem')).toEqual([]);
     expect(ctl.selectedCeilingId).toBe('ceiling-1');
     expect(ctl.addCeilingItem('vent')).toBeNull();
