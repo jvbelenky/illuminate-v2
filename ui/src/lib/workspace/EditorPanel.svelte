@@ -293,8 +293,8 @@
 		height: 16px;
 		border-radius: 50%;
 		box-sizing: border-box;
-		background: var(--color-bg-tertiary);
-		border: 1px solid var(--color-border);
+		background: none;
+		border: 1px solid var(--color-text-muted);
 		color: var(--color-text-muted);
 	}
 	.editor-part .tick.done {
