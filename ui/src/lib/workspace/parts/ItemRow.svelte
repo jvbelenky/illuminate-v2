@@ -240,11 +240,23 @@
 	.rename:hover,
 	.icon-toggle:hover {
 		color: var(--color-text);
+		background: var(--color-btn-fill-hover);
+	}
+	.rename:focus-visible,
+	.icon-toggle:focus-visible,
+	.row-main:focus-visible {
+		outline: 2px solid var(--color-scene-selected);
+		outline-offset: 1px;
+	}
+	.icon-toggle {
+		background: none;
+		border-color: transparent;
 	}
 	.icon-toggle.pressed {
-		background: color-mix(in srgb, var(--color-primary) 20%, var(--color-bg-secondary));
-		border-color: var(--color-primary);
-		color: var(--color-primary);
+		color: var(--color-text);
+	}
+	.icon-toggle:not(.pressed) {
+		opacity: 0.55;
 	}
 	.row-body {
 		display: flex;
