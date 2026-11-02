@@ -4,13 +4,14 @@
 	// the view tools sit bottom-right inside each view (PlanCanvas, RoomViewer).
 	// The two bottom corners never overlap: when the labelled edit strip does not
 	// fit beside the view tools it shows glyphs only, and wraps if even that is too wide.
-	// On a phone (`touch`): Fit and one surface dropdown top-right, the edit strip
+	// On a phone (`touch`): Undo | Redo, Fit and one surface dropdown top-right, the edit strip
 	// (2D only) scrolling sideways on one row bottom-left, and ⤢ / ⤡ bottom-right.
 	import { untrack } from 'svelte';
 	import PlanEditStrip from '$lib/plan/PlanEditStrip.svelte';
 	import SurfaceSwitcher from '$lib/plan/SurfaceSwitcher.svelte';
 	import type { PlanController } from '$lib/plan/planController.svelte';
 	import MainViewBar from './MainViewBar.svelte';
+	import UndoRedo from './UndoRedo.svelte';
 	import type { MainView } from './dockLayout';
 
 	interface Props {
@@ -95,6 +96,7 @@
 	</div>
 	<div class="corner tr" data-plan-scope>
 		{#if touch}
+			<UndoRedo />
 			<button type="button" class="mv-btn view-fit" aria-label="Fit" onclick={() => onFit?.()}>Fit</button>
 			{#if main === '2d'}
 				<SurfaceSwitcher surface={ctl.surface} surfaces={ctl.surfaces} onSelect={ctl.setSurface} compact />

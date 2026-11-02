@@ -42,8 +42,8 @@ describe('MainViewControls', () => {
 
     const strip = corner(container, 'bl').querySelector('.plan-toolbar') as HTMLElement;
     const tools = [...strip.querySelectorAll('button')];
-    expect(tools.map((b) => b.getAttribute('aria-label'))).toEqual(['Draw', 'Copy', 'Delete']);
-    expect(tools.map((b) => b.title)).toEqual(['Draw', 'Copy (Ctrl+D)', 'Delete (Del)']);
+    expect(tools.map((b) => b.getAttribute('aria-label'))).toEqual(['Draw', 'Edit corners', 'Copy', 'Delete']);
+    expect(tools.map((b) => b.title)).toEqual(['Draw', 'Edit corners', 'Copy (Ctrl+D)', 'Delete (Del)']);
     for (const b of tools) expect(b.textContent?.trim()).toBe(b.getAttribute('aria-label'));
     // The pane itself has no toolbar or surface row of its own
     expect(container.querySelector('.plan-pane .plan-toolbar')).toBeNull();
@@ -90,16 +90,18 @@ describe('MainViewControls', () => {
 describe('the 2D view tools corner', () => {
   beforeEach(() => userSettings.update((s) => ({ ...s, planNavMode: 'hand' })));
 
-  it('units sit before Pan | Zoom | Fit, and changing them changes the project units', async () => {
+  it('Undo | Redo, then units, before Pan | Zoom | Fit; changing units changes the project units', async () => {
     const calls: unknown[][] = [];
     const { container } = mount({ controls: '2d', context: 'outline', calls });
     const tools = container.querySelector('.plan-pane .view-controls') as HTMLElement;
-    const units = tools.firstElementChild as HTMLSelectElement;
+    const history = tools.firstElementChild as HTMLElement;
+    expect(history.getAttribute('aria-label')).toBe('History');
+    const units = history.nextElementSibling as HTMLSelectElement;
     expect(units.tagName).toBe('SELECT');
     expect(units.title).toBe('Units');
     expect(units.value).toBe('meters');
     expect([...units.options].map((o) => o.textContent)).toEqual(['meters', 'centimeters', 'millimeters', 'feet', 'inches']);
-    expect([...tools.querySelectorAll('button')].map((b) => b.title)).toEqual(['Pan (H)', 'Zoom (Z)', 'Zoom out (−)', 'Zoom in (+)', 'Fit (F)']);
+    expect([...tools.querySelectorAll('button')].map((b) => b.title)).toEqual(['Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)', 'Pan (H)', 'Zoom (Z)', 'Zoom out (−)', 'Zoom in (+)', 'Fit (F)']);
     await fireEvent.change(units, { target: { value: 'feet' } });
     expect(calls.filter((c) => c[0] === 'changeUnits')).toEqual([['changeUnits', 'feet']]);
   });
@@ -132,6 +134,7 @@ describe('on a phone (touch)', () => {
     const onToggleFullScreen = vi.fn();
     const { container, ctl } = mount({ controls: '2d', touch: true, context: 'obstacles', onFit, onToggleFullScreen });
     const tr = corner(container, 'tr');
+    expect([...tr.querySelectorAll('button')].slice(0, 3).map((b) => b.getAttribute('aria-label'))).toEqual(['Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)', 'Fit']);
     await fireEvent.click(within(tr).getByRole('button', { name: 'Fit' }));
     expect(onFit).toHaveBeenCalledTimes(1);
     expect(within(tr).queryByRole('group', { name: 'Surface' })).toBeNull();
@@ -156,10 +159,10 @@ describe('on a phone (touch)', () => {
     expect(within(br(container)).getByRole('button', { name: 'Exit full screen' }).textContent).toBe('⤡');
   });
 
-  it('3D shows only Fit top-right and no edit strip', () => {
+  it('3D shows only Undo | Redo and Fit top-right and no edit strip', () => {
     const { container } = mount({ controls: '3d', mini: true, touch: true, context: 'lamps', lamps: [lamp] });
     const tr = corner(container, 'tr');
-    expect([...tr.querySelectorAll('button, select')].map((e) => e.getAttribute('aria-label'))).toEqual(['Fit']);
+    expect([...tr.querySelectorAll('button, select')].map((e) => e.getAttribute('aria-label'))).toEqual(['Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)', 'Fit']);
     expect(corner(container, 'bl')).toBeNull();
   });
 

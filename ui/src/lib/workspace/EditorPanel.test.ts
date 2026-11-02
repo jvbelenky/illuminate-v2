@@ -52,32 +52,38 @@ describe('EditorPanel', () => {
     for (const s of ['room', 'lamps', 'zones']) expect(q(`.editor-stage[data-stage="${s}"] .n`)!.classList.contains('done')).toBe(true);
   });
 
-  it('a Room part ticks once opened: Floorplan at once, the others when clicked', async () => {
+  it('the Room parts sit on one scrolling row, never a grid', () => {
     mount();
-    const dot = (p: string) => q(`.editor-part[data-part="${p}"] .dot`)!;
-    expect(dot('floorplan').classList.contains('done')).toBe(true);
-    expect(dot('floorplan').querySelector('svg')).not.toBeNull();
-    for (const p of ['structures', 'ceiling', 'reflectance']) {
-      expect(dot(p).classList.contains('done')).toBe(false);
-      expect(dot(p).querySelector('svg')).toBeNull();
-    }
+    const row = q('.editor-parts')!;
+    expect(row.className).not.toMatch(/grid/);
+    expect([...row.children].map((c) => (c as HTMLElement).dataset.part)).toEqual(['floorplan', 'structures', 'ceiling', 'reflectance']);
+    expect(row.querySelector('.dot')).toBeNull();
+  });
+
+  it('a Room part ticks once opened: a corner badge on Floorplan at once, the others when clicked', async () => {
+    mount();
+    const badge = (p: string) => q(`.editor-part[data-part="${p}"] .lbl .badge`);
+    expect(badge('floorplan')).not.toBeNull();
+    expect(badge('floorplan')!.querySelector('svg')).not.toBeNull();
+    for (const p of ['structures', 'ceiling', 'reflectance']) expect(badge(p)).toBeNull();
     await click(q('.editor-part[data-part="ceiling"]'));
-    expect(dot('ceiling').classList.contains('done')).toBe(true);
-    expect(dot('structures').classList.contains('done')).toBe(false);
+    expect(badge('ceiling')).not.toBeNull();
+    expect(badge('structures')).toBeNull();
     // Leaving the stage keeps the ticks
     await click(q('.editor-stage[data-stage="zones"]'));
     await click(q('.editor-stage[data-stage="room"]'));
-    expect(dot('ceiling').classList.contains('done')).toBe(true);
+    expect(badge('ceiling')).not.toBeNull();
     expect(get(workspaceUi).visited).toEqual(['floorplan', 'ceiling']);
   });
 
   it('a new or loaded project clears the ticks but for the part on screen', async () => {
     mount();
+    const badge = (p: string) => q(`.editor-part[data-part="${p}"] .badge`);
     await click(q('.editor-part[data-part="structures"]'));
     workspaceUi.reset('editor');
     await tick();
     expect(get(workspaceUi).visited).toEqual(['floorplan']);
-    expect(q('.editor-part[data-part="structures"] .dot')!.classList.contains('done')).toBe(false);
+    expect(badge('structures')).toBeNull();
     // Cleared while already on Floorplan (the page resets on start, after the panel mounted)
     await click(q('.editor-part[data-part="ceiling"]'));
     await click(q('.editor-part[data-part="floorplan"]'));
@@ -87,8 +93,8 @@ describe('EditorPanel', () => {
     workspaceUi.clearVisited();
     await tick();
     expect(get(workspaceUi).visited).toEqual(['floorplan']);
-    expect(q('.editor-part[data-part="floorplan"] .dot')!.classList.contains('done')).toBe(true);
-    expect(q('.editor-part[data-part="ceiling"] .dot')!.classList.contains('done')).toBe(false);
+    expect(badge('floorplan')).not.toBeNull();
+    expect(badge('ceiling')).toBeNull();
   });
 
   it('moving to Lamps ticks nothing more', async () => {
