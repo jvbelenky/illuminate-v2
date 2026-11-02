@@ -198,6 +198,15 @@
 	interface View { x: number; y: number; size: number }
 	/** Canvas width and height in CSS pixels, measured; 560 x 560 until the canvas has a size. */
 	let canvasW = $state(560);
+	/**
+	 * Below this canvas width the units select shows abbreviations, so Undo | Redo,
+	 * units and the view tools (about 420 px in full) leave room for the edit
+	 * strip's glyph-only form (up to four 36 px buttons) on the bottom row.
+	 */
+	const COMPACT_TOOLS_BELOW = 600;
+	/** The canvas's measured width (null until laid out). */
+	let measuredW = $state<number | null>(null);
+	const compactTools = $derived(measuredW !== null && measuredW < COMPACT_TOOLS_BELOW);
 	let canvasH = $state(560);
 	/** Canvas width / height. */
 	const aspect = $derived(canvasW / canvasH);
@@ -293,6 +302,7 @@
 			const prev = { width: canvasW, height: canvasH };
 			canvasW = w;
 			canvasH = h;
+			measuredW = w;
 			const refit = !userMoved && !drawing && !drag;
 			const next = resizePlanView(view, prev, { width: w, height: h }, refit, () => fittedView(defaultFitPoints()));
 			if (next !== view) view = next;
@@ -1257,7 +1267,7 @@
 {#if navControls}
 <div class="view-controls">
 	<UndoRedo />
-	{#if onUnitsChange}<UnitsSelect {units} onchange={onUnitsChange} />{/if}
+	{#if onUnitsChange}<UnitsSelect {units} onchange={onUnitsChange} compact={compactTools} />{/if}
 	<div class="mv-seg" role="group" aria-label="View">
 		<button type="button" class="mv-btn nav-mode" data-mode="hand" aria-pressed={navMode === 'hand'} aria-label="Pan" title="Pan (H)" onclick={() => setNavMode('hand')}>
 			<Glyph name="hand" />
