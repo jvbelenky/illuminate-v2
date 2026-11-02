@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures';
 import type { Page } from '@playwright/test';
-import { waitForSession } from '../helpers/session';
+import { reloadSession, waitForSession } from '../helpers/session';
 import { openStep, planSvg } from '../helpers/workspace';
 
 /** The open ceiling item's X and Y (detectors, vents and sensors). */
@@ -46,8 +46,7 @@ test.describe('Ceiling designer', () => {
     const filePath = await download.path();
 
     // A fresh page starts with an empty ceiling; only the file brings the items back
-    await page.reload();
-    await waitForSession(page);
+    await reloadSession(page);
     await openStep(page, 'room', 'ceiling');
     await expect(part.locator('.editor-row')).toHaveCount(0);
 
