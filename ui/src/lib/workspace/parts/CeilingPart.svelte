@@ -269,8 +269,12 @@
 		color: var(--color-text);
 	}
 	.cp-pills > button.on {
-		background: var(--color-primary);
+		background: var(--color-highlight);
 		color: #fff;
+	}
+	.cp-pills > button:focus-visible {
+		outline: 2px solid var(--color-scene-selected);
+		outline-offset: -2px;
 	}
 	.cp-pills.ico > button {
 		display: grid;
@@ -313,18 +317,20 @@
 		height: 22px;
 		margin: 0;
 		padding: 0;
-		background: var(--color-bg-tertiary);
-		border: 1px solid var(--color-border);
+		background: none;
+		border: 1px solid transparent;
 		border-radius: 4px;
-		color: var(--color-text-muted);
+		color: var(--color-text);
 		cursor: pointer;
 	}
 	.cp-eye:hover {
-		color: var(--color-text);
+		background: var(--color-btn-fill-hover);
 	}
-	.cp-eye.pressed {
-		background: color-mix(in srgb, var(--color-primary) 20%, var(--color-bg-secondary));
-		border-color: var(--color-primary);
-		color: var(--color-primary);
+	.cp-eye:focus-visible {
+		outline: 2px solid var(--color-scene-selected);
+		outline-offset: 1px;
+	}
+	.cp-eye:not(.pressed) {
+		opacity: 0.55;
 	}
 </style>

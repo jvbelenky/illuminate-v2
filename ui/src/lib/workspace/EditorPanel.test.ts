@@ -66,6 +66,11 @@ describe('EditorPanel', () => {
     expect(badge('floorplan')).not.toBeNull();
     expect(badge('floorplan')!.querySelector('svg')).not.toBeNull();
     for (const p of ['structures', 'reflectance']) expect(badge(p)).toBeNull();
+    for (const p of ['structures', 'reflectance']) {
+      const t = q(`.editor-part[data-part="${p}"] .tick`)!;
+      expect(t).not.toBeNull();
+      expect(t.querySelector('svg')).toBeNull();
+    }
     for (const p of ['floorplan', 'structures']) {
       const kids = [...q(`.editor-part[data-part="${p}"]`)!.children];
       expect(kids[0].classList.contains('tick')).toBe(true);
