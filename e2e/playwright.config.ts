@@ -12,6 +12,8 @@ process.env.E2E_API_URL ??= `http://localhost:${API_PORT}/api/v1`;
 
 export default defineConfig({
   testDir: './tests',
+  // Loads the app once so the first test of each worker meets a warm dev server
+  globalSetup: './global-setup.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   // No retries: a test that only passes on retry is a defect, not a pass (the

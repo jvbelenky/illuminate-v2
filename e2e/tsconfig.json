@@ -11,5 +11,5 @@
       "@helpers/*": ["helpers/*"]
     }
   },
-  "include": ["tests/**/*.ts", "helpers/**/*.ts", "playwright.config.ts"]
+  "include": ["tests/**/*.ts", "helpers/**/*.ts", "playwright.config.ts", "global-setup.ts"]
 }
