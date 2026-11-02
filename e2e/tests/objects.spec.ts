@@ -315,4 +315,28 @@ test.describe('Objects (obstacles)', () => {
     expect(after.x).toBeCloseTo(before.x, 6);
     expect(after.y).toBeCloseTo(before.y, 6);
   });
+
+  test('a structure dragged close to a wall ends flush against it', async ({ page }) => {
+    await addObject(page);
+    const before = (await getObjectsFromBackend(page))[0];
+    const plan = page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
+    const shape = plan.locator('polygon.outline');
+    const room = plan.locator('polygon.context-outline');
+    const s = (await shape.boundingBox())!;
+    const r = (await room.boundingBox())!;
+    // The right wall's x in room units (SVG x is room x)
+    const roomRight = Math.max(...(await room.getAttribute('points'))!.split(' ').map((p) => Number(p.split(',')[0])));
+    // Drag the body so its right side stops 5 px short of the right wall
+    const cx = s.x + s.width / 2, cy = s.y + s.height / 2;
+    const dx = r.x + r.width - 5 - (s.x + s.width);
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx + dx / 2, cy, { steps: 4 });
+    await page.mouse.move(cx + dx, cy, { steps: 4 });
+    await expect(plan.locator('line.outline-guide')).toHaveCount(1);
+    await page.mouse.up();
+    const right = async () => Math.max(...(await shape.getAttribute('points'))!.split(' ').map((p) => Number(p.split(',')[0])));
+    await expect.poll(right).toBeCloseTo(roomRight, 6);
+    await expect.poll(async () => (await getObjectsFromBackend(page))[0].x).not.toBeCloseTo(before.x, 3);
+  });
 });

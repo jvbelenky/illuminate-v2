@@ -56,6 +56,7 @@
 		angleBetweenDeg,
 		snapSegmentDirection, pointInPolygon } from '$lib/utils/roomGeometry';
 	import { setSegmentLength, parseLengthInput } from '$lib/plan/segmentLength';
+	import { snapPointToOutline, snapTranslationToOutline, edgeAxis } from '$lib/plan/outlineSnap';
 
 	// A plan-view canvas for drawing and editing a polygon in room coordinates:
 	// viewport (fit / pan / zoom), grid with rulers, light grid and corner
@@ -348,7 +349,7 @@
 	// Sizes in room units so they stay constant on screen: px is one CSS pixel at
 	// the canvas's current size and zoom (the short side shows view.size units).
 	const px = $derived(view.size / shortSide);
-	// The snapping and guide tolerances keep their original reference scale
+	// The old fixed-560 reference scale, kept for pointer targets only (snapping measures real pixels, `px`)
 	const snapPx = $derived(view.size / 560);
 	// Minimums on screen: text 11 px, lamp dots 13 px across, corner handles 12 px, "+" handles 10 px
 	const handleR = $derived(px * 6);
@@ -412,11 +413,13 @@
 	}
 
 	// Grid snapping is light, like the angle snap: a coordinate within
-	// GRID_TOLERANCE_PX of a snap line is pulled onto it, anything else stays
-	// where the pointer is (rounded to the unit's display precision so the table
-	// stays readable). Snap lines are every 1 m / 1 ft (100 cm, 1000 mm, 12 in),
+	// GRID_TOLERANCE_PX (real CSS pixels) of a snap line is pulled onto it, anything
+	// else stays where the pointer is (rounded to the unit's display precision so the
+	// table stays readable). Snap lines are every 1 m / 1 ft (100 cm, 1000 mm, 12 in),
 	// or the finer grid when zoomed in.
-	const GRID_TOLERANCE_PX = 12;
+	const GRID_TOLERANCE_PX = 6;
+	/** Shapes inside the room snap to its outline (the `outline` prop) within this many real pixels, before the grid. */
+	const OUTLINE_TOLERANCE_PX = 10;
 	const snapUnit = $derived(Math.min(gridStep, gridCellSize(units)));
 	// Grid lines a coordinate just snapped to, shown as guidelines by the caller
 	let pendingGuides: Guide[] = [];
@@ -427,7 +430,7 @@
 		const free = roundToUnit(clampCoord(v), units);
 		if (altKey) return free;
 		const g = Math.round(v / snapUnit) * snapUnit;
-		if ((!allowNegative && g < 0) || Math.abs(v - g) > snapPx * GRID_TOLERANCE_PX) return free;
+		if ((!allowNegative && g < 0) || Math.abs(v - g) > px * GRID_TOLERANCE_PX) return free;
 		const snapped = Math.round(g * 1e6) / 1e6;
 		pendingGuides.push({ axis, value: snapped });
 		return snapped;
@@ -441,7 +444,7 @@
 	/** Grid-snap a single value without clamping (hosts use it for their own layers). */
 	export function snapValue(v: number, altKey: boolean): number {
 		const g = Math.round(v / snapUnit) * snapUnit;
-		return altKey || Math.abs(v - g) > snapPx * GRID_TOLERANCE_PX ? roundToUnit(v, units) : g;
+		return altKey || Math.abs(v - g) > px * GRID_TOLERANCE_PX ? roundToUnit(v, units) : g;
 	}
 
 	/** With Shift, constrain the segment from `from` to a multiple of 45°. */
@@ -457,7 +460,7 @@
 
 	const ANGLE_STEP = 45;
 	/** Pointer angles this close to a right angle snap to it; the rest are freehand. */
-	const RIGHT_ANGLE_TOLERANCE = 4;
+	const RIGHT_ANGLE_TOLERANCE = 3;
 	/** Below this screen length a segment is never angle-snapped: a few pixels of
 	 *  hand wobble would otherwise swing a short wall through tens of degrees. */
 	const MIN_ANGLE_SNAP_PX = 32;
@@ -477,7 +480,7 @@
 	export function snapAngle(from: Vertex, raw: Vertex, ref: Vertex, event: PointerEvent | MouseEvent): { point: Vertex; snapped: boolean } {
 		if (event.altKey) return { point: raw, snapped: false };
 		if (event.shiftKey) return snapSegmentDirection(from, raw, ref, { stepDeg: ANGLE_STEP, toleranceDeg: 180, force: true });
-		if (Math.hypot(raw[0] - from[0], raw[1] - from[1]) < snapPx * MIN_ANGLE_SNAP_PX) return { point: raw, snapped: false };
+		if (Math.hypot(raw[0] - from[0], raw[1] - from[1]) < px * MIN_ANGLE_SNAP_PX) return { point: raw, snapped: false };
 		return snapSegmentDirection(from, raw, ref, { stepDeg: 90, toleranceDeg: RIGHT_ANGLE_TOLERANCE, force: false });
 	}
 
@@ -486,7 +489,49 @@
 	// outline close square without an extra corner to tidy up afterwards.
 	interface Guide { axis: 'x' | 'y'; value: number }
 	let guides = $state<Guide[]>([]);
-	const GUIDE_TOLERANCE_PX = 8;
+	const GUIDE_TOLERANCE_PX = 6;
+	/** The outline edges and corner the shape just snapped to, highlighted while dragging or drawing. */
+	let outlineGuide = $state<{ edges: number[]; corner: number | null }>({ edges: [], corner: null });
+	const NO_OUTLINE_GUIDE = { edges: [], corner: null };
+	function outlineTolerance(altKey: boolean): number {
+		return altKey || !outline || outline.length < 3 ? 0 : px * OUTLINE_TOLERANCE_PX;
+	}
+
+	/**
+	 * Snap a corner onto the room outline: an outline corner, else the nearest
+	 * edge, then the grid along an axis-aligned edge. Null when out of reach.
+	 */
+	function snapToOutline(p: Vertex, altKey: boolean): Vertex | null {
+		const hit = snapPointToOutline(p, outline, outlineTolerance(altKey));
+		if (!hit) {
+			outlineGuide = NO_OUTLINE_GUIDE;
+			return null;
+		}
+		outlineGuide = { edges: hit.edge !== null ? [hit.edge] : [], corner: hit.corner };
+		pendingGuides = [];
+		let q = hit.point;
+		if (hit.edge !== null) {
+			const axis = edgeAxis(outline!, hit.edge);
+			if (axis === 'horizontal') q = [snapCoord(q[0], 'x', altKey), q[1]];
+			else if (axis === 'vertical') q = [q[0], snapCoord(q[1], 'y', altKey)];
+		}
+		guides = [...pendingGuides];
+		return [Math.round(q[0] * 1e6) / 1e6, Math.round(q[1] * 1e6) / 1e6];
+	}
+
+	/**
+	 * Move `start` by the pointer delta: the outline snap (flush to walls) decides
+	 * the axes it touches, the grid snap (`gridDelta`) the others.
+	 */
+	function translateWithOutline(start: Vertex[], dx: number, dy: number, gridDelta: Vertex, altKey: boolean): Vertex {
+		const moved = start.map(([x, y]) => [x + dx, y + dy] as Vertex);
+		const hit = snapTranslationToOutline(moved, outline, outlineTolerance(altKey));
+		outlineGuide = hit ? { edges: hit.edges, corner: null } : NO_OUTLINE_GUIDE;
+		if (!hit) return gridDelta;
+		if (hit.x) pendingGuides = pendingGuides.filter((g) => g.axis !== 'x');
+		if (hit.y) pendingGuides = pendingGuides.filter((g) => g.axis !== 'y');
+		return [hit.x ? dx + hit.offset[0] : gridDelta[0], hit.y ? dy + hit.offset[1] : gridDelta[1]];
+	}
 
 	/**
 	 * Pull `p` onto any other corner's x and/or y that the RAW pointer position is
@@ -496,7 +541,7 @@
 	function alignToCorners(p: Vertex, raw: Vertex, exclude: number[], lock: 'x' | 'y' | null, altKey: boolean): Vertex {
 		guides = [...pendingGuides];
 		if (altKey) return p;
-		const tol = snapPx * GUIDE_TOLERANCE_PX;
+		const tol = px * GUIDE_TOLERANCE_PX;
 		let [x, y] = p;
 		let bestX: Vertex | null = null;
 		let bestY: Vertex | null = null;
@@ -517,6 +562,8 @@
 		const raw = pointerToRoom(event);
 		const last = draft[draft.length - 1];
 		const exclude = [draft.length - 1];
+		const onOutline = snapToOutline(raw, event.altKey);
+		if (onOutline) return onOutline;
 		if (!last) {
 			// The first corner snaps quietly: a guideline means nothing until there is
 			// something to line up with.
@@ -875,8 +922,7 @@
 			const dy = p[1] - drag.startPointer[1];
 			const first = drag.startDraft[0];
 			const snapped = snapPoint([first[0] + dx, first[1] + dy], event.altKey);
-			const ddx = snapped[0] - first[0];
-			const ddy = snapped[1] - first[1];
+			const [ddx, ddy] = translateWithOutline(drag.startDraft, dx, dy, [snapped[0] - first[0], snapped[1] - first[1]], event.altKey);
 			guides = [...pendingGuides];
 			draft = drag.startDraft.map(([x, y]) => [Math.round((x + ddx) * 1e6) / 1e6, Math.round((y + ddy) * 1e6) / 1e6] as Vertex);
 			return;
@@ -886,7 +932,7 @@
 			const prev = next[(drag.index - 1 + next.length) % next.length];
 			let target: Vertex = p;
 			if (event.shiftKey && prev) target = constrain(prev, p);
-			next[drag.index] = alignToCorners(snapPoint(target, event.altKey), target, [drag.index], null, event.altKey);
+			next[drag.index] = snapToOutline(target, event.altKey) ?? alignToCorners(snapPoint(target, event.altKey), target, [drag.index], null, event.altKey);
 			draft = next;
 		} else {
 			// Slide the whole edge by the pointer delta (both endpoints move together)
@@ -895,8 +941,17 @@
 			const next = drag.startDraft.map((v) => [v[0], v[1]] as Vertex);
 			const i = drag.index;
 			const j = (i + 1) % next.length;
-			const a = snapPoint([next[i][0] + dx, next[i][1] + dy], event.altKey);
-			const b = snapPoint([next[j][0] + dx, next[j][1] + dy], event.altKey);
+			let a = snapPoint([next[i][0] + dx, next[i][1] + dy], event.altKey);
+			let b = snapPoint([next[j][0] + dx, next[j][1] + dy], event.altKey);
+			// Flush to a wall on the axes the outline decides
+			const hit = snapTranslationToOutline([[next[i][0] + dx, next[i][1] + dy], [next[j][0] + dx, next[j][1] + dy]], outline, outlineTolerance(event.altKey));
+			outlineGuide = hit ? { edges: hit.edges, corner: null } : NO_OUTLINE_GUIDE;
+			if (hit) {
+				const ox = dx + hit.offset[0], oy = dy + hit.offset[1];
+				const exact = (v: number) => Math.round(v * 1e6) / 1e6;
+				if (hit.x) { a = [exact(next[i][0] + ox), a[1]]; b = [exact(next[j][0] + ox), b[1]]; }
+				if (hit.y) { a = [a[0], exact(next[i][1] + oy)]; b = [b[0], exact(next[j][1] + oy)]; }
+			}
 			next[i] = a;
 			next[j] = b;
 			draft = next;
@@ -952,6 +1007,7 @@
 		pan = null;
 		hostDragging = false;
 		guides = [];
+		outlineGuide = NO_OUTLINE_GUIDE;
 		onHostPointerUp?.();
 	}
 
@@ -960,6 +1016,7 @@
 		if (tool === 'draw') cursor = null;
 		if (tool === 'custom') onCustomLeave?.();
 		guides = [];
+		if (!drag) outlineGuide = NO_OUTLINE_GUIDE;
 	}
 
 	// --- Keyboard ---
@@ -1179,6 +1236,19 @@
 			<line x1={gridLo.x} y1={-g.value} x2={gridHi.x} y2={-g.value} class="guide" stroke-width={px} stroke-dasharray="{px * 4} {px * 3}" />
 		{/if}
 	{/each}
+
+	<!-- The room outline's wall or corner a shape just snapped to -->
+	{#if outline && outline.length >= 3 && (drag || drawing)}
+		{#each outlineGuide.edges as e (e)}
+			{@const a = toSvg(outline[e][0], outline[e][1])}
+			{@const b = toSvg(outline[(e + 1) % outline.length][0], outline[(e + 1) % outline.length][1])}
+			<line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} class="guide outline-guide" stroke-width={px * 2} />
+		{/each}
+		{#if outlineGuide.corner !== null && outline[outlineGuide.corner]}
+			{@const c = toSvg(outline[outlineGuide.corner][0], outline[outlineGuide.corner][1])}
+			<circle cx={c[0]} cy={c[1]} r={handleR * 1.4} class="guide outline-guide corner" stroke-width={px * 2} />
+		{/if}
+	{/if}
 
 	<!-- Outline (closed polygon in edit mode, open polyline while drawing) -->
 	{#if draft.length >= 3 && !drawing}
@@ -1649,5 +1719,11 @@
 		stroke: var(--color-highlight);
 		stroke-opacity: 0.55;
 		pointer-events: none;
+	}
+	/* The outline wall or corner a shape snapped to: cyan */
+	.guide.outline-guide {
+		stroke: var(--color-scene-selected);
+		stroke-opacity: 0.9;
+		fill: none;
 	}
 </style>
