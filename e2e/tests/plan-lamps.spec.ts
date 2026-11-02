@@ -69,12 +69,12 @@ test.describe('Lamps on the plan', () => {
     const open = part.locator('.editor-row.open');
     const firstId = await open.getAttribute('data-id');
 
-    await open.locator('.item-actions').getByRole('button', { name: 'Copy', exact: true }).click();
+    await open.getByRole('button', { name: 'Copy (Ctrl+D)' }).click();
     await expect(lampRows).toHaveCount(2);
     await expect(open).not.toHaveAttribute('data-id', firstId!);
     await waitForApiIdle(page);
 
-    await open.locator('.item-actions').getByRole('button', { name: 'Delete', exact: true }).click();
+    await open.getByRole('button', { name: 'Delete (Del)' }).click();
     await expect(lampRows).toHaveCount(1);
     await waitForApiIdle(page);
 

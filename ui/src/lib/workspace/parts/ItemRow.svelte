@@ -3,6 +3,7 @@
 	// pencil once the row is open), and the eye and calculator toggles. The open
 	// row shows its editor beneath, passed in as children.
 	import type { Snippet } from 'svelte';
+	import Glyph from '$lib/workspace/Glyph.svelte';
 
 	interface Props {
 		id: string;
@@ -23,6 +24,11 @@
 		onToggleHidden: () => void;
 		/** Without it the row has no calculation toggle (ceiling items). */
 		onToggleEnabled?: () => void;
+		/** Without them the row has no copy / delete icons (standard zones). */
+		onCopy?: () => void;
+		onDelete?: () => void;
+		copyDisabled?: boolean;
+		deleteDisabled?: boolean;
 		/** The pointer entered (true) or left (false) the row. */
 		onHover?: (hovered: boolean) => void;
 		/** Wavelength dot or type icon. */
@@ -31,7 +37,7 @@
 		children?: Snippet;
 	}
 
-	let { id, name, subtitle, italicSubtitle = false, renamable = true, open, selected = false, hidden, enabled = true, onToggleOpen, onRename, onToggleHidden, onToggleEnabled, onHover, lead, children }: Props = $props();
+	let { id, name, subtitle, italicSubtitle = false, renamable = true, open, selected = false, hidden, enabled = true, onToggleOpen, onRename, onToggleHidden, onToggleEnabled, onCopy, onDelete, copyDisabled = false, deleteDisabled = false, onHover, lead, children }: Props = $props();
 
 	const label = $derived(name || id);
 
@@ -145,6 +151,16 @@
 			</svg>
 		</button>
 		{/if}
+		{#if onCopy}
+			<button type="button" class="icon-toggle pressed" disabled={copyDisabled} onclick={(e) => { e.stopPropagation(); if (!copyDisabled) onCopy(); }} aria-label="Copy (Ctrl+D)" title="Copy (Ctrl+D)">
+				<Glyph name="copy" size={12} />
+			</button>
+		{/if}
+		{#if onDelete}
+			<button type="button" class="icon-toggle pressed" disabled={deleteDisabled} onclick={(e) => { e.stopPropagation(); if (!deleteDisabled) onDelete(); }} aria-label="Delete (Del)" title="Delete (Del)">
+				<Glyph name="trash" size={12} />
+			</button>
+		{/if}
 	</div>
 	{#if open && children}
 		<div class="row-body">{@render children()}</div>
@@ -257,6 +273,11 @@
 	}
 	.icon-toggle:not(.pressed) {
 		opacity: 0.55;
+	}
+	.icon-toggle:disabled {
+		opacity: 0.4;
+		cursor: default;
+		pointer-events: none;
 	}
 	.row-body {
 		display: flex;

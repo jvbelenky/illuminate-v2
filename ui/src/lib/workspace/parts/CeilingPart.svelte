@@ -4,7 +4,6 @@
 	// The open item's fields show directly in its row.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
-	import ItemActions from './ItemActions.svelte';
 	import ShapeGeometryFields from './ShapeGeometryFields.svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import type { ReferenceMode } from './shapeGeometry';
@@ -187,6 +186,10 @@
 				onToggleOpen={() => toggleOpen(it, open)}
 				onRename={(name) => ctl.actions.updateCeilingItem(it.id, { name })}
 				onToggleHidden={() => ctl.actions.updateCeilingItem(it.id, { hidden: !it.hidden })}
+				onCopy={() => copyItem(it.id)}
+				onDelete={() => deleteItem(it.id)}
+				copyDisabled={ctl.drawing || ctl.ceilingFull}
+				deleteDisabled={ctl.drawing}
 			>
 				{#snippet lead()}
 					<span class="cp-lead" class:keep={it.kind === 'keep'}><CeilingIcon kind={it.kind} size={14} /></span>
@@ -212,7 +215,6 @@
 						</label>
 					</div>
 				{/if}
-				<ItemActions onCopy={() => copyItem(it.id)} onDelete={() => deleteItem(it.id)} disabled={ctl.drawing} copyDisabled={ctl.ceilingFull} />
 			</ItemRow>
 		{/each}
 	</div>

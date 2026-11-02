@@ -62,13 +62,13 @@ test.describe('Calc zones in the workspace', () => {
     await expect(userZoneRows(page)).toHaveCount(1);
     const open = page.locator('.zones-part .editor-row.open');
     const firstId = await open.getAttribute('data-id');
-    await open.locator('.item-actions').getByRole('button', { name: 'Copy', exact: true }).click();
+    await open.getByRole('button', { name: 'Copy (Ctrl+D)' }).click();
     await expect.poll(() => zoneCount(page)).toBe(2);
     await expect(open).not.toHaveAttribute('data-id', firstId!);
     await waitForApiIdle(page);
     expect((await backendZones(page)).filter((z) => !z.is_standard && z.type === 'point')).toHaveLength(2);
 
-    await open.locator('.item-actions').getByRole('button', { name: 'Delete', exact: true }).click();
+    await open.getByRole('button', { name: 'Delete (Del)' }).click();
     await expect.poll(() => zoneCount(page)).toBe(1);
     await waitForApiIdle(page);
     expect((await backendZones(page)).filter((z) => !z.is_standard && z.type === 'point')).toHaveLength(1);

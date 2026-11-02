@@ -1,10 +1,9 @@
 <script lang="ts">
 	// Room › Structures: the structures (scene objects) in the room. "+ Add structure" drops a
 	// default box and opens it; the open row carries the shape line (Draw footprint,
-	// Edit corners), the editor panel, and Copy / Delete at its foot.
+	// Edit corners), the editor panel.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
-	import ItemActions from './ItemActions.svelte';
 	import Glyph from '$lib/workspace/Glyph.svelte';
 	import type { Snippet } from 'svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
@@ -65,6 +64,10 @@
 				onToggleHidden={() => ctl.actions.setHidden('objects', o.id, !scene.hidden.objects.has(o.id))}
 				onToggleEnabled={() => ctl.actions.updateObstacle(o.id, { enabled: !(o.enabled !== false) })}
 				onHover={(on) => ctl.hoverItem('objects', o.id, on)}
+				onCopy={() => copy(o.id)}
+				onDelete={() => remove(o.id)}
+				copyDisabled={ctl.drawing}
+				deleteDisabled={ctl.drawing}
 			>
 				{#snippet lead()}
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9z" /><path d="M3 7.5 12 12l9-4.5M12 12v9" /></svg>
@@ -77,7 +80,6 @@
 					</div>
 				</div>
 				{#if objectPanel}{@render objectPanel(o)}{/if}
-				<ItemActions onCopy={() => copy(o.id)} onDelete={() => remove(o.id)} disabled={ctl.drawing} />
 			</ItemRow>
 		{/each}
 	</div>

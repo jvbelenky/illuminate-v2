@@ -3,7 +3,6 @@
 	// away (a checkbox and, while on, their rows). The open zone carries its editor.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
-	import ItemActions from './ItemActions.svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import { untrack, type Snippet } from 'svelte';
@@ -126,13 +125,16 @@
 				enabled={z.enabled !== false}
 				onToggleOpen={() => ctl.selectZone(open ? null : z.id)}
 				onRename={(name) => ctl.actions.updateZone(z.id, { name })}
+				onCopy={() => copyZone(z.id)}
+				onDelete={() => deleteZone(z.id)}
+				copyDisabled={ctl.drawing || ctl.placing}
+				deleteDisabled={ctl.drawing || ctl.placing}
 				onToggleHidden={() => ctl.actions.setHidden('zones', z.id, !hiddenZone(z))}
 				onToggleEnabled={() => ctl.actions.updateZone(z.id, { enabled: !(z.enabled !== false) })}
 				onHover={(on) => ctl.hoverItem('zones', z.id, on)}
 			>
 				{#snippet lead()}<CalcTypeIllustration type={iconOf(z)} size={16} />{/snippet}
 				{#if zonePanel}{@render zonePanel(z, deselect)}{/if}
-				<ItemActions onCopy={() => copyZone(z.id)} onDelete={() => deleteZone(z.id)} disabled={ctl.drawing || ctl.placing} />
 			</ItemRow>
 		{/each}
 	</div>
