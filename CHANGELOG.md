@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Copy and Delete on lamps, structures, zones and ceiling items are small icons in the row header beside the eye and calculator toggles, not buttons at the foot of the editor (standard zones have neither)
 - 2D plan: double-click a wall or its length label to type its length (room outline, structure and zone footprints, ceiling keep-out areas). Enter or clicking away applies, Escape cancels; a plain number is in the current units, or add m, cm, mm, ft, in, ' or " (5'6" works). The wall's far corner and the next corner move along it, so the next wall keeps its angle and length; a length that would make the shape cross itself stays open in red. Double-clicking a ceiling keep-out area's edge no longer adds a corner (its "+" handles do)
 - Structures and ceiling keep-out areas: the Reference select is now a small glyph of the shape with five targets, its four corners and its centre (the chosen one filled cyan); X/Y show that point and Width or Length changes keep it fixed. The glyph is in the shape's own frame, so it does not turn with Rotation
 - Item row eye and calculator toggles in the editor no longer use red outlines: off is dimmed, hover uses the shared fill, focus shows the cyan ring.

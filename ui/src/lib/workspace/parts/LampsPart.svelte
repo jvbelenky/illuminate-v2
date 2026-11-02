@@ -3,7 +3,6 @@
 	// exactly one lamp selected, its row opens onto the lamp editor.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
-	import ItemActions from './ItemActions.svelte';
 	import PlacementPictogram from './PlacementPictogram.svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import type { Snippet } from 'svelte';
@@ -122,12 +121,13 @@
 				onToggleHidden={() => ctl.actions.setHidden('lamps', l.id, !scene.hidden.lamps.has(l.id))}
 				onToggleEnabled={() => ctl.actions.updateLamp(l.id, { enabled: !(l.enabled !== false) })}
 				onHover={(on) => ctl.hoverItem('lamps', l.id, on)}
+				onCopy={() => copyLamp(l.id)}
+				onDelete={() => deleteLamp(l.id)}
 			>
 				{#snippet lead()}
 					<span class="dot" style:background={l.enabled === false ? DISABLED_COLOR : lampColor(l)} title={wavelengthTitle(l)} role="img" aria-label={wavelengthTitle(l)}></span>
 				{/snippet}
 				{#if lampPanel}{@render lampPanel(l, () => ctl.selectLamp(null))}{/if}
-				<ItemActions onCopy={() => copyLamp(l.id)} onDelete={() => deleteLamp(l.id)} />
 			</ItemRow>
 		{/each}
 	</div>

@@ -753,15 +753,15 @@ describe('Shape geometry fields', () => {
   });
 });
 
-/** The open row's Copy / Delete footer. */
+/** The row header's Copy / Delete icons. */
 function rowActions(id: string) {
-  const el = row(id).querySelector('.item-actions') as HTMLElement;
+  const el = row(id).querySelector('.row-head') as HTMLElement;
   expect(el).not.toBeNull();
   return within(el);
 }
 
 describe('Copy and Delete in every item editor', () => {
-  it('a structure: the shape line with Draw footprint and Edit corners, then Copy and Delete at the foot', async () => {
+  it('a structure: the shape line with Draw footprint and Edit corners; Copy and Delete are row icons', async () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'structures', calls, objects: [box] });
     await fireEvent.click(main('object-9'));
@@ -770,11 +770,11 @@ describe('Copy and Delete in every item editor', () => {
     const draw = within(r).getByRole('button', { name: 'Draw footprint' });
     const corners = within(r).getByRole('button', { name: 'Edit corners' });
     expect(draw.getAttribute('aria-pressed')).toBe('false');
-    // Copy and Delete come after the editor panel
-    const panel = r.querySelector('.stub-object-panel') as HTMLElement;
-    expect(panel.compareDocumentPosition(r.querySelector('.item-actions')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(rowActions('object-9').getByRole('button', { name: 'Copy' })).toBeTruthy();
-    expect(rowActions('object-9').getByRole('button', { name: 'Delete' })).toBeTruthy();
+    // Copy and Delete are icons in the row header, not in the editor
+    expect(r.querySelector('.row-body .structure-shape')).not.toBeNull();
+    expect(r.querySelector('.row-body')!.textContent).not.toMatch(/Copy|Delete/);
+    expect(rowActions('object-9').getByRole('button', { name: 'Copy (Ctrl+D)' })).toBeTruthy();
+    expect(rowActions('object-9').getByRole('button', { name: 'Delete (Del)' })).toBeTruthy();
     // Draw footprint arms drawing for this structure and shows pressed
     await fireEvent.click(draw);
     await tick();
@@ -819,12 +819,12 @@ describe('Copy and Delete in every item editor', () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'structures', calls, objects: [box] });
     await fireEvent.click(main('object-9'));
-    await fireEvent.click(rowActions('object-9').getByRole('button', { name: 'Copy' }));
+    await fireEvent.click(rowActions('object-9').getByRole('button', { name: 'Copy (Ctrl+D)' }));
     await tick();
     expect(callsOf(calls, 'addObstacle')).toHaveLength(1);
     expect(ctl.selectedId).toBe('object-1');
     expect(row('object-1').classList.contains('open')).toBe(true);
-    await fireEvent.click(rowActions('object-1').getByRole('button', { name: 'Delete' }));
+    await fireEvent.click(rowActions('object-1').getByRole('button', { name: 'Delete (Del)' }));
     await tick();
     expect(callsOf(calls, 'removeObstacle')).toEqual([['removeObstacle', 'object-1']]);
     expect(row('object-1')).toBeNull();
@@ -835,16 +835,15 @@ describe('Copy and Delete in every item editor', () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'lamps', calls, lamps: [{ ...lamp, id: 'a', name: 'A' }] });
     await fireEvent.click(main('a'));
-    const panel = row('a').querySelector('.stub-lamp-panel') as HTMLElement;
-    expect(panel.compareDocumentPosition(row('a').querySelector('.item-actions')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await fireEvent.click(rowActions('a').getByRole('button', { name: 'Copy' }));
+    expect(rowActions('a').getByRole('button', { name: 'Copy (Ctrl+D)' }).getAttribute('title')).toBe('Copy (Ctrl+D)');
+    await fireEvent.click(rowActions('a').getByRole('button', { name: 'Copy (Ctrl+D)' }));
     await tick();
     expect(callsOf(calls, 'copyLamps')).toHaveLength(1);
     expect((callsOf(calls, 'copyLamps')[0][1] as string[])).toEqual(['a']);
     const copyId = ctl.selectedLampId!;
     expect(copyId).not.toBe('a');
     expect(row(copyId).classList.contains('open')).toBe(true);
-    await fireEvent.click(rowActions(copyId).getByRole('button', { name: 'Delete' }));
+    await fireEvent.click(rowActions(copyId).getByRole('button', { name: 'Delete (Del)' }));
     await tick();
     expect(callsOf(calls, 'removeLamp')).toEqual([['removeLamp', copyId]]);
     expect(row(copyId)).toBeNull();
@@ -854,13 +853,13 @@ describe('Copy and Delete in every item editor', () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'zones', calls, zones: [standard, wholePlane] });
     await fireEvent.click(main('zone-9'));
-    await fireEvent.click(rowActions('zone-9').getByRole('button', { name: 'Copy' }));
+    await fireEvent.click(rowActions('zone-9').getByRole('button', { name: 'Copy (Ctrl+D)' }));
     await tick();
     expect(callsOf(calls, 'copyZone')).toHaveLength(1);
     const copyId = ctl.selectedZoneId!;
     expect(copyId).not.toBe('zone-9');
     expect(row(copyId).classList.contains('open')).toBe(true);
-    await fireEvent.click(rowActions(copyId).getByRole('button', { name: 'Delete' }));
+    await fireEvent.click(rowActions(copyId).getByRole('button', { name: 'Delete (Del)' }));
     await tick();
     expect(callsOf(calls, 'removeZone')).toEqual([['removeZone', copyId]]);
     expect(row(copyId)).toBeNull();
@@ -868,7 +867,7 @@ describe('Copy and Delete in every item editor', () => {
     await tick();
     await tick();
     expect(row('WholeRoomFluence').classList.contains('open')).toBe(true);
-    expect(row('WholeRoomFluence').querySelector('.item-actions')).toBeNull();
+    expect(within(row('WholeRoomFluence')).queryByRole('button', { name: /^(Copy|Delete)/ })).toBeNull();
   });
 
   it('a ceiling item: Copy copies it and opens the copy; Delete removes it', async () => {
@@ -877,13 +876,13 @@ describe('Copy and Delete in every item editor', () => {
     const ceiling = { tileSize: 'none' as const, align: 'tl' as const, offset: [0, 0] as [number, number], ceilingShown: true, tilesShown: true, itemsShown: true, items: [detector] };
     const { ctl } = mount({ part: 'ceiling', calls, ceiling });
     await fireEvent.click(main('ceiling-1'));
-    await fireEvent.click(rowActions('ceiling-1').getByRole('button', { name: 'Copy' }));
+    await fireEvent.click(rowActions('ceiling-1').getByRole('button', { name: 'Copy (Ctrl+D)' }));
     await tick();
     expect(callsOf(calls, 'copyCeilingItem')).toEqual([['copyCeilingItem', 'ceiling-1']]);
     const copyId = ctl.selectedCeilingId!;
     expect(copyId).not.toBe('ceiling-1');
     expect(row(copyId).classList.contains('open')).toBe(true);
-    await fireEvent.click(rowActions(copyId).getByRole('button', { name: 'Delete' }));
+    await fireEvent.click(rowActions(copyId).getByRole('button', { name: 'Delete (Del)' }));
     await tick();
     expect(callsOf(calls, 'removeCeilingItem')).toEqual([['removeCeilingItem', copyId]]);
     expect(row(copyId)).toBeNull();

@@ -214,8 +214,8 @@ test.describe('Objects (obstacles)', () => {
   test("the structure editor's Copy opens the copy, Delete removes it, and undo brings it back", async ({ page }) => {
     await addObject(page);
     await setObjectField(page, 'top', 1.5);
-    const actions = page.locator('.structures-part .editor-row.open .item-actions');
-    await actions.getByRole('button', { name: 'Copy', exact: true }).click();
+    const actions = page.locator('.structures-part .editor-row.open');
+    await actions.getByRole('button', { name: 'Copy (Ctrl+D)' }).click();
     await expect.poll(() => objectCount(page)).toBe(2);
     await waitForApiIdle(page);
     const backend = await getObjectsFromBackend(page);
@@ -224,7 +224,7 @@ test.describe('Objects (obstacles)', () => {
     // The copy is the open item
     await expect(page.locator('.structures-part .editor-row.open')).toHaveAttribute('data-id', 'object-2');
 
-    await actions.getByRole('button', { name: 'Delete', exact: true }).click();
+    await actions.getByRole('button', { name: 'Delete (Del)' }).click();
     await expect.poll(() => objectCount(page)).toBe(1);
     await waitForApiIdle(page);
     expect((await getObjectsFromBackend(page)).map((o) => o.id)).toEqual(['object-1']);
