@@ -8,6 +8,7 @@
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import type { ReferenceMode } from './shapeGeometry';
 	import CeilingIcon from '$lib/ceiling/CeilingIcon.svelte';
+	import Glyph from '$lib/workspace/Glyph.svelte';
 	import { keepOutEditAllowed, pointMoveAllowed, type CeilingItem, type CeilingKind, type CeilingPointItem, type TileAlign, type TileSize } from '$lib/ceiling/ceilingLayout';
 	import type { Vertex } from '$lib/utils/roomGeometry';
 	import { roundToUnit, unitAbbrev } from '$lib/utils/unitConversion';
@@ -195,6 +196,12 @@
 					<span class="cp-lead" class:keep={it.kind === 'keep'}><CeilingIcon kind={it.kind} size={14} /></span>
 				{/snippet}
 				{#if it.kind === 'keep'}
+					{@const redrawing = ctl.drawing && ctl.redrawKeepOutId === it.id}
+					{@const cornering = open && ctl.shapeMode === 'corners'}
+					<div class="shape-tools">
+						<button type="button" class="secondary plan-btn" class:active={redrawing} aria-pressed={redrawing} disabled={!!it.hidden} onclick={() => ctl.startKeepOutDraw('polygon', it.id)}><Glyph name="pen" size={16} /><span>Redraw footprint</span></button>
+						<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing || !!it.hidden} onclick={() => ctl.editKeepOutCorners(it.id)}><Glyph name="corners" size={16} /><span>Edit corners</span></button>
+					</div>
 					<ShapeGeometryFields
 						vertices={it.vertices}
 						yaw={it.yaw}

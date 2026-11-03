@@ -762,13 +762,13 @@ function rowActions(id: string) {
 }
 
 describe('Copy and Delete in every item editor', () => {
-  it('a structure: the shape line with Draw footprint and Edit corners; Copy and Delete are row icons', async () => {
+  it('a structure: the shape line with Redraw footprint and Edit corners; Copy and Delete are row icons', async () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'structures', calls, objects: [box] });
     await fireEvent.click(main('object-9'));
     const r = row('object-9');
-    expect(r.querySelector('.structure-shape')?.textContent).toMatch(/Box/);
-    const draw = within(r).getByRole('button', { name: 'Draw footprint' });
+    expect(r.querySelector('.structure-shape')?.textContent).toMatch(/Rectangle/);
+    const draw = within(r).getByRole('button', { name: 'Redraw footprint' });
     const corners = within(r).getByRole('button', { name: 'Edit corners' });
     expect(draw.getAttribute('aria-pressed')).toBe('false');
     // Copy and Delete are icons in the row header, not in the editor
@@ -776,19 +776,42 @@ describe('Copy and Delete in every item editor', () => {
     expect(r.querySelector('.row-body')!.textContent).not.toMatch(/Copy|Delete/);
     expect(rowActions('object-9').getByRole('button', { name: 'Copy (Ctrl+D)' })).toBeTruthy();
     expect(rowActions('object-9').getByRole('button', { name: 'Delete (Del)' })).toBeTruthy();
-    // Draw footprint arms drawing for this structure and shows pressed
+    // Redraw footprint arms a polygon drawing for this structure and shows pressed
     await fireEvent.click(draw);
     await tick();
     expect(ctl.drawing).toBe(true);
+    expect(ctl.drawShape).toBe('polygon');
     expect(ctl.redrawObstacleId).toBe('object-9');
-    expect(within(row('object-9')).getByRole('button', { name: 'Draw footprint' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(row('object-9')).getByRole('button', { name: 'Redraw footprint' }).getAttribute('aria-pressed')).toBe('true');
     ctl.cancelDraw();
     await tick();
     expect(ctl.drawing).toBe(false);
-    // Edit corners arms the corner tool
+    // Edit corners is a toggle: pressed while the corners are edited
     await fireEvent.click(corners);
-    expect(ctl.activeTool).toBe('corners');
+    await tick();
+    expect(ctl.shapeMode).toBe('corners');
     expect(within(row('object-9')).getByRole('button', { name: 'Edit corners' }).getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(within(row('object-9')).getByRole('button', { name: 'Edit corners' }));
+    await tick();
+    expect(ctl.shapeMode).toBe('select');
+    expect(ctl.selectedId).toBe('object-9');
+    expect(within(row('object-9')).getByRole('button', { name: 'Edit corners' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it("a keep-out area's editor: Redraw footprint and Edit corners", async () => {
+    const keep = { id: 'ceiling-2', kind: 'keep' as const, name: 'Duct', vertices: [[1, 1], [3, 1], [3, 2], [1, 2]] as [number, number][], yaw: 0 };
+    const { ctl } = mount({ part: 'ceiling', ceiling: { tileSize: 'none', align: 'tl', offset: [0, 0], ceilingShown: true, tilesShown: true, itemsShown: true, items: [keep] } });
+    ctl.selectCeilingItem('ceiling-2');
+    await tick();
+    const r = row('ceiling-2');
+    await fireEvent.click(within(r).getByRole('button', { name: 'Edit corners' }));
+    await tick();
+    expect(ctl.shapeMode).toBe('corners');
+    expect(within(row('ceiling-2')).getByRole('button', { name: 'Edit corners' }).getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(within(row('ceiling-2')).getByRole('button', { name: 'Redraw footprint' }));
+    await tick();
+    expect(ctl.drawing).toBe(true);
+    expect(ctl.redrawKeepOutId).toBe('ceiling-2');
   });
 
   it('a polygon structure reads Polygon, N corners', async () => {
@@ -798,12 +821,12 @@ describe('Copy and Delete in every item editor', () => {
     expect(row('object-9').querySelector('.structure-shape')?.textContent).toMatch(/Polygon, 5 corners/);
   });
 
-  it('a structure: a finished Draw footprint replaces its footprint', async () => {
+  it('a structure: a finished Redraw footprint replaces its footprint', async () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'structures', calls, objects: [box] });
     await fireEvent.click(main('object-9'));
-    await fireEvent.click(within(row('object-9')).getByRole('button', { name: 'Draw footprint' }));
-    ctl.draft = [[1, 1], [4, 1], [4, 3], [1, 3]];
+    await fireEvent.click(within(row('object-9')).getByRole('button', { name: 'Redraw footprint' }));
+    ctl.draft = [[1, 1], [4, 1], [4, 2], [2, 3], [1, 3]];
     ctl.drawing = false;
     await ctl.onDrawEnd(true);
     await tick();
@@ -811,9 +834,9 @@ describe('Copy and Delete in every item editor', () => {
     const updates = callsOf(calls, 'updateObstacle');
     expect(updates).toHaveLength(1);
     expect(updates[0][1]).toBe('object-9');
-    expect(updates[0][2]).toMatchObject({ shape: 'extrusion', x: 2.5, y: 2, yaw: 0 });
+    expect(updates[0][2]).toMatchObject({ shape: 'extrusion', yaw: 0 });
     await tick();
-    expect(row('object-9').querySelector('.structure-shape')?.textContent).toMatch(/Polygon, 4 corners/);
+    expect(row('object-9').querySelector('.structure-shape')?.textContent).toMatch(/Polygon, 5 corners/);
   });
 
   it('a structure: Copy duplicates it and opens the copy; Delete removes it', async () => {

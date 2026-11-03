@@ -43,7 +43,7 @@ const volume: CalcZone = {
 const point: CalcZone = { id: 'zone-5', name: 'Pt', type: 'point', x: 2, y: 3, z: 1.8, aim_x: 2, aim_y: 4, aim_z: 1.8 };
 
 function fakeController(extra: Partial<PlanController> = {}) {
-  return { surface: 'floor', drawing: false, drawKind: null, startZoneDraw: vi.fn(), setSurface: vi.fn(), selectZone: vi.fn(), ...extra } as unknown as PlanController;
+  return { surface: 'floor', drawing: false, drawKind: null, startZoneDraw: vi.fn(), editZoneCorners: vi.fn(), setSurface: vi.fn(), selectZone: vi.fn(), ...extra } as unknown as PlanController;
 }
 
 function renderPanel(zone: CalcZone, opts: { isStandard?: boolean; controller?: PlanController } = {}) {
@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe('ZonePanel', () => {
-  it('plane on floor shows Height and Flip, Draw outline, Fit to room, and folded Geometry, Grid points and Display', async () => {
+  it('plane on floor shows Height and Flip, Redraw outline and Edit corners, Fit to room, and folded Geometry, Grid points and Display', async () => {
     const { container, spy, controller } = renderPanel(floorPlane);
     expect(container.querySelector('.zone-panel')).not.toBeNull();
     expect(calcType()).toBeTruthy();
@@ -77,8 +77,10 @@ describe('ZonePanel', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Flip' }));
     expect(spy).toHaveBeenLastCalledWith('zone-1', { direction: -1 });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Redraw outline' }));
     expect(controller.startZoneDraw).toHaveBeenCalledWith('plane');
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit corners' }));
+    expect(controller.editZoneCorners).toHaveBeenCalledWith('zone-1');
 
     // Fit to room is a switch: off keeps the geometry as explicit bounds
     const fit = screen.getByRole('switch', { name: 'Fit to room' }) as HTMLInputElement;
@@ -154,7 +156,7 @@ describe('ZonePanel', () => {
     const { spy } = renderPanel(ceilingPlane, { controller: fakeController({ surface: 'ceiling' }) });
     const below = screen.getByLabelText(/^Below ceiling/) as HTMLInputElement;
     expect(parseFloat(below.value)).toBeCloseTo(0.3, 6);
-    expect(screen.getByRole('button', { name: 'Draw outline' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Redraw outline' })).toBeTruthy();
     await fireEvent.change(below, { target: { value: '0.5' } });
     const [id, partial] = spy.mock.calls.at(-1)!;
     expect(id).toBe('zone-2');
@@ -173,7 +175,7 @@ describe('ZonePanel', () => {
     expect(spy).toHaveBeenLastCalledWith('zone-3', { normal_offset: 0.6 });
     await fireEvent.click(screen.getByRole('button', { name: 'Flip' }));
     expect(spy).toHaveBeenLastCalledWith('zone-3', { flip: true });
-    expect(screen.getByRole('button', { name: 'Draw outline' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Redraw outline' })).toBeTruthy();
     const fit = screen.getByRole('switch', { name: 'Fit to wall' }) as HTMLInputElement;
     expect(fit.checked).toBe(true);
     await fireEvent.click(fit);
@@ -214,7 +216,7 @@ describe('ZonePanel', () => {
     expect(parseFloat(top.value)).toBe(2.7);
     await fireEvent.change(top, { target: { value: '2' } });
     expect(spy).toHaveBeenLastCalledWith('zone-4', { z_min: 0, z_max: 2 });
-    await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Redraw outline' }));
     expect(controller.startZoneDraw).toHaveBeenCalledWith('volume');
     const fit = screen.getByRole('switch', { name: 'Fit to room' }) as HTMLInputElement;
     expect(fit.checked).toBe(true);
@@ -270,7 +272,7 @@ describe('ZonePanel', () => {
     expect(fold('Grid points').getAttribute('aria-expanded')).toBe('true');
     expect(screen.queryByRole('group', { name: 'Calculation type' })).toBeNull();
     expect(screen.queryByLabelText(/^Height/)).toBeNull();
-    for (const name of ['Geometry', 'Display', 'Flip', 'Draw outline']) {
+    for (const name of ['Geometry', 'Display', 'Flip', 'Redraw outline', 'Edit corners']) {
       expect(screen.queryByRole('button', { name: new RegExp(`^${name}`) })).toBeNull();
     }
     expect(screen.queryByRole('switch')).toBeNull();

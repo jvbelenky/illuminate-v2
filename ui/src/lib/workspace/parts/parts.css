@@ -295,3 +295,37 @@
 	background: var(--color-btn-fill-hover);
 	border-color: var(--color-text-muted);
 }
+
+/* A shape's tools in its editor (structures, keep-out areas): Redraw and Edit corners
+   side by side, filled; specific enough to beat the editor column's outlined .secondary */
+.ep-part .shape-tools {
+	display: flex;
+	gap: var(--spacing-sm);
+}
+.ep-part .shape-tools button.plan-btn {
+	flex: 1 1 0;
+	min-width: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	margin: 0;
+	padding: 6px 8px;
+	font-size: var(--font-size-sm);
+	font-weight: 500;
+	white-space: nowrap;
+	color: var(--color-text);
+	background: var(--color-btn-fill);
+	border: 1px solid transparent;
+	border-radius: var(--radius-md);
+}
+.ep-part .shape-tools button.plan-btn:hover:not(:disabled) {
+	background: var(--color-btn-fill-hover);
+	border-color: transparent;
+}
+/* Pressed (drawing, or editing corners): the scene's selection colour */
+.ep-part .shape-tools button.plan-btn.active,
+.ep-part .shape-tools button.plan-btn.active:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--color-scene-selected) 22%, var(--color-btn-fill));
+	border-color: var(--color-scene-selected);
+}

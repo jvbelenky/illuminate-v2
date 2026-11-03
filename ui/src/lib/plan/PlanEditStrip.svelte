@@ -3,8 +3,11 @@
 	// sits bottom-left of the main view, also while 3D is main: tools that work
 	// on the 2D canvas bring the 2D view up first; Copy and Delete act on the
 	// selection in either view. On a phone it sits bottom-left of the pinned 2D view, scrolling sideways.
+	// Shapes (structures, zones, keep-out areas) go PowerPoint style: with nothing
+	// selected, Rectangle and Polygon draw a new one; with one selected, Edit
+	// corners, Rotate 90°, Copy and Delete; while its corners are edited, Done.
 	import Glyph, { type GlyphName } from '$lib/workspace/Glyph.svelte';
-	import type { PlanController } from './planController.svelte';
+	import type { DrawShape, PlanController } from './planController.svelte';
 
 	interface Props {
 		controller: PlanController;
@@ -23,12 +26,38 @@
 		title?: string;
 		onclick: () => void;
 		disabled?: boolean;
-		/** A one-shot tool (or Draw): armed until its gesture ends, exposed as aria-pressed. */
+		/** A one-shot tool (or a drawing): armed until its gesture ends, exposed as aria-pressed. */
 		pressed?: boolean;
+		/** The way out of a mode (Done): filled in the selection colour. */
+		primary?: boolean;
 	}
 
 	const COPY = 'Copy (Ctrl+D)';
 	const DELETE = 'Delete (Del)';
+
+	/** Rectangle and Polygon: draw a new shape (again, or Escape, cancels). */
+	function newShapeTools(disabled = false): Tool[] {
+		const draw = (shape: DrawShape, label: string, glyph: GlyphName): Tool => ({
+			label,
+			glyph,
+			onclick: () => ctl.startShapeDraw(shape),
+			disabled: disabled && !ctl.drawing,
+			pressed: ctl.drawing && ctl.drawShape === shape
+		});
+		return [draw('rect', 'Rectangle', 'rect'), draw('polygon', 'Polygon', 'polygon')];
+	}
+	/** A selected shape's tools, or Done while its corners are edited. */
+	function shapeTools(copy: () => void, remove: () => void, disabled = false): Tool[] {
+		if (ctl.shapeMode === 'corners') {
+			return [{ label: 'Done', glyph: 'check', title: 'Done (Esc)', onclick: ctl.endCorners, pressed: true, primary: true }];
+		}
+		return [
+			{ label: 'Edit corners', glyph: 'corners', onclick: () => ctl.inCanvas(ctl.editCorners), disabled },
+			{ label: 'Rotate 90°', glyph: 'rotate', onclick: ctl.rotateSelected90, disabled },
+			{ label: 'Copy', glyph: 'copy', title: COPY, onclick: copy, disabled },
+			{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: remove, disabled }
+		];
+	}
 
 	const tools = $derived.by<Tool[]>(() => {
 		if (ctl.onOutline) {
@@ -42,13 +71,8 @@
 			return list;
 		}
 		if (ctl.onObstacles) {
-			const none = !ctl.selected || ctl.drawing;
-			return [
-				{ label: 'Draw', glyph: 'pen', onclick: () => (ctl.drawing ? ctl.stopObstacleDraw() : ctl.startObstacleDraw()), pressed: ctl.drawing },
-				{ label: 'Edit corners', glyph: 'corners', onclick: () => ctl.inCanvas(() => ctl.toggleTool('corners')), disabled: !ctl.structureCornersEditable || ctl.drawing, pressed: ctl.activeTool === 'corners' },
-				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.duplicateSelected, disabled: none },
-				{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelected, disabled: none }
-			];
+			if (ctl.drawing || !ctl.selected) return newShapeTools();
+			return shapeTools(ctl.duplicateSelected, ctl.deleteSelected);
 		}
 		if (ctl.onLamps) {
 			const none = !lamps.length || !ctl.liveLampIds.length;
@@ -60,21 +84,25 @@
 			];
 		}
 		if (ctl.onCeiling) {
-			if (ctl.selectedCeilingItem) {
+			if (!ctl.drawing && ctl.selectedCeilingItem) {
+				if (ctl.editableKeepOut) return shapeTools(ctl.copySelectedCeilingItem, ctl.deleteSelectedCeilingItem);
 				return [
-					{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.copySelectedCeilingItem, disabled: ctl.drawing },
-					{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelectedCeilingItem, disabled: ctl.drawing }
+					{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.copySelectedCeilingItem },
+					{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelectedCeilingItem }
 				];
 			}
-			return [{ label: 'Move grid', glyph: 'tiles', onclick: () => ctl.inCanvas(() => ctl.toggleTool('grid')), pressed: ctl.activeTool === 'grid' }];
+			const list = newShapeTools(ctl.ceilingFull);
+			if (ctl.tilesActive && !ctl.drawing) {
+				list.push({ label: 'Move grid', glyph: 'tiles', onclick: () => ctl.inCanvas(() => ctl.toggleTool('grid')), pressed: ctl.activeTool === 'grid' });
+			}
+			return list;
 		}
 		if (ctl.onZones) {
-			const none = !ctl.selectedZone || ctl.placing || ctl.drawing;
+			if (ctl.drawing || !ctl.selectedZone) return newShapeTools(ctl.placing);
+			if (ctl.zoneCornersEditable) return shapeTools(ctl.copySelectedZone, ctl.deleteSelectedZone, ctl.placing);
 			return [
-				{ label: 'Draw', glyph: 'pen', onclick: () => (ctl.drawing ? ctl.canvas?.cancelDraw() : ctl.startZoneDraw('plane')), disabled: ctl.placing, pressed: ctl.drawing },
-				{ label: 'Edit corners', glyph: 'corners', onclick: () => ctl.inCanvas(() => ctl.toggleTool('corners')), disabled: !ctl.zoneCornersEditable || ctl.placing || ctl.drawing, pressed: ctl.activeTool === 'corners' },
-				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.copySelectedZone, disabled: none },
-				{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelectedZone, disabled: none }
+				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.copySelectedZone, disabled: ctl.placing },
+				{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelectedZone, disabled: ctl.placing }
 			];
 		}
 		return [];
@@ -87,6 +115,7 @@
 			<button
 				type="button"
 				class="mv-btn tool"
+				class:primary={t.primary}
 				aria-label={t.label}
 				title={t.title ?? t.label}
 				aria-pressed={t.pressed}
@@ -110,6 +139,14 @@
 		background: color-mix(in srgb, var(--color-scene-selected) 22%, transparent);
 		border-color: var(--color-scene-selected);
 		color: var(--color-text);
+	}
+	/* Done: filled in the selection colour, the way back to select mode */
+	.tool.primary,
+	.tool.primary:hover:not(:disabled) {
+		background: var(--color-scene-selected);
+		border-color: var(--color-scene-selected);
+		color: #06202c;
+		font-weight: 600;
 	}
 	.plan-toolbar.compact {
 		flex-wrap: wrap;

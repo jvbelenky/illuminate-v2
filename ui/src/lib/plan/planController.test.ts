@@ -544,24 +544,41 @@ describe('planes on surfaces', () => {
     expect(ctl.zoneCornersEditable).toBe(false);
   });
 
-  test("Edit corners on a zone: one corner edit reshapes it and ends the tool; a zone with no outline drops it", () => {
+  test('a zone is selected in select mode; Edit corners stays on through edits until Esc; a zone with no outline has no box', () => {
     const floorPlane = { id: 'zf', type: 'plane', name: 'F', surface: 'floor', height: 1, fit_room: false, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
     const pt = { id: 'zp', type: 'point', name: 'P', x: 1, y: 1, z: 1, isStandard: false } as unknown as CalcZone;
     const { ctl, actions } = make({ zones: [floorPlane, pt] });
     ctl.setContext('zones');
     ctl.canvas = fakeCanvas();
     ctl.selectZone('zf');
-    ctl.toggleTool('corners');
-    expect(ctl.activeTool).toBe('corners');
-    expect(ctl.toolCursor).toBe('default');
+    expect(ctl.shapeMode).toBe('select');
+    expect(ctl.transformable).toBe(true);
+    ctl.editZoneCorners('zf');
+    expect(ctl.shapeMode).toBe('corners');
+    expect(ctl.transformable).toBe(false);
     ctl.draft = [[0, 0], [3, 0], [3, 2], [0, 2]];
     ctl.onCanvasEdit();
     expect(actions.updateZone).toHaveBeenCalledTimes(1);
     expect(vi.mocked(actions.updateZone).mock.calls[0][1]).toMatchObject({ fit_room: false });
-    expect(ctl.activeTool).toBeNull();
-    ctl.toggleTool('corners');
+    expect(ctl.shapeMode).toBe('corners');
+    expect(ctl.onEscapeKey()).toBe(true);
+    expect(ctl.shapeMode).toBe('select');
+    expect(ctl.selectedZoneId).toBe('zf');
+    ctl.editZoneCorners('zf');
     ctl.selectZone('zp');
-    expect(ctl.activeTool).toBeNull();
+    expect(ctl.shapeMode).toBe('select');
+    expect(ctl.transformable).toBe(false);
+  });
+
+  test('a zone turned by the box keeps no yaw: its corners take the turn', () => {
+    const floorPlane = { id: 'zf', type: 'plane', name: 'F', surface: 'floor', height: 1, fit_room: false, x1: 1, x2: 5, y1: 1, y2: 3, isStandard: false } as unknown as CalcZone;
+    const { ctl, actions } = make({ zones: [floorPlane] });
+    ctl.setContext('zones');
+    ctl.canvas = fakeCanvas();
+    ctl.selectZone('zf');
+    ctl.rotateSelected90();
+    expect(actions.updateZone).toHaveBeenCalledTimes(1);
+    expect(ctl.draftYaw).toBe(0);
   });
 
   test('an orphaned wall plane is drawn on no wall and opens on Floor', () => {
@@ -958,26 +975,146 @@ describe('structure footprint: Draw footprint and Edit corners', () => {
     expect(onNeedCanvas).toHaveBeenCalledTimes(1);
   });
 
-  test('Edit corners arms the corner tool for the selected structure; one edit reshapes it and ends the tool', () => {
+  test('Edit corners toggles the selected structure between select and corners; deselecting goes back to select', () => {
     const { ctl, actions } = make();
     ctl.setContext('obstacles');
     ctl.canvas = drawCanvas(ctl);
     expect(ctl.structureCornersEditable).toBe(false);
+    expect(ctl.shapeSelected).toBe(false);
     ctl.editStructureCorners('object-1');
     expect(ctl.selectedId).toBe('object-1');
-    expect(ctl.structureCornersEditable).toBe(true);
-    expect(ctl.activeTool).toBe('corners');
+    expect(ctl.shapeMode).toBe('corners');
+    expect(ctl.activeTool).toBeNull();
     ctl.draft = [[1, 1], [2.5, 1], [2, 2], [1, 2]];
     ctl.onCanvasEdit();
     expect(actions.updateObstacle).toHaveBeenCalledTimes(1);
-    expect(ctl.activeTool).toBeNull();
-    // Again cancels; deselecting drops it
+    // Corner edits keep the mode
+    expect(ctl.shapeMode).toBe('corners');
+    // Again goes back to select mode, still selected
     ctl.editStructureCorners('object-1');
-    ctl.editStructureCorners('object-1');
-    expect(ctl.activeTool).toBeNull();
+    expect(ctl.shapeMode).toBe('select');
+    expect(ctl.selectedId).toBe('object-1');
     ctl.editStructureCorners('object-1');
     ctl.selectObstacle(null);
-    expect(ctl.activeTool).toBeNull();
+    expect(ctl.shapeMode).toBe('select');
+  });
+
+  test('a structure moved, resized or turned keeps its own frame: footprintUpdate with the box yaw', () => {
+    const turned = { id: 'object-1', name: 'Desk', shape: 'box', x: 2, y: 2, z: 0.2, width: 2, length: 1, height: 0.8, yaw: 30, pitch: 0, roll: 0, enabled: true, reflectance: 0.5, transmittance: 0 } as unknown as SceneObject;
+    const { ctl, actions } = make({ objects: [turned] });
+    ctl.setContext('obstacles');
+    ctl.canvas = drawCanvas(ctl);
+    ctl.selectObstacle('object-1');
+    expect(ctl.draftYaw).toBe(30);
+    expect(ctl.transformable).toBe(true);
+    // Rotate 90°: one update, a quarter more, still a box of the same size
+    ctl.rotateSelected90();
+    expect(actions.updateObstacle).toHaveBeenCalledTimes(1);
+    const [, partial] = vi.mocked(actions.updateObstacle).mock.calls[0];
+    expect(partial).toMatchObject({ yaw: 120, width: 2, length: 1 });
+    expect(partial).not.toHaveProperty('shape');
+    expect(partial).not.toHaveProperty('z');
+    expect(partial).not.toHaveProperty('height');
+  });
+
+  test('a double press on the body (onBodyDoubleClick) edits the corners; Esc goes back, still selected; Esc again deselects', () => {
+    const { ctl } = make();
+    ctl.setContext('obstacles');
+    ctl.canvas = drawCanvas(ctl);
+    ctl.clickObstacle('object-1');
+    ctl.editCorners();
+    expect(ctl.shapeMode).toBe('corners');
+    expect(ctl.onEscapeKey()).toBe(true);
+    expect(ctl.shapeMode).toBe('select');
+    expect(ctl.selectedId).toBe('object-1');
+    expect(ctl.onEscapeKey()).toBe(true);
+    expect(ctl.selectedId).toBeNull();
+    // Nothing selected: nothing to edit
+    ctl.editCorners();
+    expect(ctl.shapeMode).toBe('select');
+  });
+
+  test('Rectangle and Polygon draw a new structure, selected in select mode; again cancels', async () => {
+    const { ctl, actions } = make();
+    ctl.setContext('obstacles');
+    const canvas = drawCanvas(ctl);
+    ctl.canvas = canvas;
+    ctl.startShapeDraw('rect');
+    expect(canvas.startDraw).toHaveBeenLastCalledWith('rect');
+    expect(ctl.drawShape).toBe('rect');
+    ctl.startShapeDraw('rect');
+    expect(ctl.drawing).toBe(false);
+    ctl.startShapeDraw('polygon');
+    expect(canvas.startDraw).toHaveBeenLastCalledWith('polygon');
+    ctl.draft = [[1, 1], [3, 1], [3, 2], [1, 2]];
+    ctl.drawing = false;
+    await ctl.onDrawEnd(true);
+    expect(actions.addObstacle).toHaveBeenCalledTimes(1);
+    expect(ctl.selectedId).toBe('object-2');
+    expect(ctl.shapeMode).toBe('select');
+  });
+});
+
+describe('keep-out areas, PowerPoint style', () => {
+  const keep = { id: 'ceiling-1', kind: 'keep', name: 'Keep-out area 1', vertices: [[1, 1], [2, 1], [2, 2], [1, 2]], yaw: 0 } as const;
+  function drawCanvas(ctl: PlanController) {
+    let before: Vertex[] = [];
+    return {
+      startDraw: vi.fn(() => { before = ctl.draft; ctl.draft = []; ctl.drawing = true; }),
+      cancelDraw: vi.fn(() => { if (!ctl.drawing) return; ctl.draft = before; ctl.drawing = false; ctl.onDrawEnd(false); }),
+      focus: vi.fn(),
+      isDragging: () => false,
+    } as any;
+  }
+  function makeCeiling() {
+    const made = make({ ceiling: { ...DEFAULT_CEILING_LAYOUT, items: [{ ...keep, vertices: keep.vertices.map((v) => [...v] as Vertex) }] } });
+    made.ctl.setContext('ceiling');
+    made.ctl.canvas = drawCanvas(made.ctl);
+    return made;
+  }
+
+  test('a selected keep-out area has a box; Rotate 90° turns it about its centre and stores the yaw', () => {
+    const { ctl, actions } = makeCeiling();
+    ctl.selectCeilingItem('ceiling-1');
+    expect(ctl.transformable).toBe(true);
+    ctl.rotateSelected90();
+    expect(actions.updateCeilingItem).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(actions.updateCeilingItem).mock.calls[0][1]).toMatchObject({ yaw: 90 });
+    ctl.editKeepOutCorners('ceiling-1');
+    expect(ctl.shapeMode).toBe('corners');
+    ctl.endCorners();
+    expect(ctl.shapeMode).toBe('select');
+  });
+
+  test('Polygon adds a keep-out area in one step (inside the room only); Redraw footprint replaces its outline', async () => {
+    const { ctl, actions } = makeCeiling();
+    ctl.startShapeDraw('polygon');
+    expect(ctl.drawing).toBe(true);
+    ctl.draft = [[3, 1], [4, 1], [4, 2], [3, 2]];
+    ctl.drawing = false;
+    await ctl.onDrawEnd(true);
+    expect(actions.addCeilingItem).toHaveBeenCalledWith('keep', [[3, 1], [4, 1], [4, 2], [3, 2]]);
+    // Outside the room: nothing is added
+    ctl.startShapeDraw('rect');
+    ctl.draft = [[5, 1], [8, 1], [8, 2], [5, 2]];
+    ctl.drawing = false;
+    await ctl.onDrawEnd(true);
+    expect(actions.addCeilingItem).toHaveBeenCalledTimes(1);
+    // Redraw
+    ctl.startKeepOutDraw('polygon', 'ceiling-1');
+    expect(ctl.selectedCeilingId).toBe('ceiling-1');
+    expect(ctl.redrawKeepOutId).toBe('ceiling-1');
+    ctl.draft = [[1, 1], [3, 1], [1, 3]];
+    ctl.drawing = false;
+    await ctl.onDrawEnd(true);
+    expect(actions.updateCeilingItem).toHaveBeenCalledWith('ceiling-1', { vertices: [[1, 1], [3, 1], [1, 3]], yaw: 0 });
+  });
+
+  test('Escape cancels a keep-out drawing', () => {
+    const { ctl } = makeCeiling();
+    ctl.startShapeDraw('rect');
+    expect(ctl.onEscapeKey()).toBe(true);
+    expect(ctl.drawing).toBe(false);
   });
 });
 

@@ -42,8 +42,8 @@ describe('MainViewControls', () => {
 
     const strip = corner(container, 'bl').querySelector('.plan-toolbar') as HTMLElement;
     const tools = [...strip.querySelectorAll('button')];
-    expect(tools.map((b) => b.getAttribute('aria-label'))).toEqual(['Draw', 'Edit corners', 'Copy', 'Delete']);
-    expect(tools.map((b) => b.title)).toEqual(['Draw', 'Edit corners', 'Copy (Ctrl+D)', 'Delete (Del)']);
+    expect(tools.map((b) => b.getAttribute('aria-label'))).toEqual(['Rectangle', 'Polygon']);
+    expect(tools.map((b) => b.title)).toEqual(['Rectangle', 'Polygon']);
     for (const b of tools) expect(b.textContent?.trim()).toBe(b.getAttribute('aria-label'));
     // The pane itself has no toolbar or surface row of its own
     expect(container.querySelector('.plan-pane .plan-toolbar')).toBeNull();
@@ -72,10 +72,10 @@ describe('MainViewControls', () => {
     expect(onNeedCanvas).toHaveBeenCalledTimes(1);
   });
 
-  it('Draw in 3D (structures) asks for the 2D view', async () => {
+  it('Rectangle in 3D (structures) asks for the 2D view', async () => {
     const onNeedCanvas = vi.fn();
     const { container } = mount({ controls: '3d', mini: true, context: 'obstacles', onNeedCanvas });
-    await fireEvent.click(within(corner(container, 'bl')).getByRole('button', { name: 'Draw' }));
+    await fireEvent.click(within(corner(container, 'bl')).getByRole('button', { name: 'Rectangle' }));
     expect(onNeedCanvas).toHaveBeenCalledTimes(1);
   });
 

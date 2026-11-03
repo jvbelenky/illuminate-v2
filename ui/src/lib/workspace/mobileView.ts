@@ -13,9 +13,9 @@ export interface FullScreen {
 
 export const FULL_SCREEN_OFF: FullScreen = { on: false, auto: false };
 
-/** A canvas tool that wants the whole screen: a drawing, or Edit corners. */
-export function wantsFullScreen(plan: { drawing: boolean; activeTool: string | null }): boolean {
-	return plan.drawing || plan.activeTool === 'corners';
+/** A canvas tool that wants the whole screen: a drawing, or Edit corners (the outline's tool, or a shape's corners). */
+export function wantsFullScreen(plan: { drawing: boolean; activeTool: string | null; shapeMode?: string }): boolean {
+	return plan.drawing || plan.activeTool === 'corners' || plan.shapeMode === 'corners';
 }
 
 /** ⤢ / ⤡: the user's own choice, never left automatically. */
