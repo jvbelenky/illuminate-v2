@@ -191,7 +191,8 @@
 	$effect(() => {
 		if (ro) return;
 		const src = ctl.source;
-		untrack(() => ctl.followSource(src));
+		const yaw = ctl.sourceYaw;
+		untrack(() => ctl.followSource(src, yaw));
 	});
 
 	// While drawing, Ctrl+Z drops the last corner; with an invalid edit on
@@ -293,6 +294,9 @@
 				shapes={wv.shapes}
 				outline={wv.outline}
 				draggableBody={ctl.onZones && !!ctl.selectedWallPlane}
+				transformable={ctl.transformable}
+				bind:yaw={ctl.draftYaw}
+				onBodyDoubleClick={ctl.editCorners}
 				onDrawEnd={ctl.onDrawEnd}
 				onEdit={ctl.commitDraft}
 				toolCursor={ctl.toolCursor}
@@ -395,6 +399,9 @@
 			draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint) || (ctl.onCeiling && !!ctl.editableKeepOut)}
 			dblClickCorners={ctl.onCeiling}
 			selectedDraft={ctl.onCeiling && !!ctl.editableKeepOut}
+			transformable={ctl.transformable}
+			bind:yaw={ctl.draftYaw}
+			onBodyDoubleClick={ctl.editCorners}
 			onShapeClick={ctl.onObstacles ? ctl.clickObstacle : undefined}
 			onShapeRename={(id, name) => ctl.actions.updateObstacle(id, { name })}
 			onDrawEnd={ctl.onDrawEnd}

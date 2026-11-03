@@ -7,6 +7,9 @@ describe('mobile full-screen view', () => {
 		expect(wantsFullScreen({ drawing: false, activeTool: 'corners' })).toBe(true);
 		expect(wantsFullScreen({ drawing: false, activeTool: 'move' })).toBe(false);
 		expect(wantsFullScreen({ drawing: false, activeTool: null })).toBe(false);
+		// A shape's corners being edited
+		expect(wantsFullScreen({ drawing: false, activeTool: null, shapeMode: 'corners' })).toBe(true);
+		expect(wantsFullScreen({ drawing: false, activeTool: null, shapeMode: 'select' })).toBe(false);
 	});
 
 	it('⤢ and ⤡ toggle, and are never automatic', () => {

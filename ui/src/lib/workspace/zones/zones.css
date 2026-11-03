@@ -165,9 +165,23 @@
 	font-size: var(--font-size-sm);
 	white-space: nowrap;
 }
-.zone-panel .pick-btn.active,
-.zone-panel .plan-actions button.plan-btn.active {
+.zone-panel .pick-btn.active {
 	border-color: var(--color-accent);
+}
+/* Redraw outline and Edit corners, side by side; pressed in the scene's selection colour */
+.zone-panel .plan-actions .shape-pair {
+	display: flex;
+	gap: var(--spacing-sm);
+}
+.zone-panel .plan-actions .shape-pair .plan-btn {
+	flex: 1 1 0;
+	min-width: 0;
+	white-space: nowrap;
+}
+.zone-panel .plan-actions button.plan-btn.active,
+.zone-panel .plan-actions button.plan-btn.active:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--color-scene-selected) 22%, var(--color-btn-fill));
+	border-color: var(--color-scene-selected);
 }
 
 /* Filled buttons under a divider, as in Floorplan */

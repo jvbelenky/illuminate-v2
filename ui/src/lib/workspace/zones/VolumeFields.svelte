@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A volume: Bottom and Top like a structure, Fit to room (the room outline,
-	// floor to ceiling) and Draw outline, then Geometry, Grid points and Display.
+	// floor to ceiling), Redraw outline and Edit corners, then Geometry, Grid points and Display.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
 	import { userSettings } from '$lib/stores/settings';
 	import { unitAbbrev, unitStep } from '$lib/utils/unitConversion';
@@ -29,6 +29,7 @@
 	const bottom = $derived(Math.min(zone.z_min ?? 0, zone.z_max ?? room.z));
 	const top = $derived(Math.max(zone.z_min ?? 0, zone.z_max ?? room.z));
 	const drawing = $derived(ctl.drawing && ctl.drawKind === 'volume');
+	const cornering = $derived(ctl.shapeMode === 'corners' && ctl.selectedZoneId === zone.id);
 
 	/** A new bottom or top; the two swap rather than cross. */
 	function setRange(which: 'bottom' | 'top', v: number) {
@@ -56,7 +57,10 @@
 		<span>Fit to room</span>
 		<input type="checkbox" role="switch" checked={zone.fit_room ?? false} onchange={(e) => commit(fitPartial(zone, room, e.currentTarget.checked))} />
 	</label>
-	<button type="button" class="secondary plan-btn" class:active={drawing} aria-pressed={drawing} onclick={() => ctl.startZoneDraw('volume')}>Draw outline</button>
+	<div class="shape-pair">
+		<button type="button" class="secondary plan-btn" class:active={drawing} aria-pressed={drawing} onclick={() => ctl.startZoneDraw('volume')}>Redraw outline</button>
+		<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing} onclick={() => ctl.editZoneCorners(zone.id)}>Edit corners</button>
+	</div>
 </div>
 
 <ZoneFold label="Geometry">

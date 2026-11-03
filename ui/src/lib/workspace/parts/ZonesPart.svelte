@@ -110,7 +110,6 @@
 		</div>
 	</section>
 
-	<div class="ep-section">Zones</div>
 	{#if userZones.length === 0}
 		<span class="ep-chip">None</span>
 	{/if}

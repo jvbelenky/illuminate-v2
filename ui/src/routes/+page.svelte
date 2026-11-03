@@ -189,7 +189,14 @@
 		updateRoom: (partial) => project.updateRoom(partial),
 		setHidden: (kind, id, hidden) => project.setHidden(kind, id, hidden),
 		updateCeiling: (partial) => project.updateCeiling(partial),
-		addCeilingItem: (kind) => project.addCeilingItem(kind),
+		addCeilingItem: (kind, vertices) =>
+			vertices
+				? project.history.batch('Add keep-out area', () => {
+						const id = project.addCeilingItem(kind);
+						if (id) project.updateCeilingItem(id, { vertices, yaw: 0 });
+						return id;
+					})
+				: project.addCeilingItem(kind),
 		updateCeilingItem: (id, partial) => project.updateCeilingItem(id, partial),
 		removeCeilingItem: (id) => project.removeCeilingItem(id),
 		copyCeilingItem: (id) => project.copyCeilingItem(id),
@@ -448,7 +455,7 @@
 	// Drawing or Edit corners takes the view full screen, and gives it back when done
 	let canvasToolWas = false;
 	$effect(() => {
-		const now = wantsFullScreen({ drawing: plan.drawing, activeTool: plan.activeTool });
+		const now = wantsFullScreen({ drawing: plan.drawing, activeTool: plan.activeTool, shapeMode: plan.shapeMode });
 		untrack(() => {
 			const was = canvasToolWas;
 			canvasToolWas = now;

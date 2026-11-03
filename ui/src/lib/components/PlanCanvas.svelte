@@ -58,6 +58,8 @@
 	import { setSegmentLength, parseLengthInput, parseCoordinateInput } from '$lib/plan/segmentLength';
 	import InlineValueInput, { type InlineField } from '$lib/plan/InlineValueInput.svelte';
 	import { snapPointToOutline, snapTranslationToOutline, edgeAxis } from '$lib/plan/outlineSnap';
+	import TransformBox from '$lib/plan/TransformBox.svelte';
+	import { localAxisToWorld, resizeByHandle, rotateByDrag, snapLineToOutline, type Handle } from '$lib/plan/shapeTransform';
 
 	// A plan-view canvas for drawing and editing a polygon in room coordinates:
 	// viewport (fit / pan / zoom), grid with rulers, light grid and corner
@@ -103,6 +105,16 @@
 		dblClickCorners?: boolean;
 		/** Draw the draft as a selected area (cyan tint, dashed), as for a ceiling keep-out area. */
 		selectedDraft?: boolean;
+		/**
+		 * The draft is a selected shape in select mode (PowerPoint style): a box in
+		 * its own frame with eight resize handles and a rotate handle, instead of
+		 * corner handles. Its body drags to move it.
+		 */
+		transformable?: boolean;
+		/** The draft's own frame in degrees (counter-clockwise): the box turns with it, a rotate drag changes it. */
+		yaw?: number;
+		/** A double press (click or tap) on the transformable draft's body. */
+		onBodyDoubleClick?: () => void;
 		/** Mark the outline as invalid (red). */
 		invalid?: boolean;
 		ariaLabel?: string;
@@ -165,6 +177,9 @@
 		draggableBody = false,
 		dblClickCorners = false,
 		selectedDraft = false,
+		transformable = false,
+		yaw = $bindable(0),
+		onBodyDoubleClick,
 		invalid = false,
 		ariaLabel = 'Plan canvas',
 		navControls = true,
@@ -191,8 +206,25 @@
 
 	let beforeDraw: Vertex[] | null = null;
 	let cursor = $state<Vertex | null>(null);
-	/** A corner, wall or body drag; `restore` is the draft to put back if it is cancelled (before a midpoint insert). */
-	let drag = $state<{ kind: 'vertex' | 'edge' | 'body'; index: number; startPointer: Vertex; startDraft: Vertex[]; restore: Vertex[] } | null>(null);
+	/**
+	 * A corner, wall or body drag, or a resize or rotate of the transform box;
+	 * `restore` is the draft to put back if it is cancelled (before a midpoint
+	 * insert), `startYaw` the frame a resize or rotate started from.
+	 */
+	let drag = $state<{ kind: 'vertex' | 'edge' | 'body' | 'resize' | 'rotate'; index: number; startPointer: Vertex; startDraft: Vertex[]; restore: Vertex[]; handle?: Handle; startYaw?: number } | null>(null);
+	/** The angle shown by the rotate handle while it is dragged. */
+	let rotateAngle = $state<number | null>(null);
+	/** What a drawing makes: a polygon (click its corners) or a rectangle (drag it out). */
+	let drawShape = $state<'polygon' | 'rect'>('polygon');
+	/** The rectangle being dragged out. */
+	let rectDraw = $state<{ a: Vertex; b: Vertex } | null>(null);
+	/** Handles sized for a finger: the last press was a touch (or the screen is touch-first). */
+	let coarse = $state(typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
+	/** The last two primary presses, to tell a double press on the draft's body (the canvas may re-render between them, which can swallow the browser's dblclick). */
+	type Press = { t: number; x: number; y: number; touch: boolean };
+	let lastPress: Press | null = null;
+	let prevPress: Press | null = null;
+	const DOUBLE_PRESS_MS = 400;
 	let svgEl = $state<SVGSVGElement | undefined>(undefined);
 	/** An input open over the canvas: a wall's length, a corner's position, a length typed while drawing, a structure's name. */
 	type CanvasInline =
@@ -689,7 +721,10 @@
 	/** Drop the gesture in flight without applying anything: the draft goes back, the host's drag is dropped. */
 	function cancelGesture() {
 		if (drag) draft = drag.restore;
+		if (drag?.startYaw !== undefined) yaw = drag.startYaw;
 		drag = null;
+		rotateAngle = null;
+		rectDraw = null;
 		pan = null;
 		zoomBox = null;
 		guides = [];
@@ -703,12 +738,19 @@
 	 */
 	function onCanvasPointerDownCapture(event: PointerEvent) {
 		const touch = event.pointerType === 'touch';
+		if (touch) coarse = true;
+		else if (event.pointerType === 'mouse') coarse = false;
 		// A primary touch starts a new sequence: anything left from an earlier one is stale
 		if (touch && event.isPrimary) {
 			touches.clear();
 			pinch = null;
 			touchCancelled = false;
 			tapStart = null;
+		}
+		// A first finger or a left button: a press that may be half of a double press
+		if (event.button === 0 && !(touch && touches.size > 0)) {
+			prevPress = lastPress;
+			lastPress = { t: Date.now(), x: event.clientX, y: event.clientY, touch };
 		}
 		// The first pointer down owns the gesture; a primary press of the same kind replaces a stale owner
 		if (!activePointer || (event.isPrimary && activePointer.type === event.pointerType)) {
@@ -724,7 +766,7 @@
 		touches.set(event.pointerId, [event.clientX, event.clientY]);
 		if (touches.size === 1) {
 			firstTouchOnCanvas = false;
-			tapStart = { id: event.pointerId, x: event.clientX, y: event.clientY, empty: event.target === svgEl };
+			tapStart = { id: event.pointerId, x: event.clientX, y: event.clientY, empty: event.target === svgEl && !onBody(event) };
 			return;
 		}
 		// Further fingers never reach an item
@@ -733,6 +775,8 @@
 		tapStart = null;
 		lastTap = null;
 		if (touches.size !== 2 || touchCancelled || pinch) return;
+		// A body press that has not moved yet gives way to a pinch
+		if (drag?.kind === 'body' && sameDraft(drag.startDraft, draft)) drag = null;
 		if (firstTouchOnCanvas && !drag && !hostDragging) {
 			// A second finger pinches
 			svgEl?.setPointerCapture?.(event.pointerId);
@@ -768,11 +812,26 @@
 			firstTouchOnCanvas = true;
 		}
 		justPanned = false;
+		// Rectangle: press and drag out a box
+		if (drawing && tool === 'draw' && drawShape === 'rect' && event.button === 0 && !spaceHeld) {
+			event.preventDefault();
+			(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+			const p = rectPointFor(event);
+			rectDraw = { a: p, b: p };
+			return;
+		}
 		// Inside the draft with the edit tool: move it whole (hosts opt in for obstacles)
 		if (draggableBody && event.button === 0 && !spaceHeld && editing && !drawing && draft.length >= 3) {
 			const p = pointerToRoom(event);
 			if (pointInPolygon(draft, p[0], p[1])) {
 				event.preventDefault();
+				// A double press on a selected shape edits its corners
+				if (transformBox && onBodyDoubleClick && isDoublePress()) {
+					lastPress = null;
+					drag = null;
+					onBodyDoubleClick();
+					return;
+				}
 				(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
 				const start = draft.map((v) => [v[0], v[1]] as Vertex);
 				drag = { kind: 'body', index: -1, startPointer: p, startDraft: start, restore: start };
@@ -825,8 +884,10 @@
 	});
 
 	// --- Draw tool ---
-	export function startDraw() {
+	export function startDraw(shape: 'polygon' | 'rect' = 'polygon') {
 		beforeDraw = draft.map((v) => [v[0], v[1]] as Vertex);
+		drawShape = shape;
+		rectDraw = null;
 		draft = [];
 		drawing = true;
 		tool = 'draw';
@@ -851,6 +912,7 @@
 
 	export function cancelDraw() {
 		if (!drawing) return;
+		rectDraw = null;
 		draft = beforeDraw ?? [];
 		beforeDraw = null;
 		drawing = false;
@@ -866,7 +928,7 @@
 			onCustomClick?.(event);
 			return;
 		}
-		if (tool !== 'draw' || !drawing) return;
+		if (tool !== 'draw' || !drawing || drawShape === 'rect') return;
 		placeDrawPoint(drawPointFor(event));
 	}
 
@@ -884,11 +946,11 @@
 	function onCanvasDblClick(event: MouseEvent) {
 		if (tool === 'draw' && drawing) {
 			event.preventDefault();
-			finishDraw();
+			if (drawShape !== 'rect') finishDraw();
 			return;
 		}
-		// Only empty space fits: a double-click on a corner, wall or item keeps its own meaning
-		if (pannable && event.target === svgEl) fitView();
+		// Only empty space fits: a double-click on a corner, wall, item or the selected shape keeps its own meaning
+		if (pannable && event.target === svgEl && !onBody(event)) fitView();
 	}
 
 	// --- Edit tool: drag corners, slide edges, insert on midpoints ---
@@ -902,6 +964,54 @@
 		drag = { kind, index, startPointer: pointerToRoom(event), startDraft: start, restore: restore ?? start };
 		selectedIndex = kind === 'vertex' ? index : -1;
 		svgEl?.focus();
+	}
+
+	/** The transform box shows instead of the corner handles: a selected shape in select mode. */
+	const transformBox = $derived(transformable && editing && !drawing && draft.length >= 3);
+
+	/** A press inside the draft's body, where the host moves it (no fit, no tap on empty space). */
+	function onBody(event: PointerEvent | MouseEvent): boolean {
+		if (!draggableBody || !editing || drawing || draft.length < 3) return false;
+		const p = pointerToRoom(event);
+		return pointInPolygon(draft, p[0], p[1]);
+	}
+
+	/** The press just recorded is the second of a double press: soon after the last one, close by. */
+	function isDoublePress(): boolean {
+		const a = prevPress, b = lastPress;
+		if (!a || !b) return false;
+		return b.t - a.t <= DOUBLE_PRESS_MS && Math.hypot(b.x - a.x, b.y - a.y) <= (b.touch ? 30 : 8);
+	}
+
+	/** A resize handle pressed: scale the shape about the opposite handle. */
+	function beginResize(event: PointerEvent, handle: Handle) {
+		beginTransform(event, 'resize', handle);
+	}
+	/** The rotate handle pressed: turn the shape about its box's centre. */
+	function beginRotate(event: PointerEvent) {
+		beginTransform(event, 'rotate');
+	}
+	function beginTransform(event: PointerEvent, kind: 'resize' | 'rotate', handle?: Handle) {
+		if (!editing || drawing || event.button !== 0 || spaceHeld) return;
+		event.preventDefault();
+		event.stopPropagation();
+		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+		inline = null;
+		const start = draft.map((v) => [v[0], v[1]] as Vertex);
+		drag = { kind, index: -1, startPointer: pointerToRoom(event), startDraft: start, restore: start, handle, startYaw: yaw };
+		if (kind === 'rotate') rotateAngle = yaw;
+		selectedIndex = -1;
+		svgEl?.focus();
+	}
+
+	/** A rectangle's corner: on the room outline when close, else on the grid. */
+	function rectPointFor(event: PointerEvent | MouseEvent): Vertex {
+		const raw = pointerToRoom(event);
+		const onOutline = snapToOutline(raw, event.altKey);
+		if (onOutline) return onOutline;
+		const p = snapPoint(raw, event.altKey);
+		guides = [...pendingGuides];
+		return p;
 	}
 
 	function onMidpointPointerDown(event: PointerEvent, edgeIndex: number) {
@@ -946,12 +1056,51 @@
 			return;
 		}
 		if (tool === 'draw' && drawing) {
+			if (drawShape === 'rect') {
+				cursor = rectPointFor(event);
+				if (rectDraw) rectDraw = { a: rectDraw.a, b: cursor };
+				return;
+			}
 			cursor = drawPointFor(event);
 			return;
 		}
 		if (onHostMove?.(event)) return;
 		if (!drag) return;
 		const p = pointerToRoom(event);
+		if (drag.kind === 'resize' && drag.handle) {
+			pendingGuides = [];
+			const edges: number[] = [];
+			const y0 = drag.startYaw ?? 0;
+			const start = drag.startDraft;
+			draft = resizeByHandle(start, y0, drag.handle, p, {
+				keepRatio: event.shiftKey,
+				minSize: px * 8,
+				snap: (axis, v) => {
+					// Edges snap to the walls, then the grid, while they run along the axes
+					const m = localAxisToWorld(y0, axis);
+					if (!m || event.altKey) return v;
+					const other = m.axis === 0 ? 1 : 0;
+					const lo = Math.min(...start.map((q) => q[other])), hi = Math.max(...start.map((q) => q[other]));
+					const w = m.sign * v;
+					const wall = snapLineToOutline(m.axis, w, lo, hi, outline, outlineTolerance(event.altKey));
+					if (wall) {
+						edges.push(wall.edge);
+						return m.sign * wall.value;
+					}
+					return m.sign * snapCoord(w, m.axis === 0 ? 'x' : 'y', event.altKey);
+				},
+			});
+			outlineGuide = edges.length ? { edges, corner: null } : NO_OUTLINE_GUIDE;
+			guides = [...pendingGuides];
+			return;
+		}
+		if (drag.kind === 'rotate') {
+			const r = rotateByDrag(drag.startDraft, drag.startYaw ?? 0, drag.startPointer, p, event.altKey);
+			draft = r.vertices;
+			yaw = r.yaw;
+			rotateAngle = r.yaw;
+			return;
+		}
 		if (drag.kind === 'body') {
 			// Move every corner by the pointer delta, snapped so the first corner lands on the grid
 			const dx = p[0] - drag.startPointer[0];
@@ -1037,9 +1186,25 @@
 			const moved = Math.max(Math.abs(box.endClient[0] - box.startClient[0]), Math.abs(box.endClient[1] - box.startClient[1]));
 			if (moved >= ZOOM_BOX_MIN_PX) zoomToBox(box.a, box.b);
 		}
+		const rect = rectDraw;
+		rectDraw = null;
+		if (rect && drawing && drawShape === 'rect' && event.type !== 'pointercancel') {
+			// Too small to mean anything: the tool stays armed for another try
+			const w = Math.abs(rect.b[0] - rect.a[0]), h = Math.abs(rect.b[1] - rect.a[1]);
+			if (w >= px * 8 && h >= px * 8) {
+				const [x0, x1] = [Math.min(rect.a[0], rect.b[0]), Math.max(rect.a[0], rect.b[0])];
+				const [y0, y1] = [Math.min(rect.a[1], rect.b[1]), Math.max(rect.a[1], rect.b[1])];
+				draft = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+				guides = [];
+				outlineGuide = NO_OUTLINE_GUIDE;
+				finishDraw();
+				return;
+			}
+		}
 		const ended = drag;
 		drag = null;
-		if (ended && !sameDraft(ended.startDraft, draft)) onEdit?.();
+		rotateAngle = null;
+		if (ended && (!sameDraft(ended.startDraft, draft) || (ended.startYaw !== undefined && ended.startYaw !== yaw))) onEdit?.();
 		pan = null;
 		hostDragging = false;
 		guides = [];
@@ -1413,9 +1578,11 @@
 			{@const [mx, my] = midpoints[i]}
 			{@const [nx, ny] = inwardNormals[i]}
 			{@const [lx, ly] = toSvg(mx + nx * px * 20, my + ny * px * 20)}
-			<line x1={x1} y1={y1} x2={x2} y2={y2} class="edge-hit" stroke-width={hitPx * 10}
-				role="button" tabindex="-1" aria-label="Wall {i + 1}"
-				onpointerdown={(e) => beginDrag(e, 'edge', i)} ondblclick={(e) => onEdgeDblClick(e, i)} />
+			{#if !transformBox}
+				<line x1={x1} y1={y1} x2={x2} y2={y2} class="edge-hit" stroke-width={hitPx * 10}
+					role="button" tabindex="-1" aria-label="Wall {i + 1}"
+					onpointerdown={(e) => beginDrag(e, 'edge', i)} ondblclick={(e) => onEdgeDblClick(e, i)} />
+			{/if}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<text x={lx} y={ly + px * 4} class="edge-label" class:typeable={lengthTyping} class:editing-length={inline?.kind === 'length' && inline.index === i}
 				font-size={px * 11} text-anchor="middle"
@@ -1469,7 +1636,7 @@
 	{/each}
 
 	<!-- Midpoint handles: click to insert a corner -->
-	{#if editing && !drag && draft.length >= 3}
+	{#if editing && !drag && draft.length >= 3 && !transformBox}
 		{#each midpoints as [mx, my], i}
 			{@const [sx, sy] = toSvg(mx, my)}
 			<g class="mid-handle" role="button" tabindex="-1" aria-label="Insert corner on wall {i + 1}"
@@ -1482,8 +1649,8 @@
 		{/each}
 	{/if}
 
-	<!-- Corner handles -->
-	{#each draft as [vx, vy], i}
+	<!-- Corner handles (a selected shape in select mode shows its transform box instead) -->
+	{#each transformBox ? [] : draft as [vx, vy], i}
 		{@const [sx, sy] = toSvg(vx, vy)}
 		{#if showHit}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1503,6 +1670,16 @@
 		/>
 		<text x={sx + handleR * 1.6} y={sy - handleR * 1.2} class="vertex-label" font-size={px * 11}>{i + 1}</text>
 	{/each}
+
+	{#if transformBox}
+		<TransformBox vertices={draft} {yaw} {px} {hitPx} {coarse} angle={rotateAngle} onHandleDown={beginResize} onRotateDown={beginRotate} />
+	{/if}
+
+	<!-- The rectangle being dragged out -->
+	{#if rectDraw}
+		{@const [rx, ry] = toSvg(Math.min(rectDraw.a[0], rectDraw.b[0]), Math.max(rectDraw.a[1], rectDraw.b[1]))}
+		<rect x={rx} y={ry} width={Math.abs(rectDraw.b[0] - rectDraw.a[0])} height={Math.abs(rectDraw.b[1] - rectDraw.a[1])} class="rect-draw" stroke-width={px * 1.5} stroke-dasharray="{px * 5} {px * 4}" />
+	{/if}
 
 	<!-- Cursor crosshair while drawing -->
 	{#if drawing && cursor}
@@ -1700,6 +1877,11 @@
 	}
 	.rubber-band {
 		stroke: var(--color-accent);
+	}
+	.rect-draw {
+		fill: color-mix(in srgb, var(--color-scene-selected) 10%, transparent);
+		stroke: var(--color-scene-selected);
+		pointer-events: none;
 	}
 	.edge-hit {
 		stroke: transparent;

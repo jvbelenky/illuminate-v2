@@ -25,7 +25,11 @@
 		download: '<path d="M12 4v11M7 10l5 5 5-5M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>',
 		chevron: '<path d="M7 10l5 5 5-5"/>',
 		undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
-		redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>'
+		redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
+		rect: '<rect x="4" y="6" width="16" height="12"/>',
+		polygon: '<path d="M12 3.5l8.5 6.5-3.2 10H6.7L3.5 10z"/>',
+		rotate: '<path d="M19.5 13a7.5 7.5 0 1 1-2.2-6.3"/><path d="M19.5 3.5v5h-5"/>',
+		check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>'
 	} as const;
 
 	export type GlyphName = keyof typeof GLYPHS;

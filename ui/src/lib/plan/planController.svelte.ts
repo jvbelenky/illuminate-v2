@@ -8,6 +8,8 @@ import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { PlanContext } from '$lib/workspace/editorNav';
 import type { PlanActions, PlanScene } from './planActions';
 import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry, type ObstacleDraft } from '$lib/utils/obstacleDrafts';
+import { footprintUpdate } from '$lib/utils/objectGeometry';
+import { normalizeYaw, rotateShapeBy } from './shapeTransform';
 import { zoneHasFootprint, zoneFootprint, footprintGeometry as zoneFootprintGeometry } from '$lib/utils/zoneFootprint';
 import { displayDimension } from '$lib/utils/formatting';
 import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
@@ -28,7 +30,7 @@ import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zo
 import { pickMode, type PickRequest } from '$lib/stores/pickMode';
 import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels, wallToCanvas, canvasToWall, unprojectLampMove, unprojectStructureMove } from './wallProjection';
 import { wallPlaneOutline } from '$lib/utils/planeWorld';
-import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
+import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, polygonInRoom, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
 export interface Marker { id: string; name: string; x: number; y: number; ax: number; ay: number; enabled: boolean; /** Draw the name; false only for a lamp with its 2D label off */ label?: boolean }
@@ -39,8 +41,12 @@ const clone = (vs: Vertex[]) => vs.map((v) => [v[0], v[1]] as Vertex);
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 /** The picks the plan answers: a point's Place and Aim, a lamp's Position and Aim. */
 type PlanPickType = 'point_position' | 'aim_point' | 'lamp_position' | 'lamp_aim';
-/** A one-shot edit-strip tool: the next canvas gesture does it, then it is off. */
+/** A one-shot edit-strip tool: the next canvas gesture does it, then it is off ('corners': the room outline's). */
 export type StripTool = 'grid' | 'move' | 'aim' | 'image' | 'corners';
+/** A selected shape (structure, zone outline, keep-out area) is selected for moving, resizing and rotating, or has its corners editable. */
+export type ShapeMode = 'select' | 'corners';
+/** What a drawing makes: a polygon clicked corner by corner, or a rectangle dragged out. */
+export type DrawShape = 'polygon' | 'rect';
 /** The canvas cursor while a tool is active (over the Pan or Zoom cursor). */
 export type ToolCursor = 'move' | 'crosshair' | 'default';
 const PLAN_PICKS: readonly string[] = ['point_position', 'aim_point', 'lamp_position', 'lamp_aim'];
@@ -188,8 +194,7 @@ export class PlanController {
    */
   get editStripShown(): boolean {
     if (this.context === 'reflectance' || this.context === 'view') return false;
-    if (this.onWall && !this.onZones) return false;
-    return !(this.onCeiling && !this.selectedCeilingItem && !this.tilesActive);
+    return !(this.onWall && !this.onZones);
   }
   /** A local edit of the current polygon that is invalid, so not applied. */
   dirty = $state(false);
@@ -286,6 +291,7 @@ export class PlanController {
     if (!(this.onZones && this.selectedZone?.type === 'point')) this.selectedZoneId = null;
     this.clearCeilingState();
     this.endTool();
+    this.shapeMode = 'select';
     this.marquee = null;
     this.selectedIndex = -1;
     this._surface = next;
@@ -382,6 +388,65 @@ export class PlanController {
       : this.onCeiling && this.editableKeepOut ? this.editableKeepOut.vertices
       : []
   );
+
+  /** The stored polygon's own frame (degrees): a structure's or keep-out area's yaw; zones have none. */
+  readonly sourceYaw = $derived.by(() =>
+    this.onWall ? 0
+      : this.onObstacles ? (this.selected?.sourceYaw ?? 0)
+      : this.onCeiling && this.editableKeepOut ? (this.editableKeepOut.yaw ?? 0)
+      : 0
+  );
+
+  // --- Shapes (structures, zone outlines, keep-out areas), PowerPoint style: a
+  // selected shape shows a box to move, resize and rotate it ('select'); a
+  // double-click, Edit corners in the strip or its editor, edits its corners
+  // ('corners'). Esc, Done, or the editor's toggle goes back.
+  shapeMode = $state<ShapeMode>('select');
+  /** The draft's own frame (degrees): the box turns with it, and a rotate changes it. */
+  draftYaw = $state(0);
+  /** What the drawing in progress makes. */
+  drawShape = $state<DrawShape>('polygon');
+  /** A selected shape whose outline is the canvas's polygon (on this surface, shown). */
+  get shapeSelected(): boolean {
+    return this.structureCornersEditable || this.zoneCornersEditable || (this.onCeiling && !!this.editableKeepOut);
+  }
+  /** The canvas shows the selected shape's transform box. */
+  get transformable(): boolean {
+    return this.shapeSelected && this.shapeMode === 'select' && !this.drawing;
+  }
+  /** Edit the selected shape's corners. */
+  editCorners = () => {
+    if (!this.shapeSelected || this.drawing) return;
+    this.endTool();
+    this.shapeMode = 'corners';
+  };
+  /** Back to select mode (an invalid edit on screen is dropped), the shape still selected. */
+  endCorners = () => {
+    if (this.shapeMode !== 'corners') return;
+    if (this.dirty) this.revertDraft();
+    this.shapeMode = 'select';
+    this.selectedIndex = -1;
+  };
+  /** The editor's Edit corners for an item: select it if needed, then toggle its corner editing. */
+  private toggleCornersOf(isSelected: boolean, select: () => void) {
+    this.withCanvas(() => {
+      if (this.drawing) return;
+      if (isSelected && this.shapeMode === 'corners') {
+        this.endCorners();
+        return;
+      }
+      if (!isSelected) select();
+      this.editCorners();
+    });
+  }
+  /** Rotate 90°: the selected shape turns a quarter (counter-clockwise) about its box's centre. */
+  rotateSelected90 = () => {
+    if (!this.shapeSelected || this.drawing || this.draft.length < 3) return;
+    const r = rotateShapeBy(this.draft, this.draftYaw, 90);
+    this.draft = r.vertices;
+    this.draftYaw = r.yaw;
+    this.commitDraft();
+  };
 
   // Leaving a context (or closing) with an invalid outline asks first
   pendingLeave = $state<(() => void) | null>(null);
@@ -539,9 +604,10 @@ export class PlanController {
    * mid-gesture or while a local invalid edit is on screen. Called from an
    * effect that tracks `source`.
    */
-  followSource = (src: Vertex[]) => {
+  followSource = (src: Vertex[], yaw: number = this.sourceYaw) => {
     if (this.drawing || this.dirty || this.canvas?.isDragging()) return;
     if (!samePolygon(this.draft, src)) this.draft = clone(src);
+    if (this.draftYaw !== yaw) this.draftYaw = yaw;
   };
 
   /** Apply the draft as the outline or the selected obstacle's footprint, if valid and changed. */
@@ -553,11 +619,13 @@ export class PlanController {
       const seg = this.wallSeg;
       if (!z || !seg) return;
       if (validatePolygon(this.draft) !== null) {
-        this.dirty = true;
+        this.rejectDraft();
         return;
       }
       this.dirty = false;
       const next = this.toWallOutline(this.draft, seg);
+      // A zone has no yaw of its own: a turned outline is just its new corners
+      this.draftYaw = 0;
       if (!samePolygon(next, wallPlaneOutline(z, seg, this.scene().roomZ))) this.actions.updateZone(z.id, { wall_vertices: next, fit_room: false });
       return;
     }
@@ -566,11 +634,12 @@ export class PlanController {
     if (this.onZones && !this.selectedFootprint) return;
     if (this.onCeiling && !this.editableKeepOut) return;
     if (validatePolygon(this.draft) !== null) {
-      this.dirty = true;
+      this.rejectDraft();
       return;
     }
     this.dirty = false;
     const next = normalizeCCW(this.draft);
+    const yaw = normalizeYaw(this.draftYaw);
     if (this.onOutline) {
       if (!samePolygon(next, this.scene().vertices)) this.actions.setOutline(next);
     } else if (this.onCeiling) {
@@ -581,20 +650,33 @@ export class PlanController {
         this.revertDraft();
         return;
       }
-      if (!samePolygon(next, k.vertices)) this.actions.updateCeilingItem(k.id, { vertices: next });
+      if (!samePolygon(next, k.vertices) || yaw !== normalizeYaw(k.yaw ?? 0)) this.actions.updateCeilingItem(k.id, { vertices: next, yaw });
     } else if (this.onZones) {
       const z = this.selectedFootprint!;
+      this.draftYaw = 0;
       // Reshaping a whole-room zone makes it a drawn one
       if (!samePolygon(next, zoneFootprint(z))) this.actions.updateZone(z.id, { ...zoneFootprintGeometry(z.type as 'plane' | 'volume', next), fit_room: false });
-    } else if (this.selected && !samePolygon(next, this.selected.vertices)) {
-      this.actions.updateObstacle(this.selected.id!, footprintGeometry(next));
+    } else if (this.selected && (!samePolygon(next, this.selected.vertices) || yaw !== normalizeYaw(this.selected.sourceYaw ?? 0))) {
+      // Its bottom and top stay; the footprint keeps the structure's own frame (yaw)
+      const obj = this.scene().objects.find((o) => o.id === this.selected!.id);
+      this.actions.updateObstacle(this.selected.id!, obj ? footprintUpdate(obj, next, yaw) : footprintGeometry(next));
     }
   };
+
+  /**
+   * An invalid polygon on screen: while its corners are edited (or the outline)
+   * it stays, drawn red, to be fixed; a move, resize or turn of the box snaps back.
+   */
+  private rejectDraft() {
+    if (this.shapeSelected && this.shapeMode === 'select') this.revertDraft();
+    else this.dirty = true;
+  }
 
   /** Drop a local invalid edit and show the stored polygon again. */
   revertDraft = () => {
     this.dirty = false;
     this.draft = clone(this.source);
+    this.draftYaw = this.sourceYaw;
   };
 
   // --- Context
@@ -631,6 +713,7 @@ export class PlanController {
     this.selectedZoneId = null;
     this.clearCeilingState();
     this.endTool();
+    this.shapeMode = 'select';
     this.markerDrag = null;
     this.wallShapeDrag = null;
     this.marquee = null;
@@ -665,6 +748,7 @@ export class PlanController {
     this.selectedZoneId = null;
     this.clearCeilingState();
     this.endTool();
+    this.shapeMode = 'select';
     this.markerDrag = null;
     this.wallShapeDrag = null;
     this.marquee = null;
@@ -698,13 +782,14 @@ export class PlanController {
     if (this.dirty) this.revertDraft();
     this.selectedId = id;
     this.selectedIndex = -1;
+    this.shapeMode = 'select';
     const o = id ? this.obstacles.find((x) => x.id === id) : null;
     // A wall view edits no footprint (its canvas is in wall coordinates)
     this.draft = o && !this.onWall ? clone(o.vertices) : [];
-    if (this.activeTool === 'corners' && this.onObstacles && !this.structureCornersEditable) this.endTool();
+    this.draftYaw = o && !this.onWall ? (o.sourceYaw ?? 0) : 0;
   };
 
-  /** The selected structure's footprint is the canvas's polygon: Edit corners has corners to edit. */
+  /** The selected structure's footprint is the canvas's polygon: it has a box and corners to edit. */
   get structureCornersEditable(): boolean {
     return this.onObstacles && !!this.selected && !this.onWall;
   }
@@ -712,8 +797,9 @@ export class PlanController {
   redrawObstacleId = $state<string | null>(null);
 
   /**
-   * Draw footprint: redraw this structure's footprint on the 2D view (bottom and
-   * top stay; the footprint and yaw come from the drawing). Again, or Escape, cancels.
+   * Redraw footprint: draw this structure's footprint again on the 2D view, as a
+   * polygon (bottom and top stay; the footprint and yaw come from the drawing).
+   * Again, or Escape, cancels.
    */
   startObstacleRedraw = (id: string) => {
     if (this.drawing) {
@@ -727,22 +813,39 @@ export class PlanController {
       if (this.selectedId !== id || this.dirty) this.selectObstacle(id);
       if (!this.selected) return;
       this.redrawObstacleId = id;
-      this.canvas?.startDraw();
+      this.drawShape = 'polygon';
+      this.canvas?.startDraw('polygon');
     });
   };
 
-  /** Edit corners for this structure's footprint: select it and arm the one-shot corner tool (again cancels). */
+  /** The structure editor's Edit corners: select it and edit its corners (again goes back to select mode). */
   editStructureCorners = (id: string) => {
-    this.withCanvas(() => {
-      if (this.activeTool === 'corners') {
-        this.endTool();
-        return;
-      }
-      if (this.drawing) return;
-      if (this.onWall) this.setSurface('floor');
-      if (this.selectedId !== id) this.selectObstacle(id);
-      if (this.structureCornersEditable) this.toggleTool('corners');
-    });
+    if (this.onWall && !this.drawing) this.setSurface('floor');
+    this.toggleCornersOf(this.selectedId === id, () => this.selectObstacle(id));
+  };
+  /** The zone editor's Edit corners. */
+  editZoneCorners = (id: string) => {
+    this.toggleCornersOf(this.selectedZoneId === id, () => this.selectZone(id));
+  };
+  /** The keep-out area editor's Edit corners. */
+  editKeepOutCorners = (id: string) => {
+    this.toggleCornersOf(this.selectedCeilingId === id, () => this.selectCeilingItem(id));
+  };
+
+  /**
+   * The strip's Rectangle or Polygon with nothing selected: draw a new
+   * structure, zone (a plane on the surface showing) or keep-out area. Again,
+   * or Escape, cancels.
+   */
+  startShapeDraw = (shape: DrawShape) => {
+    if (this.drawing) {
+      const same = this.drawShape === shape;
+      this.canvas?.cancelDraw();
+      if (same) return;
+    }
+    if (this.onObstacles) this.startObstacleDraw(shape);
+    else if (this.onZones) this.startZoneDraw('plane', shape);
+    else if (this.onCeiling) this.startKeepOutDraw(shape);
   };
 
   /** A structure picked on the 2D plan: select it and bring its row into view. */
@@ -752,18 +855,24 @@ export class PlanController {
     this.onItemSelected?.(id);
   };
 
-  startObstacleDraw = () => {
+  startObstacleDraw = (shape: DrawShape = 'polygon') => {
     this.withCanvas(() => {
       this.endTool();
       this.selectObstacle(null);
       this.redrawObstacleId = null;
-      this.canvas?.startDraw();
+      this.drawShape = shape;
+      this.canvas?.startDraw(shape);
     });
   };
   stopObstacleDraw = () => {
     if (this.drawing) this.canvas?.cancelDraw();
   };
   onDrawEnd = async (committed: boolean) => {
+    this.shapeMode = 'select';
+    if (this.onCeiling) {
+      this.endKeepOutDraw(committed);
+      return;
+    }
     // A plane drawn on the surface showing (reached through startZoneDraw)
     if (this.onZones) {
       const kind = this.drawKind;
@@ -775,10 +884,12 @@ export class PlanController {
       if (redraw) {
         // The selected plane takes the drawn outline
         const partial = seg ? { wall_vertices: this.toWallOutline(this.draft, seg) } : zoneFootprintGeometry(kind, this.draft);
+        this.draftYaw = 0;
         this.actions.updateZone(redraw, { ...partial, fit_room: false });
         return;
       }
       try {
+        this.draftYaw = 0;
         this.selectedZoneId = await this.actions.addZone(kind, { ...this.drawnZoneGeometry(kind, this.draft, seg), fit_room: false });
         this.onItemSelected?.(this.selectedZoneId);
       } catch (e) {
@@ -795,12 +906,13 @@ export class PlanController {
       return;
     }
     if (!this.onObstacles) return;
+    this.draftYaw = 0;
     if (redrawObstacle) {
       // The structure takes the drawn footprint; its bottom and top stay
       if (this.scene().objects.some((o) => o.id === redrawObstacle)) this.actions.updateObstacle(redrawObstacle, footprintGeometry(this.draft));
       return;
     }
-    // The new obstacle is selected and editable; Draw is one click away for the next
+    // The new obstacle is selected, in select mode
     const d = draftFromPolygon(this.draft, this.scene().roomZ, this.obstacles);
     try {
       this.selectedId = await this.actions.addObstacle(objectFromDraft(d));
@@ -1026,7 +1138,13 @@ export class PlanController {
       this.endTool();
       return true;
     }
+    // Editing a shape's corners: back to select mode, still selected
+    if (this.shapeMode === 'corners' && !this.drawing) {
+      this.endCorners();
+      return true;
+    }
     if (this.onCeiling) {
+      if (this.drawing) { this.canvas?.cancelDraw(); return true; }
       if (this.selectedCeilingId) { this.selectCeilingItem(null); return true; }
       return false;
     }
@@ -1159,6 +1277,8 @@ export class PlanController {
     if (this.dirty) this.revertDraft();
     this.selectedZoneId = id;
     this.selectedIndex = -1;
+    this.shapeMode = 'select';
+    this.draftYaw = 0;
     const z = id ? this.userZones.find((x) => x.id === id) : null;
     // A plane opens on its surface and a volume on the floor; a point stays on the surface showing
     if (z) {
@@ -1170,7 +1290,6 @@ export class PlanController {
       }
     }
     this.draft = z ? this.zoneOutline(z) : [];
-    if (this.activeTool === 'corners' && !this.zoneCornersEditable) this.endTool();
   };
   /** A zone picked on the 2D plan: select it and bring its row into view. */
   clickZone = (id: string) => {
@@ -1311,9 +1430,9 @@ export class PlanController {
    * With a plane on this surface (or a volume) of that kind selected, the
    * drawing becomes its outline; otherwise it adds a new zone.
    */
-  startZoneDraw = (kind: 'plane' | 'volume') => {
+  startZoneDraw = (kind: 'plane' | 'volume', shape: DrawShape = 'polygon') => {
     if (!this.canvas && this.onNeedCanvas) {
-      this.withCanvas(() => this.startZoneDraw(kind));
+      this.withCanvas(() => this.startZoneDraw(kind, shape));
       return;
     }
     if (this.drawing) {
@@ -1329,7 +1448,8 @@ export class PlanController {
     if (!redraw) this.selectZone(null);
     this.redrawZoneId = redraw;
     this.drawKind = kind;
-    this.canvas?.startDraw();
+    this.drawShape = shape;
+    this.canvas?.startDraw(shape);
   };
 
   // --- Markers (lamps and calc points)
@@ -1463,10 +1583,64 @@ export class PlanController {
     if (this.dirty) this.revertDraft();
     this.selectedCeilingId = id;
     this.selectedIndex = -1;
+    this.shapeMode = 'select';
     if (id && this.activeTool === 'grid') this.endTool();
     const it = id ? this.ceiling.items.find((i) => i.id === id) : null;
-    this.draft = it?.kind === 'keep' && this.ceilingItemShown(it) && !this.onWall ? clone(it.vertices) : [];
+    const keep = it?.kind === 'keep' && this.ceilingItemShown(it) && !this.onWall ? it : null;
+    this.draft = keep ? clone(keep.vertices) : [];
+    this.draftYaw = keep ? (keep.yaw ?? 0) : 0;
   };
+
+  /** The keep-out area a drawing replaces the outline of (null: it adds one). */
+  redrawKeepOutId: string | null = null;
+  /**
+   * Draw a keep-out area as a rectangle or polygon: a new one, or (`redraw`,
+   * the keep-out editor's Redraw footprint) a new outline for that one. Again,
+   * or Escape, cancels.
+   */
+  startKeepOutDraw = (shape: DrawShape = 'polygon', redraw: string | null = null) => {
+    if (this.drawing) {
+      const same = this.redrawKeepOutId === redraw && this.drawShape === shape;
+      this.canvas?.cancelDraw();
+      if (same) return;
+    }
+    if (!redraw && this.ceilingFull) return;
+    this.withCanvas(() => {
+      this.endTool();
+      if (redraw) {
+        if (this.selectedCeilingId !== redraw) this.selectCeilingItem(redraw);
+        if (!this.editableKeepOut) return;
+      } else this.selectCeilingItem(null);
+      this.redrawKeepOutId = redraw;
+      this.drawShape = shape;
+      this.canvas?.startDraw(shape);
+    });
+  };
+  /** A keep-out drawing ended: the new area (selected) or the new outline, if it lies in the room. */
+  private endKeepOutDraw(committed: boolean) {
+    const redraw = this.redrawKeepOutId;
+    this.redrawKeepOutId = null;
+    if (!committed || this.draft.length < 3) return;
+    const outline = this.scene().vertices;
+    const next = normalizeCCW(this.draft);
+    this.draftYaw = 0;
+    if (redraw) {
+      const k = this.ceiling.items.find((i) => i.id === redraw);
+      if (k?.kind !== 'keep' || !keepOutEditAllowed(k.vertices, next, outline)) {
+        this.revertDraft();
+        return;
+      }
+      this.actions.updateCeilingItem(redraw, { vertices: next, yaw: 0 });
+      return;
+    }
+    const id = polygonInRoom(next, outline) ? this.actions.addCeilingItem('keep', next) : null;
+    if (!id) {
+      this.draft = [];
+      return;
+    }
+    this.selectCeilingItem(id);
+    this.onItemSelected?.(id);
+  }
   /** An item picked on the 2D plan: select it and bring its row into view. */
   clickCeilingItem = (id: string) => {
     if (this.drawing) return;

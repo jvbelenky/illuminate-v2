@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A plane: its Surface, Calculation, its distance from its surface with Flip,
-	// Fit to room and Draw outline, then Geometry, Grid points and Display folded
+	// Fit to room, Redraw outline and Edit corners, then Geometry, Grid points and Display folded
 	// away. A vertical plane parallel to no wall (legacy) shows its geometry read-only.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
@@ -98,6 +98,7 @@
 	// --- Distance, Flip, Fit, Draw
 	const distance = $derived(distanceOf(zone, surface, room.z));
 	const drawing = $derived(ctl.drawing && ctl.drawKind === 'plane');
+	const cornering = $derived(ctl.shapeMode === 'corners' && ctl.selectedZoneId === zone.id);
 
 	function setDistance(v: number) {
 		if (v !== distance) commit(distancePartial(zone, surface, room.z, v));
@@ -226,7 +227,10 @@
 			<span>{onWall ? 'Fit to wall' : 'Fit to room'}</span>
 			<input type="checkbox" role="switch" checked={zone.fit_room ?? false} onchange={(e) => commit(fitPartial(zone, room, e.currentTarget.checked))} />
 		</label>
-		<button type="button" class="secondary plan-btn" class:active={drawing} aria-pressed={drawing} onclick={() => ctl.startZoneDraw('plane')}>Draw outline</button>
+		<div class="shape-pair">
+			<button type="button" class="secondary plan-btn" class:active={drawing} aria-pressed={drawing} onclick={() => ctl.startZoneDraw('plane')}>Redraw outline</button>
+			<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing} onclick={() => ctl.editZoneCorners(zone.id)}>Edit corners</button>
+		</div>
 	</div>
 {/if}
 
