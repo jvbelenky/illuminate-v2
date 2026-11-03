@@ -96,10 +96,9 @@
 		{/if}
 	</section>
 
-	<div class="ep-section">
-		<span>Lamps</span>
-		{#if selected.length > 1}<span class="ep-chip">{selected.length} selected</span>{/if}
-	</div>
+	{#if selected.length > 1}
+		<div class="ep-section"><span class="ep-chip">{selected.length} selected</span></div>
+	{/if}
 	{#if lamps.length === 0}
 		<span class="ep-chip">None</span>
 	{/if}
