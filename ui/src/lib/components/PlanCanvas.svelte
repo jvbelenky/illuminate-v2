@@ -35,7 +35,7 @@
 
 <script lang="ts">
 	import { tick, untrack, type Snippet } from 'svelte';
-	import { planShouldHandleKey } from '$lib/plan/planKeys';
+	import { planShouldHandleKey, isTypingTarget } from '$lib/plan/planKeys';
 	import { userSettings, type PlanNavMode } from '$lib/stores/settings';
 	import type { LampInstance, SceneObject } from '$lib/types/project';
 	import { objectFootprint, polygonCentroid as polygonCentroidOf } from '$lib/utils/objectGeometry';
@@ -54,8 +54,9 @@
 		normalizeCCW,
 		snapTo,
 		angleBetweenDeg,
-		snapSegmentDirection, pointInPolygon } from '$lib/utils/roomGeometry';
-	import { setSegmentLength, parseLengthInput } from '$lib/plan/segmentLength';
+		snapSegmentDirection, pointInPolygon, validatePolygon } from '$lib/utils/roomGeometry';
+	import { setSegmentLength, parseLengthInput, parseCoordinateInput } from '$lib/plan/segmentLength';
+	import InlineValueInput, { type InlineField } from '$lib/plan/InlineValueInput.svelte';
 	import { snapPointToOutline, snapTranslationToOutline, edgeAxis } from '$lib/plan/outlineSnap';
 
 	// A plan-view canvas for drawing and editing a polygon in room coordinates:
@@ -92,9 +93,13 @@
 		/** Host shapes (obstacle footprints) with a name label; click to select when provided. */
 		shapes?: PlanShape[];
 		onShapeClick?: (id: string, event: PointerEvent) => void;
+		/** Double-click a shape's name label to rename it (when provided). */
+		onShapeRename?: (id: string, name: string) => void;
+		/** Labels of a corner's two coordinates when typed in (X / Y on the floor plan). */
+		coordLabels?: [string, string];
 		/** A pointer-down inside the draft moves it whole (instead of panning). */
 		draggableBody?: boolean;
-		/** Double-click a corner to remove it. */
+		/** Shift+double-click a corner to remove it (a plain double-click types its position). */
 		dblClickCorners?: boolean;
 		/** Draw the draft as a selected area (cyan tint, dashed), as for a ceiling keep-out area. */
 		selectedDraft?: boolean;
@@ -155,6 +160,8 @@
 		objects = [],
 		shapes = [],
 		onShapeClick,
+		onShapeRename,
+		coordLabels = ['X', 'Y'],
 		draggableBody = false,
 		dblClickCorners = false,
 		selectedDraft = false,
@@ -187,9 +194,13 @@
 	/** A corner, wall or body drag; `restore` is the draft to put back if it is cancelled (before a midpoint insert). */
 	let drag = $state<{ kind: 'vertex' | 'edge' | 'body'; index: number; startPointer: Vertex; startDraft: Vertex[]; restore: Vertex[] } | null>(null);
 	let svgEl = $state<SVGSVGElement | undefined>(undefined);
-	/** A wall length being typed (double-click a wall or its label). */
-	let lengthEdit = $state<{ index: number; text: string; invalid: boolean } | null>(null);
-	let lengthInputEl = $state<HTMLInputElement | undefined>(undefined);
+	/** An input open over the canvas: a wall's length, a corner's position, a length typed while drawing, a structure's name. */
+	type CanvasInline =
+		| { kind: 'length'; index: number }
+		| { kind: 'corner'; index: number }
+		| { kind: 'draw'; text: string }
+		| { kind: 'rename'; id: string; name: string; at: Vertex };
+	let inline = $state<CanvasInline | null>(null);
 
 	const unit = $derived(unitAbbrev(units));
 	const edgeLengths = $derived(draft.length >= 2 ? polygonEdgeLengths(draft) : []);
@@ -632,16 +643,37 @@
 	let justPanned = false;
 	let pointerOver = false;
 
+	/**
+	 * A key for this canvas: it has focus or the pointer is over it, the key is not
+	 * typed into a field, and no modal window stands in front of it (a canvas inside
+	 * the front window, such as the ceiling designer's, takes its keys there).
+	 */
+	function canvasKey(event: KeyboardEvent): boolean {
+		const el = svgEl;
+		if (!el || isTypingTarget(event.target)) return false;
+		if (!pointerOver && document.activeElement !== el) return false;
+		const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+		const front = dialogs[dialogs.length - 1];
+		return !front || front.contains(el);
+	}
+
 	function onWindowKeyDown(event: KeyboardEvent) {
+		// Drawing: a typed number is the next wall's length, along the rubber band
+		if (drawing && tool === 'draw' && draft.length > 0 && !inline && /^[0-9.]$/.test(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+			if (canvasKey(event)) {
+				event.preventDefault();
+				inline = { kind: 'draw', text: event.key };
+				return;
+			}
+		}
 		if (navControls && (event.key === '+' || event.key === '=' || event.key === '-') && !event.ctrlKey && !event.metaKey && !event.altKey) {
-			if (!planShouldHandleKey(event)) return;
+			// The canvas in use, or (pointer and focus elsewhere) the main view's
+			if (!canvasKey(event) && !planShouldHandleKey(event)) return;
 			event.preventDefault();
 			zoomStep(event.key === '-' ? -1 : 1);
 			return;
 		}
-		if (event.key !== ' ') return;
-		const armed = pointerOver || (!!svgEl && document.activeElement === svgEl);
-		if (!armed || !planShouldHandleKey(event)) return;
+		if (event.key !== ' ' || !canvasKey(event)) return;
 		spaceHeld = true;
 		event.preventDefault();
 	}
@@ -835,7 +867,11 @@
 			return;
 		}
 		if (tool !== 'draw' || !drawing) return;
-		const p = drawPointFor(event);
+		placeDrawPoint(drawPointFor(event));
+	}
+
+	/** Add a drawn corner (a click, or a typed length); on the first corner it closes the shape. */
+	function placeDrawPoint(p: Vertex) {
 		if (nearFirst(p)) {
 			finishDraw();
 			return;
@@ -861,7 +897,7 @@
 		event.preventDefault();
 		event.stopPropagation();
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-		lengthEdit = null;
+		inline = null;
 		const start = draft.map((v) => [v[0], v[1]] as Vertex);
 		drag = { kind, index, startPointer: pointerToRoom(event), startDraft: start, restore: restore ?? start };
 		selectedIndex = kind === 'vertex' ? index : -1;
@@ -1044,12 +1080,19 @@
 		onEdit?.();
 	}
 
-	/** Double-click on a corner: remove it (a polygon keeps at least three). */
+	/** Double-click on a corner: type its position. Hosts that take corner double-clicks remove it on Shift+double-click. */
 	function onVertexDblClick(event: MouseEvent, index: number) {
-		if (!dblClickCorners || !editing || drawing) return;
+		if (!editing || drawing) return;
+		if (dblClickCorners && event.shiftKey) {
+			event.preventDefault();
+			event.stopPropagation();
+			removeVertex(index);
+			return;
+		}
+		if (!lengthTyping) return;
 		event.preventDefault();
 		event.stopPropagation();
-		removeVertex(index);
+		inline = { kind: 'corner', index };
 	}
 
 	/** Double-click on a wall or its length label: type its length (corners are added with the "+" handles). */
@@ -1057,11 +1100,7 @@
 		if (!lengthTyping) return;
 		event.preventDefault();
 		event.stopPropagation();
-		lengthEdit = { index: edgeIndex, text: fmt(edgeLengths[edgeIndex]), invalid: false };
-		tick().then(() => {
-			lengthInputEl?.focus();
-			lengthInputEl?.select();
-		});
+		inline = { kind: 'length', index: edgeIndex };
 	}
 
 	/** A press on a length label stays there, so its double-click reaches it. */
@@ -1070,38 +1109,135 @@
 		event.stopPropagation();
 	}
 
-	/** Apply the typed length: vertex i+1 and i+2 move along the wall (segmentLength). Invalid input stays open. */
-	function applyLengthEdit() {
-		const edit = lengthEdit;
-		if (!edit) return;
-		const length = parseLengthInput(edit.text, units);
-		const next = length === null || edit.index >= draft.length ? null : setSegmentLength(draft, edit.index, length);
-		if (!next) {
-			edit.invalid = true;
-			return;
-		}
-		lengthEdit = null;
+	const shapeRenaming = $derived(!!onShapeRename && editing && !drawing);
+	/** A press on a structure's name label stays there, so its double-click reaches it. */
+	function onShapeLabelPointerDown(event: PointerEvent) {
+		if (!shapeRenaming || event.button !== 0 || spaceHeld) return;
+		event.stopPropagation();
+	}
+	function onShapeLabelDblClick(event: MouseEvent, shape: PlanShape) {
+		if (!shapeRenaming || shape.inert) return;
+		event.preventDefault();
+		event.stopPropagation();
+		inline = { kind: 'rename', id: shape.id, name: shape.name ?? '', at: polygonCentroidOf(shape.vertices) };
+	}
+
+	function closeInline() {
+		inline = null;
 		svgEl?.focus();
+	}
+
+	/** Apply a typed polygon edit through the host, as a finished corner drag does. */
+	function commitTyped(next: Vertex[]) {
 		if (sameDraft(next, draft)) return;
 		draft = next;
 		onEdit?.();
 	}
 
-	function cancelLengthEdit() {
-		lengthEdit = null;
-		svgEl?.focus();
-	}
+	const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
-	function onLengthKeyDown(event: KeyboardEvent) {
-		event.stopPropagation();
-		if (event.key === 'Enter') {
-			event.preventDefault();
-			applyLengthEdit();
-		} else if (event.key === 'Escape') {
-			event.preventDefault();
-			cancelLengthEdit();
-		}
+	interface InlineSpec {
+		/** Anchor in CSS pixels within the canvas wrap. */
+		at: [number, number];
+		fields: InlineField[];
+		label: string;
+		blur: boolean;
+		select: boolean;
+		apply: (values: string[]) => boolean;
 	}
+	/** What the open input shows and how it applies; null once it no longer fits (it closes). */
+	const inlineSpec = $derived.by<InlineSpec | null>(() => {
+		const e = inline;
+		if (!e) return null;
+		if (e.kind === 'length') {
+			if (!lengthTyping || e.index >= draft.length) return null;
+			const [nx, ny] = inwardNormals[e.index];
+			const [mx, my] = midpoints[e.index];
+			return {
+				at: toScreen(mx + nx * px * 20, my + ny * px * 20),
+				fields: [{ value: fmt(edgeLengths[e.index]) }],
+				label: `Wall ${e.index + 1} length`,
+				blur: true,
+				select: true,
+				apply: ([text]) => {
+					const length = parseLengthInput(text, units);
+					const next = length === null ? null : setSegmentLength(draft, e.index, length);
+					if (!next) return false;
+					closeInline();
+					commitTyped(next);
+					return true;
+				},
+			};
+		}
+		if (e.kind === 'corner') {
+			if (!lengthTyping || e.index >= draft.length) return null;
+			const [vx, vy] = draft[e.index];
+			const [sx, sy] = toScreen(vx, vy);
+			return {
+				at: [sx, sy - 30],
+				fields: [{ label: coordLabels[0], value: fmt(vx) }, { label: coordLabels[1], value: fmt(vy) }],
+				label: `Corner ${e.index + 1}`,
+				blur: true,
+				select: true,
+				apply: ([a, b]) => {
+					const x = parseCoordinateInput(a, units);
+					const y = parseCoordinateInput(b, units);
+					if (x === null || y === null) return false;
+					const next = draft.map((v) => [v[0], v[1]] as Vertex);
+					next[e.index] = [r6(x), r6(y)];
+					if (validatePolygon(next) !== null) return false;
+					closeInline();
+					commitTyped(next);
+					return true;
+				},
+			};
+		}
+		if (e.kind === 'draw') {
+			if (!drawing || draft.length === 0) return null;
+			const last = draft[draft.length - 1];
+			const c = cursor ?? last;
+			const [sx, sy] = toScreen(c[0], c[1]);
+			return {
+				at: [sx + 44, sy + 28],
+				fields: [{ value: e.text }],
+				label: 'Wall length',
+				blur: false,
+				select: false,
+				apply: ([text]) => {
+					const length = parseLengthInput(text, units);
+					const towards = cursor;
+					if (length === null || !towards) return false;
+					// Along the rubber band, which already carries the cursor's snapping
+					const dx = towards[0] - last[0];
+					const dy = towards[1] - last[1];
+					const d = Math.hypot(dx, dy);
+					if (d < 1e-9) return false;
+					const p: Vertex = [r6(clampCoord(last[0] + (dx / d) * length)), r6(clampCoord(last[1] + (dy / d) * length))];
+					closeInline();
+					placeDrawPoint(p);
+					return true;
+				},
+			};
+		}
+		const [sx, sy] = toScreen(e.at[0], e.at[1]);
+		return {
+			at: [sx, sy],
+			fields: [{ value: e.name, text: true }],
+			label: 'Name',
+			blur: true,
+			select: true,
+			apply: ([text]) => {
+				if (!text) return false;
+				closeInline();
+				if (text !== e.name) onShapeRename?.(e.id, text);
+				return true;
+			},
+		};
+	});
+	// An input whose subject went away (the drawing ended, the polygon changed) closes
+	$effect(() => {
+		if (inline && !inlineSpec) untrack(() => (inline = null));
+	});
 
 	export function removeVertex(index: number) {
 		if (draft.length <= 3) return;
@@ -1281,7 +1417,7 @@
 				role="button" tabindex="-1" aria-label="Wall {i + 1}"
 				onpointerdown={(e) => beginDrag(e, 'edge', i)} ondblclick={(e) => onEdgeDblClick(e, i)} />
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<text x={lx} y={ly + px * 4} class="edge-label" class:typeable={lengthTyping} class:editing-length={lengthEdit?.index === i}
+			<text x={lx} y={ly + px * 4} class="edge-label" class:typeable={lengthTyping} class:editing-length={inline?.kind === 'length' && inline.index === i}
 				font-size={px * 11} text-anchor="middle"
 				onpointerdown={onLabelPointerDown} ondblclick={(e) => onEdgeDblClick(e, i)}>{fmt(edgeLengths[i])}</text>
 		{/each}
@@ -1315,7 +1451,11 @@
 			onpointerdown={(e) => { if (onShapeClick && editing && !drawing && !spaceHeld && e.button === 0) { e.stopPropagation(); e.preventDefault(); onShapeClick(shape.id, e); } }}
 		/>
 		{#if shape.name}
-			<text x={cx} y={cy + px * 4} class="shape-label" class:dimmed={shape.dimmed} style:opacity={shape.opacity} font-size={px * 11} text-anchor="middle">{shape.name}</text>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<text x={cx} y={cy + px * 4} class="shape-label" class:dimmed={shape.dimmed} class:renamable={shapeRenaming && !shape.inert}
+				class:editing-length={inline?.kind === 'rename' && inline.id === shape.id}
+				style:opacity={shape.opacity} font-size={px * 11} text-anchor="middle"
+				onpointerdown={onShapeLabelPointerDown} ondblclick={(e) => onShapeLabelDblClick(e, shape)}>{shape.name}</text>
 		{/if}
 	{/each}
 
@@ -1401,26 +1541,19 @@
 </div>
 {/if}
 {#if hud}{@render hud(ctx)}{/if}
-{#if lengthEdit && lengthTyping && lengthEdit.index < draft.length}
-	{@const i = lengthEdit.index}
-	{@const [nx, ny] = inwardNormals[i]}
-	{@const [sx, sy] = toScreen(midpoints[i][0] + nx * px * 20, midpoints[i][1] + ny * px * 20)}
-	<input
-		bind:this={lengthInputEl}
-		class="length-input"
-		class:invalid={lengthEdit.invalid}
-		style="left: {sx}px; top: {sy}px"
-		type="text"
-		inputmode="decimal"
-		autocomplete="off"
-		spellcheck="false"
-		aria-label="Wall {i + 1} length"
-		aria-invalid={lengthEdit.invalid}
-		bind:value={lengthEdit.text}
-		oninput={() => { if (lengthEdit) lengthEdit.invalid = false; }}
-		onkeydown={onLengthKeyDown}
-		onblur={applyLengthEdit}
-	/>
+{#if inline && inlineSpec}
+	{#key inline}
+		<InlineValueInput
+			x={inlineSpec.at[0]}
+			y={inlineSpec.at[1]}
+			fields={inlineSpec.fields}
+			ariaLabel={inlineSpec.label}
+			applyOnBlur={inlineSpec.blur}
+			selectOnOpen={inlineSpec.select}
+			onApply={inlineSpec.apply}
+			onCancel={closeInline}
+		/>
+	{/key}
 {/if}
 </div>
 
@@ -1537,31 +1670,6 @@
 	.edge-label.editing-length {
 		visibility: hidden;
 	}
-	/* A wall length being typed, over its label */
-	.length-input {
-		position: absolute;
-		z-index: 5;
-		transform: translate(-50%, -50%);
-		width: 9ch;
-		padding: 3px 6px;
-		font: 13px var(--font-mono, monospace);
-		text-align: center;
-		color: var(--color-text);
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: 4px;
-		outline: none;
-		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-	}
-	.length-input:focus {
-		border-color: var(--color-scene-selected);
-		box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-scene-selected) 45%, transparent);
-	}
-	.length-input.invalid {
-		border-color: var(--color-error, #e5484d);
-		background: color-mix(in srgb, var(--color-error, #e5484d) 14%, var(--color-bg));
-		box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-error, #e5484d) 40%, transparent);
-	}
 	.context-outline {
 		fill: var(--color-text-muted);
 		fill-opacity: 0.05;
@@ -1669,6 +1777,13 @@
 	.shape-label.dimmed {
 		fill: var(--color-text-muted, #6b7280);
 		font-weight: 500;
+	}
+	.shape-label.renamable {
+		pointer-events: auto;
+		cursor: text;
+	}
+	.shape-label.editing-length {
+		visibility: hidden;
 	}
 	.vertex {
 		fill: var(--color-bg, #fff);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { setSegmentLength, parseLengthInput } from './segmentLength';
+import { setSegmentLength, parseLengthInput, parseCoordinateInput } from './segmentLength';
 import { polygonEdgeLengths, type Vertex } from '$lib/utils/roomGeometry';
 
 const rect: Vertex[] = [[0, 0], [6, 0], [6, 4], [0, 4]];
@@ -90,5 +90,21 @@ describe('parseLengthInput', () => {
     expect(parseLengthInput('0', 'meters')).toBeNull();
     expect(parseLengthInput('-2', 'meters')).toBeNull();
     expect(parseLengthInput('1.2.3', 'meters')).toBeNull();
+  });
+});
+
+describe('parseCoordinateInput', () => {
+  it('takes zero and negative values, with units', () => {
+    expect(parseCoordinateInput('0', 'meters')).toBe(0);
+    expect(parseCoordinateInput('-1.5', 'meters')).toBe(-1.5);
+    expect(parseCoordinateInput('-50cm', 'meters')).toBeCloseTo(-0.5, 12);
+    expect(parseCoordinateInput(`-5'6"`, 'feet')).toBeCloseTo(-5.5, 12);
+    expect(parseCoordinateInput('2 ft', 'inches')).toBeCloseTo(24, 9);
+  });
+
+  it('rejects non-numbers', () => {
+    expect(parseCoordinateInput('', 'meters')).toBeNull();
+    expect(parseCoordinateInput('x', 'meters')).toBeNull();
+    expect(parseCoordinateInput('3 yd', 'meters')).toBeNull();
   });
 });

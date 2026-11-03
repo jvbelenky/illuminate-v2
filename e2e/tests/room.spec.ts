@@ -160,6 +160,49 @@ test.describe('Polygon rooms', () => {
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(6);
   });
 
+  test('draw an outline by typing wall lengths, then type a corner position', async ({ page }) => {
+    await waitForSession(page);
+    await expandRoomPanel(page);
+    await planTool(page, 'Draw').click();
+    const plan = planSvg(page);
+    const box = (await plan.boundingBox())!;
+    await plan.click({ position: { x: box.width * 0.2, y: box.height * 0.8 } });
+    const length = page.getByRole('textbox', { name: 'Wall length' });
+    const lastCorner = async () => {
+      const b = (await plan.locator('circle.vertex').last().boundingBox())!;
+      return [b.x + b.width / 2, b.y + b.height / 2];
+    };
+    // Each wall: point the rubber band, type its length, Enter
+    for (const [dx, dy, len] of [[150, 0, '5'], [0, -150, '4'], [-150, 0, '5']] as const) {
+      const [cx, cy] = await lastCorner();
+      await page.mouse.move(cx + dx, cy + dy, { steps: 3 });
+      await page.keyboard.type(len);
+      await expect(length).toBeFocused();
+      await expect(length).toHaveValue(len);
+      await page.keyboard.press('Enter');
+      await expect(length).toHaveCount(0);
+    }
+    await expect(plan.locator('circle.vertex')).toHaveCount(4);
+    // Enter closes the outline
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(0);
+    // A 5 x 4 outline wherever it started: 20 m², walls of 5, 4, 5 and 4
+    await expect(page.locator('.floorplan-part .plan-summary')).toHaveText(/^20\.0 m²/);
+    await expect(plan.locator('text.edge-label')).toHaveText(['5.0', '4.0', '5.0', '4.0']);
+
+    // Double-click a corner: X and Y, in place
+    await openGeometry(page);
+    const row = page.locator('.floorplan-part .vertex-row').nth(1).locator('input');
+    const x0 = parseFloat(await row.nth(0).inputValue());
+    await plan.getByRole('button', { name: 'Corner 2', exact: true }).dblclick();
+    const cx = page.getByRole('textbox', { name: 'Corner 2 X' });
+    await expect(cx).toBeFocused();
+    await page.keyboard.type(String(x0 + 0.5));
+    await page.keyboard.press('Enter');
+    await expect(cx).toHaveCount(0);
+    await expect.poll(async () => parseFloat(await row.nth(0).inputValue())).toBeCloseTo(x0 + 0.5, 6);
+  });
+
   test('upload a floor plan, calibrate it, save and reload the project', async ({ page }) => {
     await waitForSession(page);
     await expandRoomPanel(page);

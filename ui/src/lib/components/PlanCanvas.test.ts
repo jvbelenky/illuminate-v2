@@ -367,8 +367,8 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
     await fireEvent.wheel(svg, { deltaX: 0, deltaY: -300, ctrlKey: true, clientX: 50, clientY: 50 });
     const zoomed = svg.getAttribute('viewBox');
     expect(zoomed).not.toBe(fitted);
-    // A double-click on a corner keeps its meaning (remove the corner) and does not fit
-    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 2' }));
+    // A Shift+double-click on a corner keeps its meaning (remove the corner) and does not fit
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 2' }), { shiftKey: true });
     expect(svg.querySelectorAll('circle.vertex')).toHaveLength(3);
     expect(svg.getAttribute('viewBox')).toBe(zoomed);
     await fireEvent.dblClick(svg, { clientX: 390, clientY: 10 });
@@ -695,5 +695,161 @@ describe('PlanCanvas snapping to the room outline', () => {
     expect(Math.max(...xs())).toBeLessThan(10 - 10 * upp);
     expect(svg.querySelectorAll('.outline-guide')).toHaveLength(0);
     await fireEvent.pointerUp(svg, { ...to, pointerId: 1 });
+  });
+});
+
+describe('PlanCanvas typed corners, drawn lengths and names', () => {
+  const S = 400;
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function mountView(props: Record<string, unknown> = {}) {
+    const onEdit = vi.fn();
+    const { container, component } = render(PlanCanvas, {
+      props: { draft: room.map((v) => [...v] as Vertex), units: 'meters', precision: 2, onEdit, ...props },
+    });
+    const svg = container.querySelector('svg.plan') as SVGSVGElement;
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: S, height: S, right: S, bottom: S, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await resize(svg, S, S);
+    const api = component as unknown as { fitView: (p: Vertex[]) => void; startDraw: () => void };
+    api.fitView([[0, 0], [10, 10]]);
+    await tick();
+    const v = box(svg);
+    const upp = v.h / S;
+    const client = (x: number, y: number) => ({ clientX: (x - v.x) / upp, clientY: S - (y - v.bottom) / upp });
+    const corners = () => [...svg.querySelectorAll('circle.vertex')].map((c) => [Number(c.getAttribute('cx')), 0 - Number(c.getAttribute('cy'))]);
+    return { svg, container, onEdit, api, client, corners };
+  }
+  const field = (name: string) => screen.queryByRole('textbox', { name }) as HTMLInputElement | null;
+
+  it('double-click a corner types its X and Y; Tab moves between them; Enter applies', async () => {
+    const { onEdit, corners } = await mountView();
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 2' }));
+    await tick();
+    const x = field('Corner 2 X')!;
+    const y = field('Corner 2 Y')!;
+    expect(x.value).toBe('4.00');
+    expect(y.value).toBe('0.00');
+    expect(document.activeElement).toBe(x);
+    await fireEvent.keyDown(x, { key: 'Tab' });
+    expect(document.activeElement).toBe(y);
+    await fireEvent.input(x, { target: { value: '5' } });
+    await fireEvent.input(y, { target: { value: '50cm' } });
+    await fireEvent.keyDown(y, { key: 'Enter' });
+    expect(field('Corner 2 X')).toBeNull();
+    expect(corners()[1]).toEqual([5, 0.5]);
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it('a corner position that breaks the polygon stays open, invalid; Escape cancels', async () => {
+    const { onEdit, corners } = await mountView();
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 2' }));
+    await tick();
+    const x = field('Corner 2 X')!;
+    // Past the far wall: the outline would cross itself
+    await fireEvent.input(x, { target: { value: '-3' } });
+    await fireEvent.keyDown(x, { key: 'Enter' });
+    expect(field('Corner 2 X')).toBe(x);
+    expect(x.classList.contains('invalid')).toBe(true);
+    await fireEvent.keyDown(x, { key: 'Escape' });
+    expect(field('Corner 2 X')).toBeNull();
+    expect(corners()[1]).toEqual([4, 0]);
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it('while drawing, a typed number places the next corner along the snapped rubber band', async () => {
+    const { svg, api, client, corners } = await mountView({ draft: [] });
+    api.startDraw();
+    await tick();
+    await fireEvent.pointerEnter(svg);
+    await fireEvent.click(svg, client(2, 2));
+    // Nearly level: the rubber band snaps to horizontal
+    await fireEvent.pointerMove(svg, { ...client(6, 2.03), pointerId: 1 });
+    await fireEvent.keyDown(svg, { key: '5' });
+    await tick();
+    const input = field('Wall length')!;
+    expect(input.value).toBe('5');
+    expect(document.activeElement).toBe(input);
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(field('Wall length')).toBeNull();
+    expect(corners()).toEqual([[2, 2], [7, 2]]);
+    // Escape closes the input only; the drawing goes on
+    await fireEvent.pointerMove(svg, { ...client(7, 6), pointerId: 1 });
+    await fireEvent.keyDown(svg, { key: '3' });
+    await tick();
+    await fireEvent.keyDown(field('Wall length')!, { key: 'Escape' });
+    expect(field('Wall length')).toBeNull();
+    expect(svg.classList.contains('drawing')).toBe(true);
+    expect(corners()).toHaveLength(2);
+    // Zero is refused
+    await fireEvent.keyDown(svg, { key: '0' });
+    await tick();
+    const zero = field('Wall length')!;
+    await fireEvent.keyDown(zero, { key: 'Enter' });
+    expect(zero.classList.contains('invalid')).toBe(true);
+    await fireEvent.input(zero, { target: { value: '4' } });
+    await fireEvent.keyDown(zero, { key: 'Enter' });
+    expect(corners()).toEqual([[2, 2], [7, 2], [7, 6]]);
+  });
+
+  it("double-click a structure's name label to rename it; an empty name is refused", async () => {
+    const onShapeRename = vi.fn();
+    const shapes = [{ id: 'object-1', vertices: [[6, 6], [8, 6], [8, 8], [6, 8]] as Vertex[], name: 'Box' }];
+    const { container } = await mountView({ shapes, onShapeRename, onShapeClick: () => {} });
+    const label = container.querySelector('text.shape-label')!;
+    await fireEvent.dblClick(label);
+    await tick();
+    const name = field('Name')!;
+    expect(name.value).toBe('Box');
+    expect(name.selectionEnd).toBe(3);
+    await fireEvent.input(name, { target: { value: '  ' } });
+    await fireEvent.keyDown(name, { key: 'Enter' });
+    expect(name.classList.contains('invalid')).toBe(true);
+    await fireEvent.input(name, { target: { value: 'Shelf' } });
+    await fireEvent.keyDown(name, { key: 'Enter' });
+    expect(onShapeRename).toHaveBeenCalledWith('object-1', 'Shelf');
+    expect(field('Name')).toBeNull();
+  });
+});
+
+describe('PlanCanvas keys in a window', () => {
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.querySelectorAll('[data-test-dialog]').forEach((d) => d.remove());
+  });
+
+  it('+ and − zoom the canvas in the front modal window, never the one behind it', async () => {
+    const behind = render(PlanCanvas, { props: { draft: room.map((v) => [...v] as Vertex), units: 'meters', precision: 2 } });
+    const back = behind.container.querySelector('svg.plan') as SVGSVGElement;
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('data-test-dialog', '');
+    document.body.appendChild(dialog);
+    const front = render(PlanCanvas, { target: dialog, props: { draft: room.map((v) => [...v] as Vertex), units: 'meters', precision: 2 } });
+    const svg = front.container.querySelector('svg.plan') as SVGSVGElement;
+    const backBox = back.getAttribute('viewBox');
+    const b0 = box(svg);
+    await fireEvent.pointerEnter(svg);
+    await fireEvent.keyDown(document.body, { key: '+' });
+    expect(box(svg).h).toBeCloseTo(b0.h / 1.25, 5);
+    expect(back.getAttribute('viewBox')).toBe(backBox);
+    // Focus works as well as the pointer
+    await fireEvent.pointerLeave(svg);
+    svg.focus();
+    await fireEvent.keyDown(svg, { key: '-' });
+    expect(box(svg).h).toBeCloseTo(b0.h, 5);
+    // The pointer on the canvas behind the window: its keys stay off
+    svg.blur();
+    await fireEvent.pointerEnter(back);
+    await fireEvent.keyDown(document.body, { key: '-' });
+    expect(back.getAttribute('viewBox')).toBe(backBox);
   });
 });

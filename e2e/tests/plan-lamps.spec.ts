@@ -3,6 +3,7 @@ import { waitForApiIdle } from '../helpers/network';
 import { waitForSession } from '../helpers/session';
 import { attachErrorGuard } from '../helpers/errors';
 import { lampCount, lampEditor } from '../helpers/lamps';
+import { getLampsFromStore } from '../helpers/api';
 import { finishEditing, openStep, planSvg, planTool } from '../helpers/workspace';
 
 test.describe('Lamps on the plan', () => {
@@ -106,5 +107,46 @@ test.describe('Lamps on the plan', () => {
     await page.locator('.app-status-bar').click();
     await page.keyboard.press('Control+z');
     await expect.poll(() => lampCount(page)).toBe(1);
+  });
+
+  test('double-click a lamp to type its height; double-click its name to rename it', async ({ page }) => {
+    await waitForSession(page);
+    await openStep(page, 'lamps');
+    const part = page.locator('.lamps-part');
+    const fixture = part.getByLabel('Fixture', { exact: true });
+    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
+    await fixture.selectOption((await fixture.locator('option[value^="preset:"]').first().getAttribute('value'))!);
+    await page.getByRole('group', { name: 'Placement' }).getByRole('button', { name: 'Downlight' }).click();
+    await expect(part.locator('.editor-row')).toHaveCount(1);
+    await waitForApiIdle(page);
+    const [before] = await getLampsFromStore(page);
+
+    // X / Y / Z at the lamp (a downlight's aim dot sits on it and opens the same); Tab to Z, type a height
+    const plan = planSvg(page);
+    const rb = (await plan.locator('circle.plan-lamp').first().boundingBox())!;
+    await page.mouse.dblclick(rb.x + rb.width / 2, rb.y + rb.height / 2);
+    const name = before.name || before.id;
+    const x = page.getByRole('textbox', { name: `${name} X` });
+    await expect(x).toBeFocused();
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('textbox', { name: `${name} Z` })).toBeFocused();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('2.1');
+    await page.keyboard.press('Enter');
+    await expect(x).toHaveCount(0);
+    await expect.poll(async () => (await getLampsFromStore(page))[0].z).toBeCloseTo(2.1, 6);
+    const [moved] = await getLampsFromStore(page);
+    expect(moved.x).toBeCloseTo(before.x, 6);
+    expect(moved.aimz - moved.z).toBeCloseTo(before.aimz - before.z, 6);
+
+    // Rename from the plan label
+    await plan.locator('text.plan-lamp-label').first().dblclick();
+    const field = page.getByRole('textbox', { name: 'Name' });
+    await expect(field).toBeFocused();
+    await page.keyboard.type('Over desk');
+    await page.keyboard.press('Enter');
+    await expect(plan.locator('text.plan-lamp-label').first()).toHaveText('Over desk');
+    await expect(part.locator('.editor-row .name').first()).toHaveText('Over desk');
   });
 });
