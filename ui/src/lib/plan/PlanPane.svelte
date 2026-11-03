@@ -16,6 +16,9 @@
 	import SurfaceSwitcher from './SurfaceSwitcher.svelte';
 	import PlanEditStrip from './PlanEditStrip.svelte';
 	import PlanWebLayer from './PlanWebLayer.svelte';
+	import InlineValueInput from './InlineValueInput.svelte';
+	import { parseCoordinateInput } from './segmentLength';
+	import { displayDimension } from '$lib/utils/formatting';
 	import { userSettings } from '$lib/stores/settings';
 	import { pickMode } from '$lib/stores/pickMode';
 	import { surfaceName } from '$lib/utils/surfaces';
@@ -102,6 +105,61 @@
 		}
 		ctl.onWindowKey(event);
 		if (handleEscape && event.key === 'Escape') ctl.onEscapeKey();
+	}
+
+	// Typing on the plan: a lamp's X / Y / Z (double-click the lamp), or a lamp's,
+	// point's or zone's name (double-click its label)
+	type PaneInline =
+		| { kind: 'position'; id: string }
+		| { kind: 'rename'; target: 'lamp' | 'zone'; id: string; name: string; at: Vertex };
+	let paneInline = $state<PaneInline | null>(null);
+	const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+	const fmtLen = (v: number) => displayDimension(v, precision);
+	// Another context, surface or a gesture closes it
+	$effect(() => {
+		void [ctl.context, ctl.surface, ctl.drawing];
+		untrack(() => (paneInline = null));
+	});
+	function closePaneInline() {
+		paneInline = null;
+		ctl.canvas?.focus();
+	}
+	function onLampDblClick(e: MouseEvent, id: string) {
+		if (!ctl.onLamps || ctl.drawing || ctl.placing || ctl.pointPick) return;
+		e.preventDefault();
+		e.stopPropagation();
+		paneInline = { kind: 'position', id };
+	}
+	/** A press on a name label stays there, so its double-click reaches it. */
+	function onNameLabelDown(e: PointerEvent) {
+		if (e.button === 0) e.stopPropagation();
+	}
+	function onNameLabelDblClick(e: MouseEvent, target: 'lamp' | 'zone', id: string, name: string, at: Vertex) {
+		if (ctl.drawing || ctl.placing || ctl.pointPick) return;
+		e.preventDefault();
+		e.stopPropagation();
+		paneInline = { kind: 'rename', target, id, name, at };
+	}
+	/** Move the lamp to the typed position, carrying its aim point along (as the lamp editor does). */
+	function applyLampPosition(id: string, [a, b, c]: string[]): boolean {
+		const lamp = lamps.find((l) => l.id === id);
+		const x = parseCoordinateInput(a, units);
+		const y = parseCoordinateInput(b, units);
+		const z = parseCoordinateInput(c, units);
+		if (!lamp || x === null || y === null || z === null) return false;
+		closePaneInline();
+		const dx = x - lamp.x, dy = y - lamp.y, dz = z - lamp.z;
+		if (dx === 0 && dy === 0 && dz === 0) return true;
+		ctl.actions.updateLamp(id, { x: r6(x), y: r6(y), z: r6(z), aimx: r6(lamp.aimx + dx), aimy: r6(lamp.aimy + dy), aimz: r6(lamp.aimz + dz) });
+		return true;
+	}
+	function applyRename(target: 'lamp' | 'zone', id: string, old: string, [name]: string[]): boolean {
+		if (!name) return false;
+		closePaneInline();
+		if (name === old) return true;
+		if (target === 'lamp') ctl.actions.updateLamp(id, { name });
+		else ctl.actions.updateZone(id, { name });
+		return true;
 	}
 
 	// An empty polygon for the read-only canvas to bind
@@ -240,6 +298,7 @@
 				toolCursor={ctl.toolCursor}
 				invalid={!ctl.drawing && ctl.validationMessage !== null && ctl.draft.length >= 3}
 				onShapeClick={ctl.onObstacles ? ctl.onWallShapeDown : undefined}
+				coordLabels={['X', 'Z']}
 				onCustomClick={ctl.onCustomClick}
 				onCustomMove={ctl.onCustomMove}
 				onCustomLeave={ctl.onCustomLeave}
@@ -337,6 +396,7 @@
 			dblClickCorners={ctl.onCeiling}
 			selectedDraft={ctl.onCeiling && !!ctl.editableKeepOut}
 			onShapeClick={ctl.onObstacles ? ctl.clickObstacle : undefined}
+			onShapeRename={(id, name) => ctl.actions.updateObstacle(id, { name })}
 			onDrawEnd={ctl.onDrawEnd}
 			onEdit={ctl.onCanvasEdit}
 			toolCursor={ctl.toolCursor}
@@ -408,7 +468,11 @@
 					{#each ctl.surfaceZones.filter((z) => z.id !== ctl.selectedZoneId || ctl.drawing) as z (z.id)}
 						{@const fp = zoneFootprint(z)}
 						<polygon class="plan-zone" class:volume={z.type === 'volume'} class:off={z.enabled === false} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => zoneDown(e, z.id)} />
-						<text class="plan-lamp-label" x={Math.min(...fp.map((p) => p[0])) + c.px * 4} y={-Math.max(...fp.map((p) => p[1])) + c.px * 13} font-size={c.px * 11}>{z.name || z.id}</text>
+						{@const lx = Math.min(...fp.map((p) => p[0])) + c.px * 4}
+						{@const ly = Math.max(...fp.map((p) => p[1])) - c.px * 13}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<text class="plan-lamp-label renamable" class:editing={paneInline?.kind === 'rename' && paneInline.id === z.id} x={lx} y={-ly} font-size={c.px * 11}
+							onpointerdown={onNameLabelDown} ondblclick={(e) => onNameLabelDblClick(e, 'zone', z.id, z.name || z.id, [lx + c.px * 40, ly + c.px * 4])}>{z.name || z.id}</text>
 					{/each}
 				{/if}
 				{#if ctl.onLamps || ctl.onZones}
@@ -418,11 +482,15 @@
 						{#if Math.hypot(v.ax - v.x, v.ay - v.y) > c.px * 2}
 							<line class="aim-line" class:selected={sel} class:point={ctl.onZones} x1={v.x} y1={-v.y} x2={v.ax} y2={-v.ay} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
 						{/if}
-						{#if c.hitPx > c.px * 1.001}<circle class="plan-hit" class:aiming={ctl.onLamps && ctl.activeTool === 'aim'} cx={v.x} cy={-v.y} r={c.hitPx * 11.7} onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} />{/if}
-						<circle class="plan-lamp" class:point={ctl.onZones} class:aiming={ctl.onLamps && ctl.activeTool === 'aim'} class:selected={sel} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="{ctl.onLamps ? 'Lamp' : 'Point'} {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} />
-						{#if c.hitPx > c.px * 1.001}<circle class="plan-hit aim" cx={v.ax} cy={-v.ay} r={c.hitPx * 4.5} onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} />{/if}
-						<circle class="plan-aim" class:point={ctl.onZones} class:selected={sel} cx={v.ax} cy={-v.ay} r={c.handleR * 0.75} role="button" tabindex="-1" aria-label="Aim of {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} />
-						{#if m.label !== false}<text class="plan-lamp-label" x={v.x + c.handleR * 2.3} y={-v.y + c.px * 4} font-size={c.px * 11}>{m.name}</text>{/if}
+						{#if c.hitPx > c.px * 1.001}<!-- svelte-ignore a11y_no_static_element_interactions --><circle class="plan-hit" class:aiming={ctl.onLamps && ctl.activeTool === 'aim'} cx={v.x} cy={-v.y} r={c.hitPx * 11.7} onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} ondblclick={(e) => onLampDblClick(e, m.id)} />{/if}
+						<circle class="plan-lamp" class:point={ctl.onZones} class:aiming={ctl.onLamps && ctl.activeTool === 'aim'} class:selected={sel} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="{ctl.onLamps ? 'Lamp' : 'Point'} {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} ondblclick={(e) => onLampDblClick(e, m.id)} />
+						{#if c.hitPx > c.px * 1.001}<!-- svelte-ignore a11y_no_static_element_interactions --><circle class="plan-hit aim" cx={v.ax} cy={-v.ay} r={c.hitPx * 4.5} onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} ondblclick={(e) => onLampDblClick(e, m.id)} />{/if}
+						<circle class="plan-aim" class:point={ctl.onZones} class:selected={sel} cx={v.ax} cy={-v.ay} r={c.handleR * 0.75} role="button" tabindex="-1" aria-label="Aim of {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} ondblclick={(e) => onLampDblClick(e, m.id)} />
+						{#if m.label !== false}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<text class="plan-lamp-label renamable" class:editing={paneInline?.kind === 'rename' && paneInline.id === m.id} x={v.x + c.handleR * 2.3} y={-v.y + c.px * 4} font-size={c.px * 11}
+								onpointerdown={onNameLabelDown} ondblclick={(e) => onNameLabelDblClick(e, ctl.onLamps ? 'lamp' : 'zone', m.id, m.name, [v.x + c.handleR * 2.3 + c.px * 40, v.y])}>{m.name}</text>
+						{/if}
 					{/each}
 					{#if ctl.marquee}
 						{@const mx = Math.min(ctl.marquee.a[0], ctl.marquee.b[0])}
@@ -445,6 +513,37 @@
 				{/if}
 			{/snippet}
 			{#snippet hud(c)}
+				{#if paneInline}
+					{@const pi = paneInline}
+					{#if pi.kind === 'position'}
+						{@const lamp = lamps.find((l) => l.id === pi.id)}
+						{#if lamp}
+							{@const [sx, sy] = c.toScreen(lamp.x, lamp.y)}
+							{#key pi}
+								<InlineValueInput
+									x={sx}
+									y={sy - 34}
+									ariaLabel={lamp.name || lamp.id}
+									fields={[{ label: 'X', value: fmtLen(lamp.x) }, { label: 'Y', value: fmtLen(lamp.y) }, { label: 'Z', value: fmtLen(lamp.z) }]}
+									onApply={(v) => applyLampPosition(pi.id, v)}
+									onCancel={closePaneInline}
+								/>
+							{/key}
+						{/if}
+					{:else}
+						{@const [sx, sy] = c.toScreen(pi.at[0], pi.at[1])}
+						{#key pi}
+							<InlineValueInput
+								x={sx}
+								y={sy}
+								ariaLabel="Name"
+								fields={[{ value: pi.name, text: true }]}
+								onApply={(v) => applyRename(pi.target, pi.id, pi.name, v)}
+								onCancel={closePaneInline}
+							/>
+						{/key}
+					{/if}
+				{/if}
 				{#if ctl.planSelected && ctl.placement && ctl.planImage}
 					{@const anchor = c.toScreen(ctl.planImage.x, ctl.planImage.y)}
 					<div class="plan-readout" style="left: {anchor[0]}px; top: {anchor[1] + 6}px" role="group" aria-label="Floorplan position">
@@ -723,6 +822,13 @@
 		stroke-width: 0.25em;
 		stroke-linejoin: round;
 		pointer-events: none;
+	}
+	.plan-lamp-label.renamable {
+		pointer-events: auto;
+		cursor: text;
+	}
+	.plan-lamp-label.editing {
+		visibility: hidden;
 	}
 	.surface-highlight {
 		fill: color-mix(in srgb, var(--color-accent) 10%, transparent);

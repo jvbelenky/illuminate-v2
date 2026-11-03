@@ -53,11 +53,21 @@ const FEET_INCHES = new RegExp(`^${NUM}\\s*'\\s*${NUM}\\s*"?$`);
  * inches. Returns null for anything else, and for zero or negative lengths.
  */
 export function parseLengthInput(text: string, units: LengthUnit): number | null {
+  const value = parseCoordinateInput(text, units);
+  return value !== null && value > 0 ? value : null;
+}
+
+/**
+ * A typed coordinate in `units`, read like `parseLengthInput` but zero and
+ * negative values are allowed (-5'6" is minus five and a half feet).
+ */
+export function parseCoordinateInput(text: string, units: LengthUnit): number | null {
   const s = text.trim().toLowerCase();
-  let value: number | null = null;
+  let value: number;
   const fi = FEET_INCHES.exec(s);
   if (fi) {
-    value = convertLength(parseFloat(fi[1]), 'feet', units) + convertLength(parseFloat(fi[2]), 'inches', units);
+    const sign = fi[1].startsWith('-') ? -1 : 1;
+    value = convertLength(parseFloat(fi[1]), 'feet', units) + sign * convertLength(parseFloat(fi[2]), 'inches', units);
   } else {
     const m = PLAIN.exec(s);
     if (!m) return null;
@@ -65,5 +75,5 @@ export function parseLengthInput(text: string, units: LengthUnit): number | null
     if (!from) return null;
     value = convertLength(parseFloat(m[1]), from, units);
   }
-  return Number.isFinite(value) && value > 0 ? value : null;
+  return Number.isFinite(value) ? value : null;
 }

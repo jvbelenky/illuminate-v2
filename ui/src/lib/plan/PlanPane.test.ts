@@ -1714,7 +1714,7 @@ describe('PlanPane ceiling context', () => {
     expect(Math.max(...xs)).toBeCloseTo(9, 6);
   });
 
-  it('double-clicking a corner of a keep-out area removes it; double-clicking an edge types its length', async () => {
+  it('Shift+double-clicking a corner of a keep-out area removes it; double-clicking an edge types its length', async () => {
     const calls: unknown[][] = [];
     const five = { ...keep, vertices: [[6, 4], [8, 4], [8, 6], [7, 7], [6, 6]] as [number, number][] };
     const { container, ctl } = mountCeiling({ calls, ceiling: { ...ceiling, items: [detector, five] } });
@@ -1723,7 +1723,7 @@ describe('PlanPane ceiling context', () => {
     await tick();
     await fireEvent.wheel(plan, { deltaY: -200, ctrlKey: true, clientX: 300, clientY: 300 });
     const zoomed = plan.getAttribute('viewBox');
-    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 4' }));
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 4' }), { shiftKey: true });
     let partial = callsOf(calls, 'updateCeilingItem').at(-1)![2] as { vertices: [number, number][] };
     expect(partial.vertices).toHaveLength(4);
     const [ex, ey] = px(plan, 7, 4);
@@ -1907,5 +1907,83 @@ describe('PlanPane ceiling context', () => {
       await fireEvent.click(plan, { clientX: 200, clientY: 200 });
       expect(calls).toHaveLength(0);
     });
+  });
+});
+
+describe('PlanPane typing on the plan', () => {
+  const lamp = { id: 'lamp-7', name: 'Beacon', lamp_type: 'krcl_222' as const, preset_id: 'beacon', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
+  const field = (name: string) => screen.queryByRole('textbox', { name }) as HTMLInputElement | null;
+
+  it('double-click a lamp to type its X, Y and Z; the aim point comes along', async () => {
+    const calls: unknown[][] = [];
+    mount({ calls, lamps: [lamp] as any, context: 'lamps' });
+    await tick();
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Lamp Beacon' }));
+    await tick();
+    const z = field('Beacon Z')!;
+    expect(field('Beacon X')!.value).toBe('2.0');
+    expect(field('Beacon Y')!.value).toBe('2.0');
+    expect(z.value).toBe('2.5');
+    await fireEvent.input(field('Beacon X')!, { target: { value: '2.5' } });
+    await fireEvent.input(z, { target: { value: '300cm' } });
+    await fireEvent.keyDown(z, { key: 'Enter' });
+    expect(field('Beacon Z')).toBeNull();
+    const [, id, partial] = callsOf(calls, 'updateLamp').at(-1) as [string, string, Record<string, number>];
+    expect(id).toBe('lamp-7');
+    expect(partial).toMatchObject({ x: 2.5, y: 2, z: 3, aimx: 2.5, aimy: 2, aimz: 0.5 });
+  });
+
+  it('a bad lamp value stays open, invalid; Escape cancels', async () => {
+    const calls: unknown[][] = [];
+    mount({ calls, lamps: [lamp] as any, context: 'lamps' });
+    await tick();
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Lamp Beacon' }));
+    await tick();
+    const x = field('Beacon X')!;
+    await fireEvent.input(x, { target: { value: 'left' } });
+    await fireEvent.keyDown(x, { key: 'Enter' });
+    expect(x.classList.contains('invalid')).toBe(true);
+    await fireEvent.keyDown(x, { key: 'Escape' });
+    expect(field('Beacon X')).toBeNull();
+    expect(callsOf(calls, 'updateLamp')).toHaveLength(0);
+  });
+
+  it("double-click a lamp's, a zone's or a structure's name label to rename it", async () => {
+    const calls: unknown[][] = [];
+    const { container, unmount } = mount({ calls, lamps: [lamp] as any, context: 'lamps' });
+    await tick();
+    await fireEvent.dblClick(container.querySelector('text.plan-lamp-label')!);
+    await tick();
+    const name = field('Name')!;
+    expect(name.value).toBe('Beacon');
+    await fireEvent.input(name, { target: { value: '' } });
+    await fireEvent.keyDown(name, { key: 'Enter' });
+    expect(name.classList.contains('invalid')).toBe(true);
+    await fireEvent.input(name, { target: { value: 'Front' } });
+    await fireEvent.keyDown(name, { key: 'Enter' });
+    expect(callsOf(calls, 'updateLamp').at(-1)).toEqual(['updateLamp', 'lamp-7', { name: 'Front' }]);
+    unmount();
+
+    const zone = { id: 'zone-9', name: 'Desk plane', type: 'plane' as const, ref_surface: 'xy' as const, enabled: true, height: 0, x1: 1, x2: 3, y1: 1, y2: 2 };
+    const zc: unknown[][] = [];
+    const zones = mount({ calls: zc, zones: [zone] as any, context: 'zones' });
+    await tick();
+    await fireEvent.dblClick(zones.container.querySelector('text.plan-lamp-label')!);
+    await tick();
+    await fireEvent.input(field('Name')!, { target: { value: 'Bench' } });
+    await fireEvent.keyDown(field('Name')!, { key: 'Enter' });
+    expect(callsOf(zc, 'updateZone').at(-1)).toEqual(['updateZone', 'zone-9', { name: 'Bench' }]);
+    zones.unmount();
+
+    const box = { id: 'object-9', name: 'Desk', shape: 'box' as const, width: 1, length: 1, height: 0.75, x: 2, y: 2, z: 0, yaw: 0, pitch: 0, roll: 0, reflectance: 0.1, transmittance: 0, enabled: true };
+    const oc: unknown[][] = [];
+    const obst = mount({ calls: oc, objects: [box], context: 'obstacles' });
+    await tick();
+    await fireEvent.dblClick(obst.container.querySelector('text.shape-label')!);
+    await tick();
+    await fireEvent.input(field('Name')!, { target: { value: 'Table' } });
+    await fireEvent.keyDown(field('Name')!, { key: 'Enter' });
+    expect(callsOf(oc, 'updateObstacle').at(-1)).toEqual(['updateObstacle', 'object-9', { name: 'Table' }]);
+    obst.unmount();
   });
 });
