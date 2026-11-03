@@ -1,6 +1,6 @@
 <script lang="ts">
 	// One item in an editor list: a lead mark, the name (renamed with the
-	// pencil once the row is open), and the eye and calculator toggles. The open
+	// pencil once the row is open), copy / delete icons, a divider, and the eye and calculator toggles. The open
 	// row shows its editor beneath, passed in as children.
 	import type { Snippet } from 'svelte';
 	import Glyph from '$lib/workspace/Glyph.svelte';
@@ -77,8 +77,10 @@
 	}
 
 	// Closing the row ends a rename in progress
+	let wasOpen = false;
 	$effect(() => {
-		if (!open && renaming) finish(false);
+		if (wasOpen && !open && renaming) finish(false);
+		wasOpen = open;
 	});
 </script>
 
@@ -98,15 +100,31 @@
 					{#if subtitle}<span class="subtitle" class:italic={italicSubtitle}>{subtitle}</span>{/if}
 				</span>
 			</button>
-			{#if open && renamable}
-				<button type="button" class="rename" onclick={startRename} aria-label="Rename {label}" title="Rename">
-					<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-						<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-						<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-					</svg>
-				</button>
-			{/if}
 		{/if}
+		{#if renamable || onCopy || onDelete}
+		<span class="actions">
+		{#if renamable}
+			<button type="button" class="action" onclick={startRename} aria-label="Rename {label}" title="Rename">
+				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+					<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+					<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+				</svg>
+			</button>
+		{/if}
+		{#if onCopy}
+			<button type="button" class="action" disabled={copyDisabled} onclick={(e) => { e.stopPropagation(); if (!copyDisabled) onCopy(); }} aria-label="Copy (Ctrl+D)" title="Copy (Ctrl+D)">
+				<Glyph name="copy" size={12} />
+			</button>
+		{/if}
+		{#if onDelete}
+			<button type="button" class="action" disabled={deleteDisabled} onclick={(e) => { e.stopPropagation(); if (!deleteDisabled) onDelete(); }} aria-label="Delete (Del)" title="Delete (Del)">
+				<Glyph name="trash" size={12} />
+			</button>
+		{/if}
+		</span>
+		<span class="divider" aria-hidden="true"></span>
+		{/if}
+		<span class="toggles">
 		<button
 			type="button"
 			class="icon-toggle"
@@ -151,16 +169,7 @@
 			</svg>
 		</button>
 		{/if}
-		{#if onCopy}
-			<button type="button" class="icon-toggle pressed" disabled={copyDisabled} onclick={(e) => { e.stopPropagation(); if (!copyDisabled) onCopy(); }} aria-label="Copy (Ctrl+D)" title="Copy (Ctrl+D)">
-				<Glyph name="copy" size={12} />
-			</button>
-		{/if}
-		{#if onDelete}
-			<button type="button" class="icon-toggle pressed" disabled={deleteDisabled} onclick={(e) => { e.stopPropagation(); if (!deleteDisabled) onDelete(); }} aria-label="Delete (Del)" title="Delete (Del)">
-				<Glyph name="trash" size={12} />
-			</button>
-		{/if}
+		</span>
 	</div>
 	{#if open && children}
 		<div class="row-body">{@render children()}</div>
@@ -234,7 +243,21 @@
 		padding: 0 6px;
 		font-size: var(--font-size-base);
 	}
-	.rename,
+	.actions,
+	.toggles {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		flex: none;
+	}
+	.divider {
+		flex: none;
+		width: 1px;
+		height: 16px;
+		margin: 0 3px;
+		background: var(--color-border);
+	}
+	.action,
 	.icon-toggle {
 		display: inline-flex;
 		align-items: center;
@@ -249,32 +272,29 @@
 		color: var(--color-text-muted);
 		cursor: pointer;
 	}
-	.rename {
+	.action {
 		background: none;
 		border-color: transparent;
 	}
-	.rename:hover,
-	.icon-toggle:hover {
+	.action:hover {
 		color: var(--color-text);
 		background: var(--color-btn-fill-hover);
 	}
-	.rename:focus-visible,
+	.icon-toggle:hover {
+		color: var(--color-text);
+	}
+	.action:focus-visible,
 	.icon-toggle:focus-visible,
 	.row-main:focus-visible {
 		outline: 2px solid var(--color-scene-selected);
 		outline-offset: 1px;
 	}
-	.icon-toggle {
-		background: none;
-		border-color: transparent;
-	}
 	.icon-toggle.pressed {
-		color: var(--color-text);
+		background: color-mix(in srgb, var(--color-primary) 20%, var(--color-bg-secondary));
+		border-color: var(--color-primary);
+		color: var(--color-primary);
 	}
-	.icon-toggle:not(.pressed) {
-		opacity: 0.55;
-	}
-	.icon-toggle:disabled {
+	.action:disabled {
 		opacity: 0.4;
 		cursor: default;
 		pointer-events: none;
