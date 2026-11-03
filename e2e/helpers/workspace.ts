@@ -79,6 +79,26 @@ export function openEditor(page: Page): Locator {
   return page.locator('.editor-body .editor-row.open .row-body');
 }
 
+/**
+ * A point on the selected shape's body (the canvas itself, not a length label
+ * or a handle drawn over it), in page pixels: a double-click there edits its corners.
+ */
+export async function shapeBodyPoint(page: Page, plan: Locator): Promise<[number, number]> {
+  const b = (await plan.locator('polygon.outline').boundingBox())!;
+  const svg = await plan.elementHandle();
+  const hit = await page.evaluate(([x0, y0, w, h, el]) => {
+    for (const fy of [0.5, 0.3, 0.7, 0.4, 0.6, 0.2, 0.8]) {
+      for (const fx of [0.5, 0.3, 0.7, 0.4, 0.6, 0.2, 0.8]) {
+        const x = x0 + w * fx, y = y0 + h * fy;
+        if (document.elementFromPoint(x, y) === el) return [x, y];
+      }
+    }
+    return null;
+  }, [b.x, b.y, b.width, b.height, svg] as const);
+  if (!hit) throw new Error('no free point on the shape body');
+  return hit as [number, number];
+}
+
 /** Click corners given as fractions of the plan canvas, then optionally close with Enter. */
 export async function clickPlan(page: Page, corners: [number, number][], opts: { close?: boolean } = {}): Promise<void> {
   const plan = planSvg(page);

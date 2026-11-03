@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
 import { waitForApiIdle } from '../helpers/network';
-import { clickPlan, finishEditing, planTool, showMain } from '../helpers/workspace';
+import { clickPlan, finishEditing, planTool, shapeBodyPoint, showMain } from '../helpers/workspace';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
 import {
@@ -236,12 +236,12 @@ test.describe('Objects (obstacles)', () => {
     expect((await getObjectsFromBackend(page)).map((o) => o.id).sort()).toEqual(['object-1', 'object-2']);
   });
 
-  test("the structure editor's Draw footprint redraws the footprint, keeping its bottom and top", async ({ page }) => {
+  test("the structure editor's Redraw footprint redraws the footprint, keeping its bottom and top", async ({ page }) => {
     await addObject(page);
     await setObjectField(page, 'top', 1.2);
     const row = page.locator('.structures-part .editor-row.open');
-    await expect(row.locator('.structure-shape')).toContainText('Box');
-    const draw = row.getByRole('button', { name: 'Draw footprint' });
+    await expect(row.locator('.structure-shape')).toContainText('Rectangle');
+    const draw = row.getByRole('button', { name: 'Redraw footprint' });
     await draw.click();
     await expect(draw).toHaveAttribute('aria-pressed', 'true');
     // Escape cancels
@@ -261,11 +261,14 @@ test.describe('Objects (obstacles)', () => {
     expect(o.height).toBeCloseTo(1.2, 6);
     await expect(row.locator('.structure-shape')).toContainText('Polygon, 6 corners');
 
-    // Edit corners arms the corner tool, in the editor and the strip alike
-    await row.getByRole('button', { name: 'Edit corners' }).click();
-    await expect(planTool(page, 'Edit corners')).toHaveAttribute('aria-pressed', 'true');
+    // Edit corners is a toggle: pressed while the corners are edited, the strip offering Done
+    const corners = row.getByRole('button', { name: 'Edit corners' });
+    await corners.click();
+    await expect(corners).toHaveAttribute('aria-pressed', 'true');
+    await expect(planTool(page, 'Done')).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(planTool(page, 'Edit corners')).toHaveAttribute('aria-pressed', 'false');
+    await expect(corners).toHaveAttribute('aria-pressed', 'false');
+    await expect(planTool(page, 'Edit corners')).toBeVisible();
   });
 
   test('draw an L-shaped object on the plan canvas', async ({ page }) => {
@@ -314,6 +317,98 @@ test.describe('Objects (obstacles)', () => {
     expect(after.length).toBeCloseTo(before.length, 6);
     expect(after.x).toBeCloseTo(before.x, 6);
     expect(after.y).toBeCloseTo(before.y, 6);
+  });
+
+  test('a selected structure turns a quarter with its rotate handle, and a corner handle widens it; undo restores the width', async ({ page }) => {
+    await addObject(page);
+    const before = (await getObjectsFromBackend(page))[0];
+    const plan = page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
+    await expect(plan.getByRole('button', { name: 'Corner 1', exact: true })).toHaveCount(0);
+
+    // A corner handle dragged right: wider, as one update
+    const handle = (await plan.getByRole('button', { name: 'Resize top-right' }).boundingBox())!;
+    const hx = handle.x + handle.width / 2, hy = handle.y + handle.height / 2;
+    await page.mouse.move(hx, hy);
+    await page.mouse.down();
+    await page.mouse.move(hx + 20, hy, { steps: 4 });
+    await page.mouse.move(hx + 45, hy, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await getObjectsFromBackend(page))[0].width).toBeGreaterThan(before.width + 0.1);
+    const widened = (await getObjectsFromBackend(page))[0];
+    expect(widened.length).toBeCloseTo(before.length, 6);
+    expect(widened.shape).toBe('box');
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+z');
+    await expect.poll(async () => (await getObjectsFromBackend(page))[0].width).toBeCloseTo(before.width, 6);
+
+    // The rotate handle, dragged a quarter turn round the box's centre: Rotation 90
+    const shape = (await plan.locator('polygon.outline').boundingBox())!;
+    const cx = shape.x + shape.width / 2, cy = shape.y + shape.height / 2;
+    const knob = (await plan.getByRole('button', { name: 'Rotate' }).boundingBox())!;
+    const kx = knob.x + knob.width / 2, ky = knob.y + knob.height / 2;
+    const r = Math.hypot(kx - cx, ky - cy);
+    await page.mouse.move(kx, ky);
+    await page.mouse.down();
+    for (const deg of [20, 45, 70, 90]) {
+      const a = -Math.PI / 2 - (deg * Math.PI) / 180;
+      await page.mouse.move(cx + r * Math.cos(a), cy + r * Math.sin(a), { steps: 3 });
+    }
+    await expect(plan.locator('text.tb-angle')).toHaveText('90°');
+    await page.mouse.up();
+    await expect.poll(async () => (await getObjectsFromBackend(page))[0].yaw).toBeCloseTo(90, 6);
+    await expect(await objectField(page, 'yaw')).toHaveValue('90');
+    const turned = (await getObjectsFromBackend(page))[0];
+    expect(turned.width).toBeCloseTo(before.width, 6);
+    expect(turned.x).toBeCloseTo(before.x, 6);
+    expect(turned.y).toBeCloseTo(before.y, 6);
+  });
+
+  test('a double-click on the structure shows its corners; a corner drags; Esc goes back to its box', async ({ page }) => {
+    await addObject(page);
+    const plan = page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
+    await page.mouse.dblclick(...(await shapeBodyPoint(page, plan)));
+    const corner = plan.getByRole('button', { name: 'Corner 3', exact: true });
+    await expect(corner).toBeVisible();
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toHaveCount(0);
+    await expect(planTool(page, 'Done')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.structures-part .editor-row.open').getByRole('button', { name: 'Edit corners' })).toHaveAttribute('aria-pressed', 'true');
+
+    const c = (await corner.boundingBox())!;
+    const x = c.x + c.width / 2, y = c.y + c.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 20, y - 10, { steps: 4 });
+    await page.mouse.move(x + 35, y - 25, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await getObjectsFromBackend(page))[0].shape).toBe('extrusion');
+    // Still editing corners until Esc
+    await expect(corner).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
+    await expect(plan.getByRole('button', { name: 'Corner 3', exact: true })).toHaveCount(0);
+    await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(1);
+  });
+
+  test('Rectangle drags out a new structure, selected with its box', async ({ page }) => {
+    await expandObjectsPanel(page);
+    await planTool(page, 'Rectangle').click();
+    await expect(planTool(page, 'Rectangle')).toHaveAttribute('aria-pressed', 'true');
+    const plan = page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
+    const box = (await plan.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.35, box.y + box.height * 0.4);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.5, { steps: 4 });
+    await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.6, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(() => objectCount(page)).toBe(1);
+    await waitForApiIdle(page);
+    const [o] = await getObjectsFromBackend(page);
+    expect(o.width).toBeGreaterThan(0.5);
+    expect(o.length).toBeGreaterThan(0.5);
+    await expect(page.locator('.structures-part .editor-row.open .structure-shape')).toContainText('Rectangle');
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
+    await expect(planTool(page, 'Rotate 90°')).toBeVisible();
   });
 
   test('a structure dragged close to a wall ends flush against it', async ({ page }) => {
