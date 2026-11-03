@@ -390,6 +390,41 @@ test.describe('Objects (obstacles)', () => {
     await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(1);
   });
 
+  test('at 1440 x 900 the strip of a selected structure shows its labels, clear of the view tools', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await addObject(page);
+    const strip = page.locator('.main-view-controls .plan-toolbar');
+    const tools = page.locator('.view-slot[data-view="2d"]:not(.mini) .view-controls');
+    await expect(strip).not.toHaveClass(/compact/);
+    for (const label of ['Edit corners', 'Rotate 90°', 'Copy', 'Delete']) {
+      await expect(planTool(page, label).locator('.tool-label')).toBeVisible();
+    }
+    await expect.poll(async () => {
+      const a = (await strip.boundingBox())!;
+      const b = (await tools.boundingBox())!;
+      return a.x + a.width <= b.x || a.y + a.height <= b.y;
+    }).toBe(true);
+  });
+
+  test('a press on an unselected structure selects it and a drag from it moves it, in one gesture', async ({ page }) => {
+    await addObject(page);
+    const before = (await getObjectsFromBackend(page))[0];
+    const plan = page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(0);
+    const shape = (await plan.locator('polygon.shape').first().boundingBox())!;
+    const x = shape.x + shape.width / 2, y = shape.y + shape.height / 4;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 30, y, { steps: 4 });
+    await page.mouse.move(x + 60, y, { steps: 4 });
+    await page.mouse.up();
+    await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(1);
+    await expect.poll(async () => (await getObjectsFromBackend(page))[0].x).toBeGreaterThan(before.x + 0.2);
+    expect((await getObjectsFromBackend(page))[0].y).toBeCloseTo(before.y, 1);
+  });
+
   test('Rectangle drags out a new structure, selected with its box', async ({ page }) => {
     await expandObjectsPanel(page);
     await planTool(page, 'Rectangle').click();

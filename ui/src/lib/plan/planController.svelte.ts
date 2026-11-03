@@ -1683,7 +1683,12 @@ export class PlanController {
     event.stopPropagation();
     this.clickCeilingItem(id);
     const it = this.ceiling.items.find((i) => i.id === id);
-    if (!it || it.kind === 'keep') return;
+    if (!it) return;
+    // A keep-out area is now the canvas's shape: a drag from this press moves it
+    if (it.kind === 'keep') {
+      canvas.startBodyDrag?.(event);
+      return;
+    }
     (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
     this.ceilingDrag = { id, start: canvas.pointerToRoom(event), from: [it.x, it.y], at: [it.x, it.y] };
   };

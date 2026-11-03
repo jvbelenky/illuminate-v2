@@ -1382,6 +1382,31 @@ describe('PlanPane reference image and calibration', () => {
       expect((callsOf(calls, 'updateObstacle').at(-1)![2] as Record<string, number>).yaw).toBe(180);
     });
 
+    it('a press on an unselected structure selects it; dragging on from that press moves it, a click does not', async () => {
+      const calls: unknown[][] = [];
+      const { container, ctl } = mount({ calls, objects: [box], context: 'obstacles' });
+      const plan = stubPlan(container);
+      const [x, y] = px(plan, 2, 2);
+      // A click: selected, nothing moved
+      await fireEvent.pointerDown(container.querySelector('polygon.shape')!, { clientX: x, clientY: y, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: x + 2, clientY: y, pointerId: 1 });
+      await fireEvent.pointerUp(plan, { clientX: x + 2, clientY: y, pointerId: 1 });
+      await tick();
+      expect(ctl.selectedId).toBe('object-9');
+      expect(callsOf(calls, 'updateObstacle')).toHaveLength(0);
+      // Deselect, then press and drag in one gesture
+      ctl.selectObstacle(null);
+      await tick();
+      await fireEvent.pointerDown(container.querySelector('polygon.shape')!, { clientX: x, clientY: y, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: x + 80, clientY: y, pointerId: 1 });
+      await fireEvent.pointerUp(plan, { clientX: x + 80, clientY: y, pointerId: 1 });
+      await tick();
+      expect(ctl.selectedId).toBe('object-9');
+      const updates = callsOf(calls, 'updateObstacle');
+      expect(updates).toHaveLength(1);
+      expect((updates[0][2] as { x: number }).x).toBeGreaterThan(2);
+    });
+
     it('a double click on the selected structure shows its corners; Esc goes back to its box', async () => {
       const { container, ctl } = mount({ objects: [box], context: 'obstacles' });
       const plan = stubPlan(container);

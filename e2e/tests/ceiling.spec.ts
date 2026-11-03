@@ -218,12 +218,14 @@ test.describe('Main view corners', () => {
         await openStep(page, stage, part);
         await expect(strip).toBeVisible();
         await expect(tools).toBeVisible();
-        // Measured once the strip has settled (it may drop its labels to fit)
+        // Measured once the strip has settled (beside the tools, or on its own row above them)
         await expect.poll(async () => {
           const a = (await strip.boundingBox())!;
           const b = (await tools.boundingBox())!;
-          return a.x + a.width <= b.x && a.y + a.height > b.y - 1;
-        }, { message: `${part ?? stage}: the strip ends left of the view tools` }).toBe(true);
+          return a.x + a.width <= b.x || a.y + a.height <= b.y;
+        }, { message: `${part ?? stage}: the strip clears the view tools` }).toBe(true);
+        // Labels at desktop widths; glyphs only on a narrow view
+        if (width >= 1280) await expect(strip).not.toHaveClass(/compact/);
         await page.screenshot({ path: testInfo.outputPath(`corners-${width}-${part ?? stage}.png`) });
       }
     });
