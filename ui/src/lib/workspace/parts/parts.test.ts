@@ -210,9 +210,10 @@ describe('Structures part', () => {
   it('rows rename with the pencil: Enter saves, Esc cancels', async () => {
     const calls: unknown[][] = [];
     mount({ part: 'structures', calls, objects: [box] });
-    // The pencil is only there once the row is open
-    expect(screen.queryByRole('button', { name: /Rename/ })).toBeNull();
-    await fireEvent.click(main('object-9'));
+    // The pencil sits with copy and delete, ahead of the eye and calculator
+    const names = Array.from(row('object-9').querySelectorAll('.row-head button:not(.row-main)')).map((b) => b.getAttribute('aria-label'));
+    expect(names.map((n) => n!.split(' ')[0])).toEqual(['Rename', 'Copy', 'Delete', 'Hide', 'Exclude']);
+    expect(row('object-9').querySelector('.actions + .divider + .toggles')).not.toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: /Rename/ }));
     let input = row('object-9').querySelector('input[type="text"]') as HTMLInputElement;
     await fireEvent.input(input, { target: { value: 'Esc name' } });
