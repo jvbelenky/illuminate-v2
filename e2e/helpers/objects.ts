@@ -35,8 +35,8 @@ export async function addObject(page: Page): Promise<void> {
 }
 
 /**
- * Draw an obstacle footprint on the 2D plan with the toolbar's Draw. The corners
- * (fractions of the canvas) default to a square over the middle of the plan.
+ * Draw an obstacle footprint on the 2D plan with the edit strip's Polygon. The
+ * corners (fractions of the canvas) default to a square over the middle of the plan.
  */
 export async function drawObject(
   page: Page,
@@ -44,7 +44,7 @@ export async function drawObject(
 ): Promise<void> {
   await expandObjectsPanel(page);
   const before = await objectCount(page);
-  await planTool(page, 'Draw').click();
+  await planTool(page, 'Polygon').click();
   await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(1);
   await clickPlan(page, corners, { close: true });
   await expect.poll(() => objectCount(page)).toBe(before + 1);

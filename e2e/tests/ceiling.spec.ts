@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures';
 import type { Locator, Page } from '@playwright/test';
 import { reloadSession, waitForSession } from '../helpers/session';
-import { ceilingDesigner, designerPlan, openCeilingDesigner, openStep, planSvg, showMain } from '../helpers/workspace';
+import { ceilingDesigner, designerPlan, openCeilingDesigner, openStep, planSvg, shapeBodyPoint, showMain } from '../helpers/workspace';
 
 /** The open ceiling item's X and Y (detectors, vents and sensors). */
 async function itemXY(page: Page): Promise<[number, number]> {
@@ -53,7 +53,8 @@ test.describe('Ceiling designer', () => {
     await part.getByRole('button', { name: 'Keep-out', exact: true }).click();
     await expect(part.locator('.editor-row[data-id="ceiling-2"]')).toHaveClass(/open/);
     await expect(part.getByLabel('Width', { exact: true })).toHaveValue('1.2');
-    await expect(designerPlan(page).getByRole('button', { name: 'Corner 1', exact: true })).toBeVisible();
+    // Selected: its box, with resize and rotate handles
+    await expect(designerPlan(page).getByRole('button', { name: 'Rotate' })).toBeVisible();
 
     // Move grid (nothing selected): a drag on empty ceiling shifts the tile lines
     await part.locator('.editor-row[data-id="ceiling-2"] .row-main').click();
@@ -92,6 +93,60 @@ test.describe('Ceiling designer', () => {
     await part.locator('.editor-row[data-id="ceiling-1"] .row-main').click();
     expect(await itemXY(page)).toEqual(moved);
     await expect(designerPlan(page).getByRole('button', { name: 'Keep-out area 1' })).toBeVisible();
+  });
+
+  test('a keep-out area turns a quarter with its rotate handle, shows its corners on a double-click, and Rectangle adds another', async ({ page }) => {
+    await waitForSession(page);
+    const designer = await openCeilingDesigner(page);
+    const part = designer.locator('.ceiling-part');
+    const plan = designerPlan(page);
+    await part.getByRole('button', { name: 'Keep-out', exact: true }).click();
+    const row = part.locator('.editor-row[data-id="ceiling-1"]');
+    await expect(row).toHaveClass(/open/);
+    const rotation = row.getByLabel('Rotation', { exact: true });
+    await expect(rotation).toHaveValue('0');
+
+    // The rotate handle, a quarter turn round the area's centre
+    const area = (await plan.locator('polygon.outline').boundingBox())!;
+    const cx = area.x + area.width / 2, cy = area.y + area.height / 2;
+    const knob = (await plan.getByRole('button', { name: 'Rotate' }).boundingBox())!;
+    const kx = knob.x + knob.width / 2, ky = knob.y + knob.height / 2;
+    const r = Math.hypot(kx - cx, ky - cy);
+    await page.mouse.move(kx, ky);
+    await page.mouse.down();
+    for (const deg of [20, 45, 70, 90]) {
+      const a = -Math.PI / 2 - (deg * Math.PI) / 180;
+      await page.mouse.move(cx + r * Math.cos(a), cy + r * Math.sin(a), { steps: 3 });
+    }
+    await page.mouse.up();
+    await expect(rotation).toHaveValue('90');
+    await expect(row.getByLabel('Width', { exact: true })).toHaveValue('1.2');
+
+    // Double-click: its corners; Esc goes back to the box, the area still selected and the window open
+    await page.mouse.dblclick(...(await shapeBodyPoint(page, plan)));
+    await expect(plan.getByRole('button', { name: 'Corner 1', exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Edit corners' })).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
+    await expect(plan.getByRole('button', { name: 'Corner 1', exact: true })).toHaveCount(0);
+    await expect(row).toHaveClass(/open/);
+    await expect(designer).toBeVisible();
+
+    // Nothing selected: Rectangle drags out a new keep-out area
+    await page.keyboard.press('Escape');
+    await expect(part.locator('.editor-row.open')).toHaveCount(0);
+    const rect = designer.locator('.cd-tools').getByRole('button', { name: 'Rectangle' });
+    await rect.click();
+    await expect(rect).toHaveAttribute('aria-pressed', 'true');
+    const box = (await plan.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.35);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.35, box.y + box.height * 0.42, { steps: 4 });
+    await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.5, { steps: 4 });
+    await page.mouse.up();
+    await expect(part.locator('.editor-row')).toHaveCount(2);
+    await expect(part.locator('.editor-row[data-id="ceiling-2"]')).toHaveClass(/open/);
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
   });
 
   test("the item editor's Copy opens the copy and Delete removes it; Ctrl+Z in the window brings it back", async ({ page }) => {

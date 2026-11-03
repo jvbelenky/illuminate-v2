@@ -3,7 +3,7 @@ import { waitForApiIdle } from '../helpers/network';
 import { waitForSession } from '../helpers/session';
 import { attachErrorGuard } from '../helpers/errors';
 import { addZone, userZoneRows, zoneCount, zoneEditor } from '../helpers/zones';
-import { planSvg, planTool, showMain } from '../helpers/workspace';
+import { clickPlan, openStep, planSvg, planTool, showMain } from '../helpers/workspace';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
 
@@ -76,6 +76,51 @@ test.describe('Calc zones in the workspace', () => {
     await page.locator('.app-status-bar').click();
     await page.keyboard.press('Control+z');
     await expect.poll(() => zoneCount(page)).toBe(2);
+  });
+
+  test('Polygon on the plan adds a zone with its box; its editor toggles Edit corners; Rectangle adds another', async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    await waitForSession(page);
+    await showMain(page, '2d');
+    await openStep(page, 'zones');
+    const before = await zoneCount(page);
+    await planTool(page, 'Polygon').click();
+    await expect(planTool(page, 'Polygon')).toHaveAttribute('aria-pressed', 'true');
+    await clickPlan(page, [[0.3, 0.6], [0.5, 0.6], [0.5, 0.4], [0.3, 0.4]], { close: true });
+    await expect.poll(() => zoneCount(page)).toBe(before + 1);
+    await waitForApiIdle(page);
+    await expect(zoneEditor(page)).toBeVisible();
+    const plan = planSvg(page);
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
+    await expect(planTool(page, 'Rotate 90°')).toBeVisible();
+
+    // The editor's Redraw outline and Edit corners; Edit corners toggles the corners
+    await expect(zoneEditor(page).getByRole('button', { name: 'Redraw outline' })).toBeVisible();
+    const corners = zoneEditor(page).getByRole('button', { name: 'Edit corners' });
+    await corners.click();
+    await expect(corners).toHaveAttribute('aria-pressed', 'true');
+    await expect(plan.getByRole('button', { name: 'Corner 1', exact: true })).toBeVisible();
+    await expect(planTool(page, 'Done')).toBeVisible();
+    await corners.click();
+    await expect(corners).toHaveAttribute('aria-pressed', 'false');
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
+
+    // Esc deselects; with nothing selected, Rectangle drags out another
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Escape');
+    await expect(zoneEditor(page)).toHaveCount(0);
+    await planTool(page, 'Rectangle').click();
+    const box = (await plan.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.4);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.5, { steps: 4 });
+    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.6, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(() => zoneCount(page)).toBe(before + 2);
+    await waitForApiIdle(page);
+    const planes = (await backendZones(page)).filter((z) => !z.is_standard && z.type === 'plane');
+    expect(planes).toHaveLength(2);
+    guard.assertClean();
   });
 
   test('add a plane on Wall 2, calculate, and it has results', async ({ page }) => {

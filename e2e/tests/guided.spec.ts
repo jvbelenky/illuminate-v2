@@ -111,7 +111,7 @@ test.describe('Guided workspace', () => {
     await waitForSession(page);
     await page.locator('button.editor-part[data-part="structures"]').click();
     await expect(page.locator('.editor-part[data-part="structures"][aria-selected="true"]')).toBeVisible();
-    await planTool(page, 'Draw').click();
+    await planTool(page, 'Polygon').click();
     await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(1);
     await clickPlan(page, [[0.4, 0.6], [0.6, 0.6], [0.6, 0.4], [0.4, 0.4]], { close: true });
     await expect(page.locator('.structures-part .editor-row')).toHaveCount(1);
