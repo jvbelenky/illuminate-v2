@@ -87,11 +87,14 @@
 	);
 	// Wall planes on the read-only wall view: the selected or hovered one
 	const roWallPlanes = $derived((ctl.wallView?.planes ?? []).filter((z) => z.id === ctl.selectedZoneId || z.id === hovered('zones')));
-	/** A zone outline picked on the canvas (not mid-draw or mid-place). */
+	/** A zone outline picked on the canvas (not mid-draw or mid-place): selected, and a drag from there moves it. */
 	function zoneDown(e: PointerEvent, id: string) {
 		if (ctl.drawing || ctl.placing || ctl.pointPick || e.button !== 0) return;
 		e.stopPropagation();
+		const surface = ctl.surface;
 		ctl.clickZone(id);
+		// Only on the same canvas (a wall plane picked on the floor opens its wall)
+		if (ctl.surface === surface) ctl.canvas?.startBodyDrag(e);
 	}
 
 	function onKey(event: KeyboardEvent) {

@@ -3,7 +3,9 @@
 	// top-left the 2D | 3D switch; top-right (2D, also in the summary) the surface; bottom-left the edit strip, also while 3D is main. Units and
 	// the view tools sit bottom-right inside each view (PlanCanvas, RoomViewer).
 	// The two bottom corners never overlap: when the labelled edit strip does not
-	// fit beside the view tools it shows glyphs only, and wraps if even that is too wide.
+	// fit beside the view tools it rises onto its own row above them, labels kept;
+	// only a view under 600 px (or one too narrow even for that row) shows glyphs
+	// only, wrapping if even that is too wide.
 	// On a phone (`touch`): Undo | Redo, Fit and one surface dropdown top-right, the edit strip
 	// (2D only) scrolling sideways on one row bottom-left, and ⤢ / ⤡ bottom-right.
 	import { untrack } from 'svelte';
@@ -35,11 +37,15 @@
 	/** Inset of each corner group, and the least gap between the two bottom groups (px). */
 	const INSET = 8;
 	const GAP = 8;
+	/** Below this view width the strip shows glyphs only rather than rising above the view tools. */
+	const COMPACT_BELOW = 600;
 
 	let root = $state<HTMLDivElement | undefined>(undefined);
 	/** Room left for the edit strip beside the view tools (px); null until measured. */
 	let room = $state<number | null>(null);
 	let compact = $state(false);
+	/** How far the labelled strip rises to clear the view tools (px); 0 beside them. */
+	let lift = $state(0);
 
 	$effect(() => {
 		if (touch || !root || !editing || typeof ResizeObserver === 'undefined') return;
@@ -73,7 +79,18 @@
 				}
 			}
 			if (!compact) fullWidth = strip.offsetWidth;
-			compact = fullWidth > room;
+			const width = el.clientWidth;
+			if (fullWidth <= room) {
+				compact = false;
+				lift = 0;
+			} else if (width >= COMPACT_BELOW && fullWidth <= width - 2 * INSET) {
+				// Its own row, above the view tools
+				compact = false;
+				lift = (tools ? (tools as HTMLElement).offsetHeight : 0) + GAP;
+			} else {
+				compact = true;
+				lift = 0;
+			}
 		}
 		watch(el);
 		// The strip and the view tools come and go with the context and the main view
@@ -121,7 +138,7 @@
 			>
 		</div>
 	{:else if editing}
-		<div class="corner bl" data-plan-scope style:max-width={compact && room !== null ? `${Math.max(36, room)}px` : undefined}>
+		<div class="corner bl" class:lifted={lift > 0} data-plan-scope style:bottom={lift > 0 ? `${INSET + lift}px` : undefined} style:max-width={compact && room !== null ? `${Math.max(36, room)}px` : undefined}>
 			<PlanEditStrip controller={ctl} {compact} />
 		</div>
 	{/if}

@@ -211,7 +211,9 @@
 	 * `restore` is the draft to put back if it is cancelled (before a midpoint
 	 * insert), `startYaw` the frame a resize or rotate started from.
 	 */
-	let drag = $state<{ kind: 'vertex' | 'edge' | 'body' | 'resize' | 'rotate'; index: number; startPointer: Vertex; startDraft: Vertex[]; restore: Vertex[]; handle?: Handle; startYaw?: number } | null>(null);
+	let drag = $state<{ kind: 'vertex' | 'edge' | 'body' | 'resize' | 'rotate'; index: number; startPointer: Vertex; startDraft: Vertex[]; restore: Vertex[]; handle?: Handle; startYaw?: number; slop?: [number, number] } | null>(null);
+	/** A body drag moves nothing until the pointer has gone this far (CSS px), so a click only selects. */
+	const BODY_SLOP_PX = 4;
 	/** The angle shown by the rotate handle while it is dragged. */
 	let rotateAngle = $state<number | null>(null);
 	/** What a drawing makes: a polygon (click its corners) or a rectangle (drag it out). */
@@ -832,11 +834,7 @@
 					onBodyDoubleClick();
 					return;
 				}
-				(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-				const start = draft.map((v) => [v[0], v[1]] as Vertex);
-				drag = { kind: 'body', index: -1, startPointer: p, startDraft: start, restore: start };
-				selectedIndex = -1;
-				svgEl?.focus();
+				beginBodyDrag(event, p);
 				return;
 			}
 		}
@@ -983,6 +981,28 @@
 		return b.t - a.t <= DOUBLE_PRESS_MS && Math.hypot(b.x - a.x, b.y - a.y) <= (b.touch ? 30 : 8);
 	}
 
+	function beginBodyDrag(event: PointerEvent, p: Vertex) {
+		// On the canvas itself: the element pressed may go away as the selection redraws
+		svgEl?.setPointerCapture?.(event.pointerId);
+		const start = draft.map((v) => [v[0], v[1]] as Vertex);
+		drag = { kind: 'body', index: -1, startPointer: p, startDraft: start, restore: start, slop: [event.clientX, event.clientY] };
+		selectedIndex = -1;
+		svgEl?.focus();
+	}
+
+	/**
+	 * The press that just selected a shape (its draft is now this canvas's)
+	 * goes on to move it, PowerPoint style, once the pointer travels past the
+	 * slop. True when it started a drag.
+	 */
+	export function startBodyDrag(event: PointerEvent): boolean {
+		if (!draggableBody || !editing || drawing || draft.length < 3 || event.button !== 0 || spaceHeld) return false;
+		const p = pointerToRoom(event);
+		if (!pointInPolygon(draft, p[0], p[1])) return false;
+		beginBodyDrag(event, p);
+		return true;
+	}
+
 	/** A resize handle pressed: scale the shape about the opposite handle. */
 	function beginResize(event: PointerEvent, handle: Handle) {
 		beginTransform(event, 'resize', handle);
@@ -1102,6 +1122,10 @@
 			return;
 		}
 		if (drag.kind === 'body') {
+			if (drag.slop) {
+				if (Math.hypot(event.clientX - drag.slop[0], event.clientY - drag.slop[1]) < BODY_SLOP_PX) return;
+				drag.slop = undefined;
+			}
 			// Move every corner by the pointer delta, snapped so the first corner lands on the grid
 			const dx = p[0] - drag.startPointer[0];
 			const dy = p[1] - drag.startPointer[1];
@@ -1615,7 +1639,7 @@
 			role={onShapeClick ? 'button' : undefined}
 			tabindex={onShapeClick ? -1 : undefined}
 			aria-label={shape.name ?? shape.id}
-			onpointerdown={(e) => { if (onShapeClick && editing && !drawing && !spaceHeld && e.button === 0) { e.stopPropagation(); e.preventDefault(); onShapeClick(shape.id, e); } }}
+			onpointerdown={(e) => { if (onShapeClick && editing && !drawing && !spaceHeld && e.button === 0) { e.stopPropagation(); e.preventDefault(); onShapeClick(shape.id, e); startBodyDrag(e); } }}
 		/>
 		{#if shape.name}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
