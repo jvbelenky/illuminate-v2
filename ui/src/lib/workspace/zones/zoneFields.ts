@@ -7,7 +7,7 @@ import type { CalcZone, PlaneCalcMode, RoomConfig } from '$lib/types/project';
 import { wallIndex, zoneSurface, type Surface } from '$lib/utils/surfaces';
 import { formatFloat } from '$lib/utils/formatting';
 import { fromMeters, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
-import { footprintGeometry, rectangleCorners, roomFillGeometry, roomFootprint, zoneFootprint } from '$lib/utils/zoneFootprint';
+import { footprintGeometry, isAxisRectangle, rectangleCorners, roomFillGeometry, roomFootprint, zoneFootprint } from '$lib/utils/zoneFootprint';
 import { planeWall, wallPlaneOutline } from '$lib/utils/planeWorld';
 import type { Vertex } from '$lib/utils/roomGeometry';
 
@@ -157,6 +157,14 @@ const EYE_HEIGHT_M = 1.8;
 export function surfaceChoice(zone: CalcZone, roomZ: number): Surface | '' {
   if (zone.wall_orphan || isLegacyPlane(zone)) return '';
   return zoneSurface(zone, roomZ);
+}
+
+/**
+ * The heading of a zone's geometry fold: Vertices when it lists a drawn outline's
+ * vertices, Geometry when it shows a rectangle (or a legacy plane) as X and Y ranges.
+ */
+export function geometryLabel(vertices: Vertex[], ranges = false): 'Vertices' | 'Geometry' {
+  return ranges || isAxisRectangle(vertices) ? 'Geometry' : 'Vertices';
 }
 
 /** The footprint a flat plane or volume shows: its outline, the room when fit with no bounds, else its bounds. */

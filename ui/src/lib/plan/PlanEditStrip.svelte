@@ -3,9 +3,10 @@
 	// sits bottom-left of the main view, also while 3D is main: tools that work
 	// on the 2D canvas bring the 2D view up first; Copy and Delete act on the
 	// selection in either view. On a phone it sits bottom-left of the pinned 2D view, scrolling sideways.
-	// Shapes (structures, zones, keep-out areas) go PowerPoint style: with nothing
-	// selected, Rectangle and Polygon draw a new one; with one selected, Edit
-	// corners, Rotate 90°, Copy and Delete; while its corners are edited, Done.
+	// Shapes (structures, zones, keep-out areas) go PowerPoint style: with one
+	// selected, Edit vertices, Rotate 90°, Copy and Delete; while its vertices are
+	// edited, Done. Structures and zones come from their Add cards, so with nothing
+	// selected their strip is empty; keep-out areas still draw from Rectangle and Polygon.
 	import Glyph, { type GlyphName } from '$lib/workspace/Glyph.svelte';
 	import type { DrawShape, PlanController } from './planController.svelte';
 
@@ -40,20 +41,21 @@
 		const draw = (shape: DrawShape, label: string, glyph: GlyphName): Tool => ({
 			label,
 			glyph,
+			title: ctl.drawing && ctl.drawShape === shape ? 'Cancel drawing (Esc)' : `Draw a ${label.toLowerCase()}`,
 			onclick: () => ctl.startShapeDraw(shape),
 			disabled: disabled && !ctl.drawing,
 			pressed: ctl.drawing && ctl.drawShape === shape
 		});
 		return [draw('rect', 'Rectangle', 'rect'), draw('polygon', 'Polygon', 'polygon')];
 	}
-	/** A selected shape's tools, or Done while its corners are edited. */
+	/** A selected shape's tools, or Done while its vertices are edited. */
 	function shapeTools(copy: () => void, remove: () => void, disabled = false): Tool[] {
 		if (ctl.shapeMode === 'corners') {
-			return [{ label: 'Done', glyph: 'check', title: 'Done (Esc)', onclick: ctl.endCorners, pressed: true, primary: true }];
+			return [{ label: 'Done', glyph: 'check', title: 'Done editing vertices (Esc)', onclick: ctl.endCorners, pressed: true, primary: true }];
 		}
 		return [
-			{ label: 'Edit corners', glyph: 'corners', onclick: () => ctl.inCanvas(ctl.editCorners), disabled },
-			{ label: 'Rotate 90°', glyph: 'rotate', onclick: ctl.rotateSelected90, disabled },
+			{ label: 'Edit vertices', glyph: 'corners', title: 'Drag, add or remove vertices', onclick: () => ctl.inCanvas(ctl.editCorners), disabled },
+			{ label: 'Rotate 90°', glyph: 'rotate', title: 'Rotate 90° counter-clockwise', onclick: ctl.rotateSelected90, disabled },
 			{ label: 'Copy', glyph: 'copy', title: COPY, onclick: copy, disabled },
 			{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: remove, disabled }
 		];
@@ -62,16 +64,17 @@
 	const tools = $derived.by<Tool[]>(() => {
 		if (ctl.onOutline) {
 			const list: Tool[] = [
-				{ label: 'Draw', glyph: 'pen', onclick: () => (ctl.drawing ? ctl.cancelDraw() : ctl.requestNewOutline()), pressed: ctl.drawing },
-				{ label: 'Edit corners', glyph: 'corners', onclick: () => ctl.inCanvas(() => ctl.toggleTool('corners')), disabled: ctl.drawing, pressed: ctl.activeTool === 'corners' }
+				{ label: 'Draw', glyph: 'pen', title: ctl.drawing ? 'Cancel drawing (Esc)' : 'Draw a new room outline', onclick: () => (ctl.drawing ? ctl.cancelDraw() : ctl.requestNewOutline()), pressed: ctl.drawing },
+				{ label: 'Edit vertices', glyph: 'corners', title: 'Drag, add or remove the outline\'s vertices', onclick: () => ctl.inCanvas(() => ctl.toggleTool('corners')), disabled: ctl.drawing, pressed: ctl.activeTool === 'corners' }
 			];
 			if (ctl.hasImage) {
-				list.push({ label: 'Move image', glyph: 'image', onclick: () => ctl.inCanvas(() => ctl.toggleTool('image')), disabled: ctl.drawing, pressed: ctl.activeTool === 'image' });
+				list.push({ label: 'Move image', glyph: 'image', title: 'Drag the floor plan image', onclick: () => ctl.inCanvas(() => ctl.toggleTool('image')), disabled: ctl.drawing, pressed: ctl.activeTool === 'image' });
 			}
 			return list;
 		}
 		if (ctl.onObstacles) {
-			if (ctl.drawing || !ctl.selected) return newShapeTools();
+			if (ctl.drawing) return newShapeTools();
+			if (!ctl.selected) return [];
 			return shapeTools(ctl.duplicateSelected, ctl.deleteSelected);
 		}
 		if (ctl.onLamps) {
@@ -93,12 +96,13 @@
 			}
 			const list = newShapeTools(ctl.ceilingFull);
 			if (ctl.tilesActive && !ctl.drawing) {
-				list.push({ label: 'Move grid', glyph: 'tiles', onclick: () => ctl.inCanvas(() => ctl.toggleTool('grid')), pressed: ctl.activeTool === 'grid' });
+				list.push({ label: 'Move grid', glyph: 'tiles', title: 'Drag the tile grid', onclick: () => ctl.inCanvas(() => ctl.toggleTool('grid')), pressed: ctl.activeTool === 'grid' });
 			}
 			return list;
 		}
 		if (ctl.onZones) {
-			if (ctl.drawing || !ctl.selectedZone) return newShapeTools(ctl.placing);
+			if (ctl.drawing) return newShapeTools(ctl.placing);
+			if (!ctl.selectedZone) return [];
 			if (ctl.zoneCornersEditable) return shapeTools(ctl.copySelectedZone, ctl.deleteSelectedZone, ctl.placing);
 			return [
 				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.copySelectedZone, disabled: ctl.placing },

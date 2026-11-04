@@ -104,7 +104,7 @@ test.describe('Polygon rooms', () => {
     await expect(width).toBeEnabled();
     await expect(length).toBeEnabled();
     await closePlan(page);
-    await expect(page.locator('.summary-panel')).toContainText('3-corner outline');
+    await expect(page.locator('.summary-panel')).toContainText('3-vertex outline');
 
     // The reflectance settings list the polygon's walls
     await openReflectanceModal(page);
@@ -114,7 +114,7 @@ test.describe('Polygon rooms', () => {
     // Back to a rectangle via the corner table: a 4-corner outline at the origin
     await expandRoomPanel(page);
     await openGeometry(page);
-    await part.getByRole('button', { name: 'Add corner' }).click();
+    await part.getByRole('button', { name: 'Add vertex' }).click();
     await expect(rows).toHaveCount(4);
     const corners = [[0, 0], [5, 0], [5, 4], [0, 4]];
     for (let i = 0; i < corners.length; i++) {
@@ -190,12 +190,12 @@ test.describe('Polygon rooms', () => {
     await expect(page.locator('.floorplan-part .plan-summary')).toHaveText(/^20\.0 m²/);
     await expect(plan.locator('text.edge-label')).toHaveText(['5.0', '4.0', '5.0', '4.0']);
 
-    // Double-click a corner: X and Y, in place
+    // Double-click a vertex: X and Y, in place
     await openGeometry(page);
     const row = page.locator('.floorplan-part .vertex-row').nth(1).locator('input');
     const x0 = parseFloat(await row.nth(0).inputValue());
-    await plan.getByRole('button', { name: 'Corner 2', exact: true }).dblclick();
-    const cx = page.getByRole('textbox', { name: 'Corner 2 X' });
+    await plan.getByRole('button', { name: 'Vertex 2', exact: true }).dblclick();
+    const cx = page.getByRole('textbox', { name: 'Vertex 2 X' });
     await expect(cx).toBeFocused();
     await page.keyboard.type(String(x0 + 0.5));
     await page.keyboard.press('Enter');

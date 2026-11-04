@@ -1,13 +1,13 @@
 <script lang="ts">
 	// Room › Structures: the structures (scene objects) in the room. "+ Add structure" drops a
 	// default box and opens it; the open row carries the shape line (Rectangle, or
-	// Polygon with its corners; Redraw footprint, Edit corners), the editor panel.
+	// Polygon with its vertices; Redraw footprint, Edit vertices), the editor panel.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
 	import Glyph from '$lib/workspace/Glyph.svelte';
 	import type { Snippet } from 'svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
-	import { defaultObject, type SceneObject } from '$lib/types/project';
+	import { defaultObject, nextStructureName, type SceneObject } from '$lib/types/project';
 	import { objectFootprint } from '$lib/utils/objectGeometry';
 	import { shapeKind } from '$lib/plan/shapeTransform';
 	import type { PlanController } from '$lib/plan/planController.svelte';
@@ -21,7 +21,7 @@
 	async function addStructure() {
 		const { room, units } = ctl.scene();
 		try {
-			const id = await ctl.actions.addObstacle(defaultObject(room, units));
+			const id = await ctl.actions.addObstacle(defaultObject(room, units, { name: nextStructureName(ctl.scene().objects) }));
 			ctl.selectObstacle(id);
 			await scrollRowIntoView(id);
 		} catch (e) {
@@ -29,7 +29,7 @@
 		}
 	}
 
-	/** "Rectangle", or "Polygon, N corners", in the structure's own frame. */
+	/** "Rectangle", or "Polygon, N vertices", in the structure's own frame. */
 	function shapeLabel(o: SceneObject): string {
 		return shapeKind(objectFootprint(o), o.yaw);
 	}
@@ -50,7 +50,7 @@
 	{#if objects.length === 0}
 		<span class="ep-chip">None</span>
 	{/if}
-	<div class="ep-list">
+	<div class="ep-list roomy">
 		{#each objects as o (o.id)}
 			{@const open = ctl.selectedId === o.id}
 			{@const redrawing = ctl.drawing && ctl.redrawObstacleId === o.id}
@@ -78,7 +78,7 @@
 					<span class="structure-shape-label">{shapeLabel(o)}</span>
 					<div class="shape-tools">
 						<button type="button" class="secondary plan-btn" class:active={redrawing} aria-pressed={redrawing} onclick={() => ctl.startObstacleRedraw(o.id)}><Glyph name="pen" size={16} /><span>Redraw footprint</span></button>
-						<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing} onclick={() => ctl.editStructureCorners(o.id)}><Glyph name="corners" size={16} /><span>Edit corners</span></button>
+						<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing} onclick={() => ctl.editStructureCorners(o.id)}><Glyph name="corners" size={16} /><span>Edit vertices</span></button>
 					</div>
 				</div>
 				{#if objectPanel}{@render objectPanel(o)}{/if}

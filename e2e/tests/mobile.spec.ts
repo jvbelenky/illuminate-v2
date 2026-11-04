@@ -127,10 +127,10 @@ test.describe('Mobile layout', () => {
     await expect(page).toHaveURL(/\/$/);
   });
 
-  test('Draw outline goes full screen and returns when the drawing ends', async ({ page }) => {
+  test('Draw new outline goes full screen and returns when the drawing ends', async ({ page }) => {
     await openMobile(page);
     // A new project opens the editor at Room › Floorplan
-    await editor(page).getByRole('button', { name: 'Draw outline' }).click();
+    await editor(page).getByRole('button', { name: 'Draw new outline' }).click();
     await expect(exitButton(page)).toBeVisible();
     await expect(editor(page)).toBeHidden();
     await clickPlan(page, [[0.25, 0.3], [0.75, 0.3], [0.75, 0.7], [0.25, 0.7]], { close: true });

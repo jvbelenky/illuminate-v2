@@ -233,7 +233,7 @@ export function snapLineToOutline(
   return best;
 }
 
-/** A footprint's shape in words: a rectangle in its own frame, or a polygon with its corner count. */
+/** A footprint's shape in words: a rectangle in its own frame, or a polygon with its vertex count. */
 export function shapeKind(vertices: Vertex[], yaw: number): string {
   if (vertices.length === 4) {
     const local = vertices.map((v) => toLocal(v, yaw));
@@ -244,5 +244,5 @@ export function shapeKind(vertices: Vertex[], yaw: number): string {
     const distinct = new Set(local.map(([x, y]) => `${near(x, min[0]) ? 0 : 1}${near(y, min[1]) ? 0 : 1}`));
     if (onCorner && distinct.size === 4) return 'Rectangle';
   }
-  return `Polygon, ${vertices.length} corners`;
+  return `Polygon, ${vertices.length} vertices`;
 }

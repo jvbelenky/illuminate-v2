@@ -200,7 +200,7 @@
 					{@const cornering = open && ctl.shapeMode === 'corners'}
 					<div class="shape-tools">
 						<button type="button" class="secondary plan-btn" class:active={redrawing} aria-pressed={redrawing} disabled={!!it.hidden} onclick={() => ctl.startKeepOutDraw('polygon', it.id)}><Glyph name="pen" size={16} /><span>Redraw footprint</span></button>
-						<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing || !!it.hidden} onclick={() => ctl.editKeepOutCorners(it.id)}><Glyph name="corners" size={16} /><span>Edit corners</span></button>
+						<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing || !!it.hidden} onclick={() => ctl.editKeepOutCorners(it.id)}><Glyph name="corners" size={16} /><span>Edit vertices</span></button>
 					</div>
 					<ShapeGeometryFields
 						vertices={it.vertices}

@@ -122,13 +122,13 @@ test.describe('Ceiling designer', () => {
     await expect(rotation).toHaveValue('90');
     await expect(row.getByLabel('Width', { exact: true })).toHaveValue('1.2');
 
-    // Double-click: its corners; Esc goes back to the box, the area still selected and the window open
+    // Double-click: its vertices; Esc goes back to the box, the area still selected and the window open
     await page.mouse.dblclick(...(await shapeBodyPoint(page, plan)));
-    await expect(plan.getByRole('button', { name: 'Corner 1', exact: true })).toBeVisible();
-    await expect(row.getByRole('button', { name: 'Edit corners' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(plan.getByRole('button', { name: 'Vertex 1', exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Edit vertices' })).toHaveAttribute('aria-pressed', 'true');
     await page.keyboard.press('Escape');
     await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
-    await expect(plan.getByRole('button', { name: 'Corner 1', exact: true })).toHaveCount(0);
+    await expect(plan.getByRole('button', { name: 'Vertex 1', exact: true })).toHaveCount(0);
     await expect(row).toHaveClass(/open/);
     await expect(designer).toBeVisible();
 
@@ -218,6 +218,8 @@ test.describe('Main view corners', () => {
       const calc = page.locator('.main-view-controls .corner.tr');
       for (const [stage, part] of [['room', 'floorplan'], ['room', 'structures'], ['lamps', undefined]] as const) {
         await openStep(page, stage, part);
+        // Structures: the strip shows only for a selected one
+        if (part === 'structures') await page.getByRole('button', { name: '+ Add structure' }).click();
         await expect(strip).toBeVisible();
         await expect(calc.locator('button.calculate-btn')).toBeVisible();
         // Measured once the strip has settled (labelled, or glyphs only)
@@ -226,8 +228,9 @@ test.describe('Main view corners', () => {
           const b = (await calc.boundingBox())!;
           return a.x + a.width <= b.x || a.y + a.height <= b.y;
         }, { message: `${part ?? stage}: the strip clears Calculate` }).toBe(true);
-        // Labels at desktop widths; glyphs only on a narrow view
-        if (width >= 1280) await expect(strip).not.toHaveClass(/compact/);
+        // Labels at desktop widths; glyphs only on a narrow view. A selected structure's four
+        // tools are wider (their labels at 1440 px are pinned in objects.spec)
+        if (width >= 1280 && part !== 'structures') await expect(strip).not.toHaveClass(/compact/);
         await page.screenshot({ path: testInfo.outputPath(`corners-${width}-${part ?? stage}.png`) });
       }
     });

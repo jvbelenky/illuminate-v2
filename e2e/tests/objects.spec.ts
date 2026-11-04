@@ -259,16 +259,16 @@ test.describe('Objects (obstacles)', () => {
     expect(o.yaw).toBe(0);
     expect(o.z).toBeCloseTo(0, 6);
     expect(o.height).toBeCloseTo(1.2, 6);
-    await expect(row.locator('.structure-shape')).toContainText('Polygon, 6 corners');
+    await expect(row.locator('.structure-shape')).toContainText('Polygon, 6 vertices');
 
-    // Edit corners is a toggle: pressed while the corners are edited, the strip offering Done
-    const corners = row.getByRole('button', { name: 'Edit corners' });
+    // Edit vertices is a toggle: pressed while the vertices are edited, the strip offering Done
+    const corners = row.getByRole('button', { name: 'Edit vertices' });
     await corners.click();
     await expect(corners).toHaveAttribute('aria-pressed', 'true');
     await expect(planTool(page, 'Done')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(corners).toHaveAttribute('aria-pressed', 'false');
-    await expect(planTool(page, 'Edit corners')).toBeVisible();
+    await expect(planTool(page, 'Edit vertices')).toBeVisible();
   });
 
   test('draw an L-shaped object on the plan canvas', async ({ page }) => {
@@ -324,7 +324,7 @@ test.describe('Objects (obstacles)', () => {
     const before = (await getObjectsFromBackend(page))[0];
     const plan = page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
     await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
-    await expect(plan.getByRole('button', { name: 'Corner 1', exact: true })).toHaveCount(0);
+    await expect(plan.getByRole('button', { name: 'Vertex 1', exact: true })).toHaveCount(0);
 
     // A corner handle dragged right: wider, as one update
     const handle = (await plan.getByRole('button', { name: 'Resize top-right' }).boundingBox())!;
@@ -368,11 +368,11 @@ test.describe('Objects (obstacles)', () => {
     await addObject(page);
     const plan = page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
     await page.mouse.dblclick(...(await shapeBodyPoint(page, plan)));
-    const corner = plan.getByRole('button', { name: 'Corner 3', exact: true });
+    const corner = plan.getByRole('button', { name: 'Vertex 3', exact: true });
     await expect(corner).toBeVisible();
     await expect(plan.getByRole('button', { name: 'Rotate' })).toHaveCount(0);
     await expect(planTool(page, 'Done')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.structures-part .editor-row.open').getByRole('button', { name: 'Edit corners' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.structures-part .editor-row.open').getByRole('button', { name: 'Edit vertices' })).toHaveAttribute('aria-pressed', 'true');
 
     const c = (await corner.boundingBox())!;
     const x = c.x + c.width / 2, y = c.y + c.height / 2;
@@ -386,7 +386,7 @@ test.describe('Objects (obstacles)', () => {
     await expect(corner).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
-    await expect(plan.getByRole('button', { name: 'Corner 3', exact: true })).toHaveCount(0);
+    await expect(plan.getByRole('button', { name: 'Vertex 3', exact: true })).toHaveCount(0);
     await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(1);
   });
 
@@ -396,7 +396,7 @@ test.describe('Objects (obstacles)', () => {
     const strip = page.locator('.main-view-controls .plan-toolbar');
     const tools = page.locator('.main-view-controls .corner.tr');
     await expect(strip).not.toHaveClass(/compact/);
-    for (const label of ['Edit corners', 'Rotate 90°', 'Copy', 'Delete']) {
+    for (const label of ['Edit vertices', 'Rotate 90°', 'Copy', 'Delete']) {
       await expect(planTool(page, label).locator('.tool-label')).toBeVisible();
     }
     await expect.poll(async () => {
@@ -425,25 +425,22 @@ test.describe('Objects (obstacles)', () => {
     expect((await getObjectsFromBackend(page))[0].y).toBeCloseTo(before.y, 1);
   });
 
-  test('Rectangle drags out a new structure, selected with its box', async ({ page }) => {
+  test('with nothing selected the strip has no shape tools; + Add structure gives a selected structure with its box', async ({ page }) => {
     await expandObjectsPanel(page);
-    await planTool(page, 'Rectangle').click();
-    await expect(planTool(page, 'Rectangle')).toHaveAttribute('aria-pressed', 'true');
     const plan = page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
-    const box = (await plan.boundingBox())!;
-    await page.mouse.move(box.x + box.width * 0.35, box.y + box.height * 0.4);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.5, { steps: 4 });
-    await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.6, { steps: 4 });
-    await page.mouse.up();
-    await expect.poll(() => objectCount(page)).toBe(1);
-    await waitForApiIdle(page);
+    for (const name of ['Rectangle', 'Polygon']) await expect(planTool(page, name)).toHaveCount(0);
+    await addObject(page);
     const [o] = await getObjectsFromBackend(page);
-    expect(o.width).toBeGreaterThan(0.5);
-    expect(o.length).toBeGreaterThan(0.5);
+    expect(o.name).toBe('Structure 1');
     await expect(page.locator('.structures-part .editor-row.open .structure-shape')).toContainText('Rectangle');
+    // Selected, in select mode: its box and the selection tools
     await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
-    await expect(planTool(page, 'Rotate 90°')).toBeVisible();
+    for (const name of ['Edit vertices', 'Rotate 90°', 'Copy', 'Delete']) await expect(planTool(page, name)).toBeVisible();
+    // Deselected: the shape tools stay away
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(0);
+    await expect(page.locator('.plan-toolbar')).toHaveCount(0);
   });
 
   test('a structure dragged close to a wall ends flush against it', async ({ page }) => {

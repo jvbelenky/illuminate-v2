@@ -149,6 +149,27 @@ describe('PlanCanvas on-screen sizes', () => {
   const radiusPx = (svg: SVGSVGElement, sel: string) => Number(svg.querySelector(sel)!.getAttribute('r')) * screenPerUnit(svg);
   const fontPx = (svg: SVGSVGElement, sel: string) => Number(svg.querySelector(sel)!.getAttribute('font-size')) * screenPerUnit(svg);
 
+  it('a dimmed or disabled footprint is dashed in screen pixels, not room units (whole outlines off the Structures tab)', async () => {
+    const { container } = render(PlanCanvas, {
+      props: {
+        draft: room.map((v) => [...v] as Vertex), units: 'meters', precision: 2,
+        shapes: [{ ...shape, dimmed: true }, { ...shape, id: 's2', disabled: true }, { ...shape, id: 's3', selected: true }] as never,
+        objects: [{ id: 'o1', shape: 'box', width: 1, length: 1, height: 1, x: 3, y: 3, z: 0, yaw: 0, pitch: 0, roll: 0, enabled: false }] as never,
+      },
+    });
+    const svg = container.querySelector('svg.plan') as SVGSVGElement;
+    await resize(svg, 700, 400);
+    const [dimmed, disabled, selected] = [...svg.querySelectorAll('polygon.shape')];
+    const footprint = svg.querySelector('polygon.object-footprint')!;
+    for (const el of [dimmed, disabled, footprint]) {
+      const dashes = el.getAttribute('stroke-dasharray')!.split(' ').map(Number);
+      // 4 px on, 3 px off on screen
+      expect(dashes[0] * screenPerUnit(svg)).toBeCloseTo(4, 3);
+      expect(dashes[1] * screenPerUnit(svg)).toBeCloseTo(3, 3);
+    }
+    expect(selected.getAttribute('stroke-dasharray')).toBeNull();
+  });
+
   // Minimums on screen: text 11 px, lamp markers 12 px across, handles 9 px across
   for (const [w, h] of [[333, 801], [700, 400], [1100, 850]]) {
     it(`draws labels, markers and handles at their minimum sizes in a ${w} x ${h} canvas`, async () => {
@@ -368,7 +389,7 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
     const zoomed = svg.getAttribute('viewBox');
     expect(zoomed).not.toBe(fitted);
     // A Shift+double-click on a corner keeps its meaning (remove the corner) and does not fit
-    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 2' }), { shiftKey: true });
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Vertex 2' }), { shiftKey: true });
     expect(svg.querySelectorAll('circle.vertex')).toHaveLength(3);
     expect(svg.getAttribute('viewBox')).toBe(zoomed);
     await fireEvent.dblClick(svg, { clientX: 390, clientY: 10 });
@@ -383,7 +404,7 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
     const { svg } = await mountSized();
     await fireEvent.wheel(svg, { deltaX: 0, deltaY: -300, ctrlKey: true, clientX: 50, clientY: 50 });
     const zoomed = svg.getAttribute('viewBox');
-    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 2' }));
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Vertex 2' }));
     expect(svg.getAttribute('viewBox')).toBe(zoomed);
     expect(svg.querySelectorAll('circle.vertex')).toHaveLength(4);
   });
@@ -438,11 +459,11 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
     const onEdit = vi.fn();
     const { svg } = await mountSized({ onEdit });
     const before = corners(svg);
-    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Corner 2' }), touch(40, 200, 300, true));
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Vertex 2' }), touch(40, 200, 300, true));
     await fireEvent.pointerMove(svg, touch(40, 260, 300));
     expect(corners(svg)).not.toEqual(before);
     // A second finger lands (on another corner): the drag is cancelled, the other corner is not taken
-    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Corner 3' }), touch(41, 300, 100));
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Vertex 3' }), touch(41, 300, 100));
     expect(corners(svg)).toEqual(before);
     // Neither finger does anything more until both lift
     await fireEvent.pointerMove(svg, touch(41, 350, 150));
@@ -458,7 +479,7 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
     const onEdit = vi.fn();
     const { svg } = await mountSized({ onEdit });
     const before = corners(svg);
-    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Insert corner on wall 1' }), touch(42, 200, 380, true));
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Insert vertex on wall 1' }), touch(42, 200, 380, true));
     await fireEvent.pointerMove(svg, touch(42, 200, 340));
     expect(svg.querySelectorAll('circle.vertex')).toHaveLength(5);
     await fireEvent.pointerDown(svg, touch(43, 100, 100));
@@ -472,7 +493,7 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
     const onEdit = vi.fn();
     const { svg } = await mountSized({ onEdit });
     const before = corners(svg);
-    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Corner 2' }), touch(44, 200, 300, true));
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Vertex 2' }), touch(44, 200, 300, true));
     await fireEvent.pointerMove(svg, touch(44, 260, 300));
     await fireEvent.pointerUp(svg, touch(44, 260, 300));
     expect(corners(svg)).not.toEqual(before);
@@ -482,7 +503,7 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
   it('only the pointer that started a drag moves it (a finger during a mouse drag is ignored)', async () => {
     const onEdit = vi.fn();
     const { svg } = await mountSized({ onEdit });
-    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Corner 2' }), { clientX: 200, clientY: 300, button: 0, pointerId: 1, pointerType: 'mouse', isPrimary: true });
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Vertex 2' }), { clientX: 200, clientY: 300, button: 0, pointerId: 1, pointerType: 'mouse', isPrimary: true });
     await fireEvent.pointerMove(svg, { clientX: 240, clientY: 300, pointerId: 1, pointerType: 'mouse' });
     const moved = corners(svg);
     await fireEvent.pointerDown(svg, touch(50, 100, 100, true));
@@ -672,7 +693,7 @@ describe('PlanCanvas snapping to the room outline', () => {
 
   it('a corner dragged near an outline corner lands on it; Alt leaves it free', async () => {
     const { svg, upp, client, xs, ys } = await mountInRoom();
-    const corner = screen.getByRole('button', { name: 'Corner 3' });
+    const corner = screen.getByRole('button', { name: 'Vertex 3' });
     const near = client(10 - 4 * upp, 10 - 3 * upp);
     await fireEvent.pointerDown(corner, { ...client(4, 4), button: 0, pointerId: 1 });
     await fireEvent.pointerMove(svg, { ...near, pointerId: 1 });
@@ -727,10 +748,10 @@ describe('PlanCanvas typed corners, drawn lengths and names', () => {
 
   it('double-click a corner types its X and Y; Tab moves between them; Enter applies', async () => {
     const { onEdit, corners } = await mountView();
-    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 2' }));
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Vertex 2' }));
     await tick();
-    const x = field('Corner 2 X')!;
-    const y = field('Corner 2 Y')!;
+    const x = field('Vertex 2 X')!;
+    const y = field('Vertex 2 Y')!;
     expect(x.value).toBe('4.00');
     expect(y.value).toBe('0.00');
     expect(document.activeElement).toBe(x);
@@ -739,23 +760,23 @@ describe('PlanCanvas typed corners, drawn lengths and names', () => {
     await fireEvent.input(x, { target: { value: '5' } });
     await fireEvent.input(y, { target: { value: '50cm' } });
     await fireEvent.keyDown(y, { key: 'Enter' });
-    expect(field('Corner 2 X')).toBeNull();
+    expect(field('Vertex 2 X')).toBeNull();
     expect(corners()[1]).toEqual([5, 0.5]);
     expect(onEdit).toHaveBeenCalledTimes(1);
   });
 
   it('a corner position that breaks the polygon stays open, invalid; Escape cancels', async () => {
     const { onEdit, corners } = await mountView();
-    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 2' }));
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Vertex 2' }));
     await tick();
-    const x = field('Corner 2 X')!;
+    const x = field('Vertex 2 X')!;
     // Past the far wall: the outline would cross itself
     await fireEvent.input(x, { target: { value: '-3' } });
     await fireEvent.keyDown(x, { key: 'Enter' });
-    expect(field('Corner 2 X')).toBe(x);
+    expect(field('Vertex 2 X')).toBe(x);
     expect(x.classList.contains('invalid')).toBe(true);
     await fireEvent.keyDown(x, { key: 'Escape' });
-    expect(field('Corner 2 X')).toBeNull();
+    expect(field('Vertex 2 X')).toBeNull();
     expect(corners()[1]).toEqual([4, 0]);
     expect(onEdit).not.toHaveBeenCalled();
   });

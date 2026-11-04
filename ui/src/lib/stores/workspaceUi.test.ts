@@ -2,14 +2,15 @@ import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 
 const KEY = 'illuminate_workspace_ui';
-const DEFAULT = { mode: 'editor', stage: 'room', part: 'floorplan', visited: [] };
+// A fresh tab opens on the summary, the editor closed (at Room › Floorplan once opened)
+const DEFAULT = { mode: 'summary', stage: 'room', part: 'floorplan', visited: [] };
 
 describe('workspaceUi', () => {
   beforeEach(() => {
     vi.resetModules();
   });
 
-  test('starts in the editor at Room › Floorplan', async () => {
+  test('starts on the summary, the editor closed at Room › Floorplan', async () => {
     const { workspaceUi } = await import('./workspaceUi');
     expect(get(workspaceUi)).toEqual(DEFAULT);
   });

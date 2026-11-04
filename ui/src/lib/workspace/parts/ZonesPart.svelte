@@ -113,7 +113,7 @@
 	{#if userZones.length === 0}
 		<span class="ep-chip">None</span>
 	{/if}
-	<div class="ep-list">
+	<div class="ep-list roomy">
 		{#each userZones as z (z.id)}
 			{@const open = ctl.selectedZoneId === z.id}
 			<ItemRow
@@ -149,7 +149,7 @@
 		</label>
 
 		{#if scene.room.useStandardZones && standardZones.length > 0}
-			<div class="ep-list">
+			<div class="ep-list roomy">
 				{#each standardZones as z (z.id)}
 					<ItemRow
 						id={z.id}

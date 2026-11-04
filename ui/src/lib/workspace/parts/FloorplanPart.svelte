@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Room › Floorplan: the room's size and units, its area and volume, the
-	// reference image to trace over; the corner table is folded under Geometry.
+	// reference image to trace over; the vertex table is folded under Vertices, below the image card.
 	import './parts.css';
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
 	import { polygonArea } from '$lib/utils/roomGeometry';
@@ -79,34 +79,8 @@
 	{/if}
 
 	<div class="plan-actions">
-		<button type="button" class="secondary plan-btn" disabled={ctl.drawing} onclick={ctl.requestNewOutline}>Draw outline</button>
+		<button type="button" class="secondary plan-btn" disabled={ctl.drawing} onclick={ctl.requestNewOutline}>Draw new outline</button>
 	</div>
-
-	<button type="button" class="ep-disc" aria-expanded={geometryOpen} onclick={() => (geometryOpen = !geometryOpen)}>
-		<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
-		Geometry
-	</button>
-	{#if geometryOpen}
-		<div class="vertex-table">
-			<div class="vertex-header">
-				<span></span>
-				<span>X ({ctl.unit})</span>
-				<span>Y ({ctl.unit})</span>
-				<span></span>
-			</div>
-			<div class="vertex-rows">
-				{#each ctl.draft as [vx, vy], i (i)}
-					<div class="vertex-row" class:selected={ctl.selectedIndex === i}>
-						<span class="row-index" title="Corner {i + 1}">{i + 1}</span>
-						<ValidatedNumberInput value={vx} precision={scene.precision} min={0} step={ctl.snapStep} disabled={ctl.drawing} oncommit={(v) => ctl.setVertexCoord(i, 0, v)} />
-						<ValidatedNumberInput value={vy} precision={scene.precision} min={0} step={ctl.snapStep} disabled={ctl.drawing} oncommit={(v) => ctl.setVertexCoord(i, 1, v)} />
-						<button type="button" class="secondary remove-btn" title="Remove corner {i + 1}" aria-label="Remove corner {i + 1}" disabled={ctl.drawing || ctl.draft.length <= 3} onclick={() => ctl.removeVertex(i)}>×</button>
-					</div>
-				{/each}
-			</div>
-			<button type="button" class="secondary add-vertex-btn" disabled={ctl.drawing || ctl.draft.length < 2} onclick={ctl.addVertex}>Add corner</button>
-		</div>
-	{/if}
 
 	<section class="ep-addcard image-card" aria-label="Floor plan image">
 		<button type="button" class="secondary plan-btn" disabled={ctl.decoding} onclick={() => fileInput?.click()}>{ctl.decoding ? 'Reading…' : 'Upload floor plan image'}</button>
@@ -147,6 +121,32 @@
 			</div>
 		{/if}
 	</section>
+
+	<button type="button" class="ep-disc" aria-expanded={geometryOpen} onclick={() => (geometryOpen = !geometryOpen)}>
+		<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
+		Vertices
+	</button>
+	{#if geometryOpen}
+		<div class="vertex-table">
+			<div class="vertex-header">
+				<span></span>
+				<span>X ({ctl.unit})</span>
+				<span>Y ({ctl.unit})</span>
+				<span></span>
+			</div>
+			<div class="vertex-rows">
+				{#each ctl.draft as [vx, vy], i (i)}
+					<div class="vertex-row" class:selected={ctl.selectedIndex === i}>
+						<span class="row-index" title="Vertex {i + 1}">{i + 1}</span>
+						<ValidatedNumberInput value={vx} precision={scene.precision} min={0} step={ctl.snapStep} disabled={ctl.drawing} oncommit={(v) => ctl.setVertexCoord(i, 0, v)} />
+						<ValidatedNumberInput value={vy} precision={scene.precision} min={0} step={ctl.snapStep} disabled={ctl.drawing} oncommit={(v) => ctl.setVertexCoord(i, 1, v)} />
+						<button type="button" class="secondary remove-btn" title="Remove vertex {i + 1}" aria-label="Remove vertex {i + 1}" disabled={ctl.drawing || ctl.draft.length <= 3} onclick={() => ctl.removeVertex(i)}>×</button>
+					</div>
+				{/each}
+			</div>
+			<button type="button" class="secondary add-vertex-btn" disabled={ctl.drawing || ctl.draft.length < 2} onclick={ctl.addVertex}>Add vertex</button>
+		</div>
+	{/if}
 </div>
 
 <style>

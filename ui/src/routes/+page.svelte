@@ -56,7 +56,7 @@
 	import { stickStateOf } from '$lib/utils/lampSticking';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, LampStick, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
-	import { defaultLamp, defaultZone, defaultObject, ROOM_DEFAULTS } from '$lib/types/project';
+	import { defaultLamp, defaultZone, defaultObject, nextStructureName, ROOM_DEFAULTS } from '$lib/types/project';
 	import { userSettings } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
@@ -774,7 +774,7 @@
 			const previewLampId = urlParams.get('preview_lamp');
 
 			if (!previewLampId && $userSettings.showStartChooser && !wasRestoredFromStorage() && $lamps.length === 0) {
-				showStartChooser = true;
+				showWelcome();
 			}
 
 			// With the start chooser turned off: a restored project with content lands on
@@ -878,6 +878,17 @@
 		} else {
 			console.warn('Calculation failed:', calcResult.error);
 		}
+	}
+
+	/**
+	 * The welcome popup, over the summary with the editor closed and every editor
+	 * checkmark cleared. Start designing opens the editor; any other dismissal
+	 * leaves the summary showing.
+	 */
+	function showWelcome() {
+		workspaceUi.reset('summary');
+		syncPlanContext();
+		showStartChooser = true;
 	}
 
 	async function handleStartChoice(choice: StartChoice) {
@@ -1162,7 +1173,7 @@
 	function addNewObject() {
 		openStep('room', 'structures', async () => {
 			try {
-				const id = await planActions.addObstacle(defaultObject($room, $userSettings.units));
+				const id = await planActions.addObstacle(defaultObject($room, $userSettings.units, { name: nextStructureName($objects) }));
 				plan.selectObstacle(id);
 				await scrollRowIntoView(id);
 			} catch (e) {
@@ -1239,7 +1250,7 @@
 		onShowSpectrumViewer={() => openOrRestore('Spectrum Viewer', () => showSpectrumViewer = true)}
 		onShowExport={() => openOrRestore('Export', () => showExportModal = true)}
 		onShowHelp={() => openOrRestore('Help', () => showHelpModal = true)}
-		onShowGettingStarted={() => showStartChooser = true}
+		onShowGettingStarted={showWelcome}
 		onShowCite={() => openOrRestore('How To Cite', () => showCiteModal = true)}
 		onShowAbout={() => openOrRestore('About Illuminate', () => showAboutModal = true)}
 		showDimensions={$room.showDimensions ?? true}
@@ -1319,7 +1330,7 @@
 	{/snippet}
 
 	{#snippet dockResultsTools()}
-		<button type="button" class="dock-audit" class:has-warnings={$auditProblems.length > 0} aria-label="Design Audit" title="Design Audit" onclick={() => openOrRestore('Design Audit', () => showAuditModal = true)}>
+		<button type="button" class="dock-audit" class:has-warnings={$auditProblems.length > 0} aria-label="Design Audit" title="Open the design audit" onclick={() => openOrRestore('Design Audit', () => showAuditModal = true)}>
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
 		</button>
 	{/snippet}

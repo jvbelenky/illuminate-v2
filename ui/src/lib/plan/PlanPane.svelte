@@ -611,7 +611,7 @@
 	{#if ctl.askClearOutline}
 		<ConfirmDialog
 			title="Clear the old outline?"
-			message="The floorplan is loaded. Remove the existing corners so you can trace the room fresh, or keep them."
+			message="The floorplan is loaded. Remove the existing vertices so you can trace the room fresh, or keep them."
 			confirmLabel="Clear"
 			cancelLabel="Keep"
 			variant="warning"
@@ -623,7 +623,7 @@
 	{#if ctl.askTrace}
 		<ConfirmDialog
 			title="Trace the room outline"
-			message="Place at least three points on the plan to mark the room's corners."
+			message="Place at least three points on the plan to mark the room's vertices."
 			confirmLabel="Start tracing"
 			cancelLabel="Later"
 			variant="success"

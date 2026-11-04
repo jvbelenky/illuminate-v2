@@ -31,12 +31,13 @@
 		<span class="dock-spacer"></span>
 		{#if tools}{@render tools()}{/if}
 		{#if onSwap}
-			<button type="button" class="dock-btn" aria-label="Swap views" onclick={onSwap}>⇄</button>
+			<button type="button" class="dock-btn" aria-label="Swap views" title="Swap with the main view" onclick={onSwap}>⇄</button>
 		{/if}
 		<button
 			type="button"
 			class="dock-btn"
 			aria-label={minimized ? 'Restore' : 'Minimize'}
+			title={minimized ? 'Restore' : 'Minimize'}
 			onclick={onToggleMinimized}>{minimized ? '▢' : '–'}</button
 		>
 	</div>

@@ -78,14 +78,17 @@ test.describe('Calc zones in the workspace', () => {
     await expect.poll(() => zoneCount(page)).toBe(2);
   });
 
-  test('Polygon on the plan adds a zone with its box; its editor toggles Edit corners; Rectangle adds another', async ({ page }) => {
+  test('an added plane redrawn on the plan has its box; its editor toggles Edit vertices; no shape tools without a selection', async ({ page }) => {
     const guard = attachErrorGuard(page);
     await waitForSession(page);
     await showMain(page, '2d');
     await openStep(page, 'zones');
+    // Nothing selected: no Rectangle or Polygon in the strip
+    for (const name of ['Rectangle', 'Polygon']) await expect(planTool(page, name)).toHaveCount(0);
     const before = await zoneCount(page);
-    await planTool(page, 'Polygon').click();
-    await expect(planTool(page, 'Polygon')).toHaveAttribute('aria-pressed', 'true');
+    await addZone(page, 'plane');
+    await zoneEditor(page).getByRole('button', { name: 'Redraw outline' }).click();
+    await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(1);
     await clickPlan(page, [[0.3, 0.6], [0.5, 0.6], [0.5, 0.4], [0.3, 0.4]], { close: true });
     await expect.poll(() => zoneCount(page)).toBe(before + 1);
     await waitForApiIdle(page);
@@ -94,32 +97,24 @@ test.describe('Calc zones in the workspace', () => {
     await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
     await expect(planTool(page, 'Rotate 90°')).toBeVisible();
 
-    // The editor's Redraw outline and Edit corners; Edit corners toggles the corners
+    // The editor's Redraw outline and Edit vertices; Edit vertices toggles the vertices
     await expect(zoneEditor(page).getByRole('button', { name: 'Redraw outline' })).toBeVisible();
-    const corners = zoneEditor(page).getByRole('button', { name: 'Edit corners' });
+    const corners = zoneEditor(page).getByRole('button', { name: 'Edit vertices' });
     await corners.click();
     await expect(corners).toHaveAttribute('aria-pressed', 'true');
-    await expect(plan.getByRole('button', { name: 'Corner 1', exact: true })).toBeVisible();
+    await expect(plan.getByRole('button', { name: 'Vertex 1', exact: true })).toBeVisible();
     await expect(planTool(page, 'Done')).toBeVisible();
     await corners.click();
     await expect(corners).toHaveAttribute('aria-pressed', 'false');
     await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
 
-    // Esc deselects; with nothing selected, Rectangle drags out another
+    // Esc deselects; with nothing selected, no shape tools
     await page.locator('.app-status-bar').click();
     await page.keyboard.press('Escape');
     await expect(zoneEditor(page)).toHaveCount(0);
-    await planTool(page, 'Rectangle').click();
-    const box = (await plan.boundingBox())!;
-    await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.4);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.5, { steps: 4 });
-    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.6, { steps: 4 });
-    await page.mouse.up();
-    await expect.poll(() => zoneCount(page)).toBe(before + 2);
-    await waitForApiIdle(page);
+    await expect(page.locator('.plan-toolbar')).toHaveCount(0);
     const planes = (await backendZones(page)).filter((z) => !z.is_standard && z.type === 'plane');
-    expect(planes).toHaveLength(2);
+    expect(planes).toHaveLength(1);
     guard.assertClean();
   });
 

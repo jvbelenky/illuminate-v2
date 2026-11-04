@@ -108,7 +108,7 @@
 		</div>
 		<div class="corner tr" data-plan-scope>
 			<UndoRedo />
-			<button type="button" class="mv-btn view-fit" aria-label="Fit" onclick={() => onFit?.()}>Fit</button>
+			<button type="button" class="mv-btn view-fit" aria-label="Fit" title="Fit the room in view" onclick={() => onFit?.()}>Fit</button>
 			{#if main === '2d'}
 				<SurfaceSwitcher surface={ctl.surface} surfaces={ctl.surfaces} onSelect={ctl.setSurface} />
 			{/if}
