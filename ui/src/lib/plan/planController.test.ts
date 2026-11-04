@@ -41,7 +41,7 @@ function makeActions(): PlanActions {
     updateObstacle: vi.fn(),
     removeObstacle: vi.fn(),
     addLamp: vi.fn(async () => 'lamp-2'),
-    addPlacedLamp: vi.fn(async () => 'lamp-2'),
+    addNewLamp: vi.fn(async () => 'lamp-2'),
     copyLamps: vi.fn(async () => ['lamp-2']),
     updateLamp: vi.fn(),
     removeLamp: vi.fn(),

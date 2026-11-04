@@ -1,55 +1,33 @@
 <script lang="ts">
-	// Lamps: add a lamp (fixture, then a placement), and the list of lamps. With
-	// exactly one lamp selected, its row opens onto the lamp editor.
+	// Lamps: "+ Add lamp" (a new lamp, opened, its editor asking for a fixture), and
+	// the list of lamps. With exactly one lamp selected, its row opens onto the lamp editor.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
-	import PlacementPictogram from './PlacementPictogram.svelte';
-	import { scrollRowIntoView } from './scrollRowIntoView';
+	import { promptForFixture } from './scrollRowIntoView';
 	import type { Snippet } from 'svelte';
 	import { lampColor, lampWavelength } from '$lib/utils/wavelengthColor';
 	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
 	import { fixtureKeyOf } from '$lib/utils/lampFixture';
 	import type { LampInstance } from '$lib/types/project';
-	import { PLACEMENT_MODES, type PlacementMode } from '$lib/utils/lampPlacement';
 	import type { PlanController } from '$lib/plan/planController.svelte';
 
 	interface Props {
 		controller: PlanController;
 		/** The full editor for the selected lamp, with a callback that deselects it. */
 		lampPanel?: Snippet<[LampInstance, () => void]>;
-		/** Open the custom lamp manager ("Add custom lamp…"). */
-		onAddCustomLamp?: () => void;
 	}
 
-	let { controller, lampPanel, onAddCustomLamp = () => {} }: Props = $props();
+	let { controller, lampPanel }: Props = $props();
 	const ctl = $derived(controller);
 
 	const scene = $derived(ctl.scene());
 	const lamps = $derived(scene.lamps);
 	const fixtures = $derived(scene.fixtures);
-	const groups = $derived([...new Set(fixtures.map((f) => f.group))]);
 	const selected = $derived(ctl.selectedLampIds);
 
-	const PLACEMENT_TITLES: Record<PlacementMode, string> = {
-		downlight: 'On the ceiling, aimed straight down, where it adds the most coverage',
-		corner: 'High in a corner, aimed across the room (each click takes the next free corner)',
-		edge: 'High on a wall, aimed into the room (each click takes the next free wall)',
-		horizontal: 'High on a wall, aimed level across the room for upper-room use',
-	};
-
-	function chooseFixture(select: HTMLSelectElement) {
-		if (select.value === '__add_custom__') {
-			select.value = ctl.addFixture;
-			onAddCustomLamp();
-			return;
-		}
-		ctl.addFixture = select.value;
-	}
-
-	async function addPlaced(mode: PlacementMode) {
-		await ctl.addPlaced(mode);
-		const id = ctl.selectedLampId;
-		if (id) await scrollRowIntoView(id);
+	async function addLamp() {
+		const id = await ctl.addNewLamp();
+		if (id) await promptForFixture(id);
 	}
 
 	function fixtureName(l: LampInstance): string {
@@ -74,27 +52,7 @@
 </script>
 
 <div class="ep-part lamps-part">
-	<section class="ep-addcard" aria-label="Add lamp">
-		<h3 class="ep-addcard-title">Add lamp</h3>
-		<select value={ctl.addFixture} onchange={(e) => chooseFixture(e.currentTarget)} aria-label="Fixture">
-			<option value="" disabled>Choose a fixture…</option>
-			{#each groups as g (g)}
-				<optgroup label={g}>
-					{#each fixtures.filter((f) => f.group === g) as f (f.key)}
-						<option value={f.key}>{f.label}</option>
-					{/each}
-				</optgroup>
-			{/each}
-			<option value="__add_custom__">Add custom lamp…</option>
-		</select>
-		{#if ctl.addFixture}
-			<div class="ep-grid ep-addbtns add-placements" role="group" aria-label="Placement">
-				{#each PLACEMENT_MODES as pl (pl.mode)}
-					<button type="button" class="secondary" disabled={ctl.addingLamp !== null} aria-busy={ctl.addingLamp === pl.mode} onclick={() => addPlaced(pl.mode)} title={PLACEMENT_TITLES[pl.mode]}><PlacementPictogram mode={pl.mode} /><span>{pl.label}</span></button>
-				{/each}
-			</div>
-		{/if}
-	</section>
+	<button type="button" class="secondary" disabled={ctl.addingLamp} aria-busy={ctl.addingLamp} onclick={addLamp}>+ Add lamp</button>
 
 	{#if selected.length > 1}
 		<div class="ep-section"><span class="ep-chip">{selected.length} selected</span></div>
@@ -133,9 +91,6 @@
 </div>
 
 <style>
-	.add-placements {
-		gap: 6px;
-	}
 	.dot {
 		width: 9px;
 		height: 9px;

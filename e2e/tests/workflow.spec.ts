@@ -4,7 +4,7 @@ import {
   addLampFromPreset, lampCount, removeLamp, selectLamp, copyLamp,
   clickPlacementPreset, openLampFold,
   openAdvancedSettings, selectAdvancedTab, closeAdvancedSettings,
-  addLampWithType, createCustomLamp, openFixtureAdvanced, lampEditor,
+  addLamp, fixtureSelect, createCustomLamp, openFixtureAdvanced, lampEditor,
 } from '../helpers/lamps';
 import {
   addZone, setCalcMode, zoneCount, selectZone, zoneEditor, closeZone, openZoneFold, gridInputs,
@@ -177,11 +177,11 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('custom lamp: file upload, wavelength, placement, advanced settings', async () => {
-    await addLampWithType(page, 'other');
+    await addLamp(page);
     await expect.poll(() => lampCount(page)).toBe(2);
 
     // Build a custom lamp definition (IES + wavelength) and apply it
-    await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 265 });
+    await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 265, lampType: 'other' });
 
     // Placement preset
     await clickPlacementPreset(page, 'Downlight');
@@ -492,11 +492,12 @@ test.describe.serial('Comprehensive workflow', () => {
     await page.keyboard.press('Escape');
   });
   test('wall-mounted custom lamp: picker detects Sideways toward 0°, lamp is placed aiming horizontally', async () => {
-    await addLampWithType(page, 'lp_254');
+    await addLamp(page);
 
-    await page.locator('select#preset').selectOption('__add_custom__');
+    await fixtureSelect(page).selectOption('__add_custom__');
     const form = page.locator('.lamp-form');
     await expect(form).toBeVisible({ timeout: 15_000 });
+    await form.locator('select#lamp-type-select').selectOption('lp_254');
     await form.locator('#ies-file-input').setInputFiles(WALL_IES_FIXTURE);
     await form.locator('[data-facet-open="fixture"]').click({ timeout: 15_000 });
     const suggested = form.locator('.mount-btn[data-group="wall"]');
@@ -521,11 +522,12 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('dense-grid IES: orientation picker resolves without freezing the page', async () => {
-    await addLampWithType(page, 'lp_254');
+    await addLamp(page);
 
-    await page.locator('select#preset').selectOption('__add_custom__');
+    await fixtureSelect(page).selectOption('__add_custom__');
     const form = page.locator('.lamp-form');
     await expect(form).toBeVisible({ timeout: 15_000 });
+    await form.locator('select#lamp-type-select').selectOption('lp_254');
     await form.locator('#ies-file-input').setInputFiles(DENSE_IES_FIXTURE);
     await form.locator('[data-facet-open="fixture"]').click({ timeout: 15_000 });
     // A deep-$state analysis made the scene's vertex loop quadratic and hung

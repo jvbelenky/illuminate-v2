@@ -1,15 +1,16 @@
 <script lang="ts">
 	import { project, lamps, fetchStateHashesDebounced, lampHasPhotometry } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
-	import { getLampOptions, placeSessionLamp } from '$lib/api/client';
-	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
+	import { placeSessionLamp } from '$lib/api/client';
+	import type { LampInstance, RoomConfig, LampType } from '$lib/types/project';
 	import type { CustomLampType } from '$lib/types/lampLibrary';
-	import { customLamps } from '$lib/stores/lampLibrary';
+	import { fixtureKeyOf, type FixtureOption } from '$lib/utils/lampFixture';
+	import FixtureSelect from '$lib/workspace/parts/FixtureSelect.svelte';
 	import { fromMeters, unitAbbrev, unitStep } from '$lib/utils/unitConversion';
 	import { attachCeiling, attachWall } from '$lib/utils/lampSticking';
 	import { moveLampKeepingAim } from '$lib/utils/lampMove';
 	import { roomVertices } from '$lib/utils/roomGeometry';
-	import { onMount, onDestroy, tick, untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import { restoreByTitle } from '$lib/stores/modalDock.svelte';
@@ -29,14 +30,11 @@
 		onOpenLampManager: (type: CustomLampType, lampId: string, editDefId?: string) => void;
 		/** Offer the pick buttons (a pick runs in the main view: the 2D plan or the 3D view). */
 		pick?: boolean;
+		/** The fixtures the "Choose a fixture…" dropdown offers (presets and the custom lamp library). */
+		fixtures?: FixtureOption[];
 	}
 
-	let { lamp, room, onClose, onOpenLampManager, pick = true }: Props = $props();
-
-	// Lamp options from API
-	let presets: LampPresetInfo[] = $state([]);
-	let loading = $state(true);
-	let error = $state<string | null>(null);
+	let { lamp, room, onClose, onOpenLampManager, pick = true, fixtures = [] }: Props = $props();
 
 	// Position, aim, rotation and type are read from the lamp (the store) and
 	// written straight back through project.updateLamp. Nothing is mirrored
@@ -131,43 +129,22 @@
 		if (size !== webSize(lamp[key])) update({ [key]: size });
 	}
 
-	// Lamp selection state. `effectivePresetId` is the established local-state
-	// exception (initialized once from the lamp, then driven by the dropdown
-	// handler — never mirrored from a background store emit). It may hold a
-	// built-in preset id, 'custom' (legacy uploaded file), or 'custom_lamp:{id}'.
-	let effectivePresetId = $state(lamp.custom_lamp_id ? `custom_lamp:${lamp.custom_lamp_id}` : (lamp.preset_id || ''));
-	// Mirrors the last committed dropdown selection so the non-destructive
-	// "Add custom lamp..." option can restore the select without touching the
-	// lamp's photometry (see handleLampSelect).
-	let lastSelectedPresetId = effectivePresetId;
-
-	// Position, aim and rotation only appear once the lamp has photometry, so
-	// a new lamp asks one question at a time.
-	const showPlacement = $derived(lampHasPhotometry(lamp));
-
-	// Re-derive the dropdown selection when the lamp's photometry identity
-	// changes EXTERNALLY (applyCustomLamp's echo after the "Add custom lamp..."
-	// auto-apply, a propagated definition edit, or a direct store write). Track
-	// ONLY the lamp's canonical identity fields via the reads below - never
-	// effectivePresetId itself (written under untrack) - so this can't fight the
-	// transient __add_custom__ -> tick-restore sequence or a mid-flight user
-	// selection; neither of those changes the lamp's fields. Only rewrite when the
-	// canonical value actually differs, and never resurrect the legacy 'custom'
-	// pseudo-selection (a lamp-type change echoes preset_id='custom').
-	$effect(() => {
-		const canonical = lamp.custom_lamp_id
-			? `custom_lamp:${lamp.custom_lamp_id}`
-			: (lamp.preset_id || '');
-		untrack(() => {
-			if (canonical !== effectivePresetId && canonical !== 'custom') {
-				effectivePresetId = canonical;
-				lastSelectedPresetId = canonical;
-			}
-		});
+	// The fixture dropdown reads the lamp: '' until a fixture is chosen. A lamp
+	// from an uploaded file (no library definition) shows as that.
+	const UPLOADED = '__uploaded__';
+	const fixtureValue = $derived(fixtureKeyOf(lamp) || (lamp.has_ies_file ? UPLOADED : ''));
+	const fixtureExtra = $derived.by(() => {
+		if (fixtureValue === UPLOADED) return [{ value: UPLOADED, label: 'Custom lamp (uploaded file)' }];
+		// A fixture the list does not offer (yet): still show it as chosen
+		if (fixtureValue && !fixtures.some((f) => f.key === fixtureValue)) {
+			return [{ value: fixtureValue, label: lamp.preset_id && !lamp.custom_lamp_id ? lamp.preset_id : 'Custom lamp' }];
+		}
+		return [];
 	});
 
-	// Custom lamp definitions matching the current lamp type.
-	let matchingCustomLamps = $derived($customLamps.filter((d) => d.lampType === lamp_type));
+	// The rest of the panel waits for the lamp's photometry, so a new lamp asks
+	// for its fixture first; the placements show, usable once it has one.
+	const showPlacement = $derived(lampHasPhotometry(lamp));
 
 	// Modal states
 	let showDetailsModal = $state(false);
@@ -292,52 +269,21 @@
 		pickResult.set(null);
 	});
 
-	onMount(async () => {
-		try {
-			const options = await getLampOptions();
-			presets = options.presets_222nm;
-			loading = false;
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load lamp options';
-			loading = false;
-		}
-	});
+	// --- Fixture ---
 
-	// --- Lamp selection ---
-
-	async function handleLampSelect(value: string) {
-		if (value === '__add_custom__') {
-			// Non-destructive: opening the manager must touch NOTHING on this lamp —
-			// no updateLamp, no unload. Restore the select's bound value to the
-			// previously-selected option (bind:value already moved it to
-			// '__add_custom__'). Only effectivePresetId is touched — never preset_id
-			// or any field the debounced auto-save reads — so cancelling the manager
-			// leaves the lamp exactly as it was. Saving a new definition auto-applies
-			// it via onOpenLampManager -> onCreated -> applyCustomLamp.
-			//
-			// await tick() first: bind:value has already set effectivePresetId to
-			// '__add_custom__' for THIS flush. If we reassigned synchronously to
-			// lastSelectedPresetId (the pre-event value), the reactive value would end
-			// the flush equal to where it started — Svelte sees no net change and never
-			// rewrites the <select>, which keeps showing 'Add custom lamp...'. Letting
-			// the flush complete first makes the restore a real state change
-			// ('__add_custom__' -> previous) that Svelte writes back to the DOM.
-			await tick();
-			effectivePresetId = lastSelectedPresetId;
-			onOpenLampManager(lamp_type, lamp.id);
-			return;
+	/**
+	 * Put a fixture on the lamp, keeping its position, aim and other settings;
+	 * one undo step. A built-in preset is a 222 nm lamp; a library lamp brings
+	 * its own type. "Add custom lamp…" opens the manager without touching the
+	 * lamp; a definition saved there is applied to it.
+	 */
+	async function chooseFixture(key: string) {
+		if (key.startsWith('custom:')) {
+			const defId = key.slice('custom:'.length);
+			await project.history.batch('Choose fixture', () => project.applyCustomLamp(lamp.id, defId));
+		} else if (key.startsWith('preset:')) {
+			update({ lamp_type: 'krcl_222', preset_id: key.slice('preset:'.length), custom_lamp_id: undefined });
 		}
-		if (value.startsWith('custom_lamp:')) {
-			const defId = value.substring('custom_lamp:'.length);
-			effectivePresetId = value;
-			lastSelectedPresetId = value;
-			await project.applyCustomLamp(lamp.id, defId);
-			return;
-		}
-		// Built-in preset (only krcl_222 reaches here — other types have no presets)
-		effectivePresetId = value;
-		lastSelectedPresetId = value;
-		update({ preset_id: value, custom_lamp_id: undefined });
 	}
 
 	// Compute tilt (bank) and orientation (heading) from lamp position and aim point
@@ -439,69 +385,13 @@
 		onOpenLampManager(lamp_type, lamp.id, lamp.custom_lamp_id);
 	}
 
-	function handleLampTypeChange(newType: LampType) {
-		if (newType === lamp_type) return;
-		// 254 nm and custom-wavelength lamps have no presets; a 222 nm lamp keeps
-		// a built-in preset but must pick again after an uploaded file
-		const current = lamp.preset_id;
-		const preset_id = newType === 'krcl_222' ? (current && current !== 'custom' ? current : '') : 'custom';
-		// Reset the dropdown selection: a lamp previously chosen for another type
-		// is no longer a valid option for the new type.
-		effectivePresetId = '';
-		lastSelectedPresetId = '';
-		// A custom lamp reference from the old type is no longer valid for the
-		// new type; clear it in the same update so a later edit to that definition
-		// in the Lamp Manager cannot silently revert this lamp to it (see applyCustomLamp).
-		// A built-in preset's photometry goes with the preset: leaving 'has_ies_file'
-		// set would send the web and info panels after IES data the lamp no longer has.
-		const droppedPreset = newType !== 'krcl_222' && !!current && current !== 'custom' && !lamp.custom_lamp_id;
-		update({
-			lamp_type: newType,
-			preset_id,
-			custom_lamp_id: undefined,
-			...(droppedPreset ? { has_ies_file: false, ies_filename: undefined } : {}),
-		});
-	}
 </script>
 
 <div class="lamp-editor">
 	<button class="close-x" onclick={onClose} title="Close">&times;</button>
-	{#if loading}
-		<div class="loading">Loading lamp options...</div>
-	{:else if error}
-		<div class="error">{error}</div>
-	{:else}
-		<div class="form-group">
-			<label for="lamp-type">Lamp Type</label>
-			<select id="lamp-type" value={lamp_type} onchange={(e) => handleLampTypeChange(e.currentTarget.value as LampType)}>
-				<option value="krcl_222">Krypton chloride (222 nm)</option>
-				<option value="lp_254">Low-pressure mercury (254 nm)</option>
-				<option value="other">Other (custom wavelength)</option>
-			</select>
-		</div>
-
-		<div class="form-group">
-			<label for="preset">Select Lamp</label>
+		<div class="form-group fixture-row">
 			<div class="select-with-button">
-				<select id="preset" bind:value={effectivePresetId} onchange={(e) => handleLampSelect(e.currentTarget.value)}>
-					<option value="" disabled>-- Select a lamp --</option>
-					{#if lamp_type === 'krcl_222'}
-						{#each presets as preset}
-							<option value={preset.id}>{preset.name}</option>
-						{/each}
-					{/if}
-					{#if effectivePresetId === 'custom'}
-						<option value="custom">Custom lamp (uploaded file)</option>
-					{/if}
-					{#if matchingCustomLamps.length > 0}
-						<option disabled>──────────</option>
-						{#each matchingCustomLamps as def}
-							<option value={'custom_lamp:' + def.id}>{def.name}</option>
-						{/each}
-					{/if}
-					<option disabled>──────────</option>
-					<option value="__add_custom__">Add custom lamp...</option>
-				</select>
+				<FixtureSelect {fixtures} value={fixtureValue} extra={fixtureExtra} onChoose={chooseFixture} onAddCustom={() => onOpenLampManager(lamp_type, lamp.id)} />
 				<button type="button" class="secondary" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
 					Details...
 				</button>
@@ -545,15 +435,18 @@
 				<b>%</b>
 			</span>
 		</div>
+		{/if}
 
-		<div class="ep-grid ep-addbtns placements" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
+		<div class="ep-grid ep-addbtns placements" role="group" aria-label="Placement" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
 			{#each PLACEMENT_MODES as pl (pl.mode)}
-				<button type="button" class="secondary placement" data-mode={pl.mode} disabled={placingMode !== null} aria-busy={placingMode === pl.mode} title={PLACEMENT_TITLES[pl.mode]} onclick={() => applyPlacement(pl.mode)}>
+				<button type="button" class="secondary placement" data-mode={pl.mode} disabled={!showPlacement || placingMode !== null} aria-busy={placingMode === pl.mode} title={PLACEMENT_TITLES[pl.mode]} onclick={() => applyPlacement(pl.mode)}>
 					<PlacementPictogram mode={pl.mode} />
 					<span>{pl.label}</span>
 				</button>
 			{/each}
 		</div>
+
+		{#if showPlacement}
 
 		<div class="sticks">
 			<label class="ep-check">
@@ -687,7 +580,6 @@
 		{/if}
 
 		{/if}
-	{/if}
 </div>
 
 {#snippet webSizeRow(key: 'web_size_2d' | 'web_size_3d', aria: string)}
@@ -752,14 +644,13 @@
 		background: var(--color-bg-tertiary);
 	}
 
-	.loading,
-	.error {
-		padding: var(--spacing-md);
-		text-align: center;
+	/* Clear of the close button in the corner; Details... kept compact so the fixture name has the room */
+	.fixture-row {
+		padding-right: 20px;
 	}
-
-	.error {
-		color: var(--color-error);
+	.fixture-row .select-with-button button.secondary {
+		flex: none;
+		padding-inline: 10px;
 	}
 
 	.select-with-button {
@@ -775,7 +666,7 @@
 		background: var(--color-btn-fill-raised-hover);
 	}
 
-	.select-with-button select,
+	.select-with-button :global(select),
 	.select-with-button input {
 		flex: 1;
 		min-width: 0;

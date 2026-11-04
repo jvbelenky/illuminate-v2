@@ -4,7 +4,6 @@ import type PlanCanvas from '$lib/components/PlanCanvas.svelte';
 import type { CanvasTool, PlanShape } from '$lib/components/PlanCanvas.svelte';
 import type { CalcZone, FloorPlanPlacement, LampInstance } from '$lib/types/project';
 import type { FloorPlanImage } from '$lib/stores/floorplanImage';
-import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { PlanContext } from '$lib/workspace/editorNav';
 import type { PlanActions, PlanScene } from './planActions';
 import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry, type ObstacleDraft } from '$lib/utils/obstacleDrafts';
@@ -481,9 +480,8 @@ export class PlanController {
   markerDrag = $state<{ id: string; part: 'body' | 'aim' | 'aimAt'; start: Vertex; dx: number; dy: number; target: Vertex | null; group: string[] } | null>(null);
   marquee = $state<{ a: Vertex; b: Vertex; add: boolean } | null>(null);
 
-  // --- Add lamp: choose a fixture, then each placement button adds one, placed automatically
-  addFixture = $state('');
-  addingLamp = $state<PlacementMode | null>(null);
+  // --- Add lamp: a new lamp, selected, whose editor then asks for its fixture
+  addingLamp = $state(false);
 
   readonly markers = $derived.by<Marker[]>(() => {
     const seg = this.wallSeg;
@@ -1221,15 +1219,19 @@ export class PlanController {
 
   // --- Lamps
 
-  addPlaced = async (mode: PlacementMode) => {
-    if (!this.addFixture || this.addingLamp) return;
-    this.addingLamp = mode;
+  /** Add a new lamp and select it; its id, or null when it could not be added. */
+  addNewLamp = async (): Promise<string | null> => {
+    if (this.addingLamp) return null;
+    this.addingLamp = true;
     try {
-      this.selectLamp(await this.actions.addPlacedLamp(this.addFixture, mode));
+      const id = await this.actions.addNewLamp();
+      this.selectLamp(id);
+      return id;
     } catch (e) {
       console.error('Failed to add lamp:', e);
+      return null;
     } finally {
-      this.addingLamp = null;
+      this.addingLamp = false;
     }
   };
   toggleLamp = (id: string) => {

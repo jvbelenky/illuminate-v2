@@ -18,25 +18,40 @@ export function lampEditor(page: Page) {
   return page.locator('.lamps-part .editor-row.open .lamp-editor');
 }
 
+/** The open lamp editor's "Choose a fixture…" dropdown. */
+export function fixtureSelect(page: Page) {
+  return lampEditor(page).getByLabel('Fixture', { exact: true });
+}
+
 /**
- * Add a lamp: choose a fixture (the nth preset, default the first) and press a
- * placement. The new lamp is selected, with its editor open.
+ * Press "+ Add lamp": a new lamp with no fixture, selected, its editor open
+ * and asking for a fixture.
  */
-export async function addLampFromPreset(page: Page, presetIndex: number = 0): Promise<void> {
+export async function addLamp(page: Page): Promise<void> {
   await expandLampsPanel(page);
   const before = await lampCount(page);
+  await page.locator('.lamps-part').getByRole('button', { name: '+ Add lamp' }).click();
+  await expect.poll(() => lampCount(page)).toBe(before + 1);
+  await expect(lampEditor(page)).toBeVisible({ timeout: 15_000 });
+  await expect(fixtureSelect(page)).toBeVisible();
+  await waitForApiIdle(page);
+}
 
-  const fixture = page.locator('.lamps-part').getByLabel('Fixture', { exact: true });
+/**
+ * Add a lamp, choose a fixture in its editor (the nth preset, default the
+ * first) and place it with Downlight. The new lamp is selected, with its editor open.
+ */
+export async function addLampFromPreset(page: Page, presetIndex: number = 0): Promise<void> {
+  await addLamp(page);
+  const fixture = fixtureSelect(page);
   const presets = fixture.locator('option[value^="preset:"]');
   // Options load from the API
   await expect(presets).not.toHaveCount(0, { timeout: 15_000 });
   const value = await presets.nth(presetIndex).getAttribute('value');
   await fixture.selectOption(value!);
-
-  await page.getByRole('group', { name: 'Placement' }).getByRole('button', { name: 'Downlight' }).click();
-  await expect.poll(() => lampCount(page)).toBe(before + 1);
-  await expect(lampEditor(page)).toBeVisible({ timeout: 15_000 });
-  await expect(lampEditor(page).locator('select#preset')).toBeVisible();
+  const downlight = lampEditor(page).locator('button.placement[data-mode="downlight"]');
+  await expect(downlight).toBeEnabled({ timeout: 15_000 });
+  await downlight.click();
   await waitForApiIdle(page);
 }
 
@@ -51,21 +66,6 @@ export async function lampCount(page: Page): Promise<number> {
   return (await getLampsFromStore(page)).length;
 }
 
-/**
- * Add a lamp and switch it to a lamp type. The lamp starts from a preset, and a
- * type change drops it to a custom (modelless) lamp of that type.
- */
-export async function addLampWithType(
-  page: Page,
-  lampType: 'krcl_222' | 'lp_254' | 'other'
-): Promise<void> {
-  await addLampFromPreset(page);
-  const typeSelect = lampEditor(page).locator('select#lamp-type');
-  await expect(typeSelect).toBeVisible({ timeout: 15_000 });
-  await typeSelect.selectOption(lampType);
-  await waitForApiIdle(page);
-}
-
 export interface CustomLampOptions {
   /** Path to the IES fixture. Required — a definition needs photometry. */
   ies: string;
@@ -73,7 +73,7 @@ export interface CustomLampOptions {
   spectrum?: string;
   /** Only settable on an 'other'-type definition, and only without a spectrum. */
   wavelength?: number;
-  /** Overrides the type inherited from the launching lamp. */
+  /** The definition's lamp type (the form starts on the launching lamp's). */
   lampType?: 'krcl_222' | 'lp_254' | 'other';
   /** Overrides the name auto-populated from the IES filename. */
   name?: string;
@@ -96,7 +96,7 @@ export interface CustomLampOptions {
  * Replaces the old inline uploadLampIes/uploadLampSpectrum/setLampWavelength
  * helpers. Commit e8ad6eb ("replace file pool with custom lamp library") moved
  * every photometry input out of the inline editor and into the lamp manager
- * modal, reached through the preset dropdown's "Add custom lamp..." option. The
+ * modal, reached through the fixture dropdown's "Add custom lamp…" option. The
  * modal opens straight into its form, pre-typed from the launching lamp, and
  * saving auto-applies the new definition to that lamp and closes the manager.
  *
@@ -110,7 +110,7 @@ export async function openFixtureAdvanced(scope: Locator): Promise<void> {
 }
 
 export async function createCustomLamp(page: Page, opts: CustomLampOptions): Promise<void> {
-  await page.locator('select#preset').selectOption('__add_custom__');
+  await fixtureSelect(page).selectOption('__add_custom__');
 
   const form = page.locator('.lamp-form');
   await expect(form).toBeVisible({ timeout: 15_000 });

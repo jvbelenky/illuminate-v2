@@ -267,37 +267,21 @@ describe('Ceiling part', () => {
 });
 
 describe('Lamps part', () => {
-  it('Add lamp: a fixture reveals the placements; each placement adds a lamp and opens it', async () => {
+  it('+ Add lamp adds a lamp with no fixture, opens its row and focuses its fixture dropdown', async () => {
     const calls: unknown[][] = [];
     const { container } = mount({ part: 'lamps', calls, fixtures });
-    expect(screen.queryByRole('group', { name: 'Placement' })).toBeNull();
     expect(screen.getByText('None')).toBeTruthy();
-    await fireEvent.change(screen.getByLabelText('Fixture'), { target: { value: 'preset:ushio_b1' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Corner' }));
+    // One button: no fixture dropdown and no placements in the Add card
+    expect(screen.queryByLabelText('Fixture')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Placement' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: '+ Add lamp' }));
     await tick();
-    expect(callsOf(calls, 'addPlacedLamp')[0]).toEqual(['addPlacedLamp', 'preset:ushio_b1', 'corner']);
+    await tick();
+    expect(callsOf(calls, 'addNewLamp')).toEqual([['addNewLamp']]);
     expect(container.querySelector('.stub-lamp-panel')?.textContent).toMatch(/Lamp 1/);
-    expect(document.querySelector('.editor-row.open')).not.toBeNull();
-  });
-
-  it('the Add lamp card says Upper-room', async () => {
-    mount({ part: 'lamps', fixtures });
-    await fireEvent.change(screen.getByLabelText('Fixture'), { target: { value: 'preset:beacon' } });
-    const group = screen.getByRole('group', { name: 'Placement' });
-    const buttons = Array.from(group.querySelectorAll('button'));
-    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['Downlight', 'Corner', 'Edge', 'Upper-room']);
-    for (const b of buttons) expect(b.querySelector('svg')).not.toBeNull();
-    expect(group.textContent).not.toMatch(/Horizontal/);
-  });
-
-  it('choosing Add custom lamp… opens the manager and keeps the previous fixture', async () => {
-    let opened = 0;
-    mount({ part: 'lamps', fixtures, onAddCustomLamp: () => opened++ });
-    const select = screen.getByLabelText('Fixture') as HTMLSelectElement;
-    await fireEvent.change(select, { target: { value: 'preset:beacon' } });
-    await fireEvent.change(select, { target: { value: '__add_custom__' } });
-    expect(opened).toBe(1);
-    expect(select.value).toBe('preset:beacon');
+    const open = document.querySelector('.editor-row.open') as HTMLElement;
+    expect(open.dataset.id).toBe('lamp-1');
+    expect(document.activeElement).toBe(open.querySelector('select[aria-label="Fixture"]'));
   });
 
   it('rows show a wavelength dot (grey when excluded) and the fixture name', async () => {
@@ -536,8 +520,7 @@ describe('new items scroll into view', () => {
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
     mount({ part: 'lamps', fixtures });
-    await fireEvent.change(screen.getByLabelText('Fixture'), { target: { value: 'preset:ushio_b1' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Corner' }));
+    await fireEvent.click(screen.getByRole('button', { name: '+ Add lamp' }));
     await tick();
     await tick();
     expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });

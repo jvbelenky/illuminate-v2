@@ -2,7 +2,18 @@ import { test, expect } from '@playwright/test';
 import { waitForApiIdle } from '../helpers/network';
 import { waitForSession } from '../helpers/session';
 import { attachErrorGuard } from '../helpers/errors';
-import { lampCount, lampEditor } from '../helpers/lamps';
+import { addLamp, addLampFromPreset, fixtureSelect, lampCount, lampEditor } from '../helpers/lamps';
+import type { Page } from '@playwright/test';
+
+/** + Add lamp, choose this fixture in the new lamp's editor, then place it. */
+async function addPlaced(page: Page, label: string, mode: 'Downlight' | 'Corner' | 'Edge' | 'Upper-room'): Promise<void> {
+  await addLamp(page);
+  await fixtureSelect(page).selectOption({ label });
+  const button = lampEditor(page).getByRole('group', { name: 'Placement' }).getByRole('button', { name: mode });
+  await expect(button).toBeEnabled({ timeout: 15_000 });
+  await button.click();
+  await waitForApiIdle(page);
+}
 import { getLampsFromStore } from '../helpers/api';
 import { finishEditing, openStep, planSvg, planTool } from '../helpers/workspace';
 
@@ -16,23 +27,20 @@ test.describe('Lamps on the plan', () => {
     await expect(planTool(page, 'Move')).toBeDisabled();
     await expect(planTool(page, 'Delete')).toBeDisabled();
 
-    // Choose a fixture: the placements appear; each adds a lamp placed automatically
+    // + Add lamp: one button, no fixture dropdown or placements of its own
     const part = page.locator('.lamps-part');
-    const fixture = part.getByLabel('Fixture', { exact: true });
-    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
-    await fixture.selectOption((await fixture.locator('option[value^="preset:"]').first().getAttribute('value'))!);
-    const placements = page.getByRole('group', { name: 'Placement' });
+    await expect(part.getByLabel('Fixture', { exact: true })).toHaveCount(0);
+    await expect(part.getByRole('group', { name: 'Placement' })).toHaveCount(0);
     const lampRows = part.locator('.editor-row');
-    await placements.getByRole('button', { name: 'Downlight' }).click();
+    await addPlaced(page, 'Beacon', 'Downlight');
     await expect(lampRows).toHaveCount(1);
-    await placements.getByRole('button', { name: 'Corner' }).click();
+    await addPlaced(page, 'Beacon', 'Corner');
     await expect(lampRows).toHaveCount(2);
-    await waitForApiIdle(page);
     // Both came with the fixture; Move is offered, not armed
     await expect(lampRows.nth(1).locator('.subtitle')).not.toHaveText('');
     await expect(planTool(page, 'Move')).toHaveAttribute('aria-pressed', 'false');
     // The last one added is selected, with its full editor in its row
-    await expect(lampEditor(page).locator('select#preset')).toBeVisible();
+    await expect(fixtureSelect(page)).toBeVisible();
 
     // A Shift + drag box over the whole plan selects both; Delete removes them in one step
     // (a plain drag on empty space follows the view's Hand / Zoom mode)
@@ -61,15 +69,8 @@ test.describe('Lamps on the plan', () => {
     await waitForSession(page);
     await openStep(page, 'lamps');
     const part = page.locator('.lamps-part');
-    const fixture = part.getByLabel('Fixture', { exact: true });
-    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
-    const placements = page.getByRole('group', { name: 'Placement' });
-    await fixture.selectOption({ label: 'Aerolamp DevKit' });
-    await placements.getByRole('button', { name: 'Downlight' }).click();
-    await waitForApiIdle(page);
-    await fixture.selectOption({ label: 'Beacon' });
-    await placements.getByRole('button', { name: 'Corner' }).click();
-    await waitForApiIdle(page);
+    await addPlaced(page, 'Aerolamp DevKit', 'Downlight');
+    await addPlaced(page, 'Beacon', 'Corner');
 
     // Open Lamp 1 (Lamp 2, added last, was open)
     await part.locator('.editor-row .row-main').first().click();
@@ -114,10 +115,7 @@ test.describe('Lamps on the plan', () => {
     await waitForSession(page);
     await openStep(page, 'lamps');
     const part = page.locator('.lamps-part');
-    const fixture = part.getByLabel('Fixture', { exact: true });
-    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
-    await fixture.selectOption((await fixture.locator('option[value^="preset:"]').first().getAttribute('value'))!);
-    await page.getByRole('group', { name: 'Placement' }).getByRole('button', { name: 'Downlight' }).click();
+    await addLampFromPreset(page);
     const lampRows = part.locator('.editor-row');
     await expect(lampRows).toHaveCount(1);
     await waitForApiIdle(page);
@@ -142,10 +140,7 @@ test.describe('Lamps on the plan', () => {
     await waitForSession(page);
     await openStep(page, 'lamps');
     const part = page.locator('.lamps-part');
-    const fixture = part.getByLabel('Fixture', { exact: true });
-    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
-    await fixture.selectOption((await fixture.locator('option[value^="preset:"]').first().getAttribute('value'))!);
-    await page.getByRole('group', { name: 'Placement' }).getByRole('button', { name: 'Downlight' }).click();
+    await addLampFromPreset(page);
     const lampRows = part.locator('.editor-row');
     await expect(lampRows).toHaveCount(1);
     await waitForApiIdle(page);
@@ -167,10 +162,7 @@ test.describe('Lamps on the plan', () => {
     await waitForSession(page);
     await openStep(page, 'lamps');
     const part = page.locator('.lamps-part');
-    const fixture = part.getByLabel('Fixture', { exact: true });
-    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
-    await fixture.selectOption((await fixture.locator('option[value^="preset:"]').first().getAttribute('value'))!);
-    await page.getByRole('group', { name: 'Placement' }).getByRole('button', { name: 'Downlight' }).click();
+    await addLampFromPreset(page);
     await expect(part.locator('.editor-row')).toHaveCount(1);
     await waitForApiIdle(page);
     const [before] = await getLampsFromStore(page);
@@ -203,5 +195,42 @@ test.describe('Lamps on the plan', () => {
     await page.keyboard.press('Enter');
     await expect(plan.locator('text.plan-lamp-label').first()).toHaveText('Over desk');
     await expect(part.locator('.editor-row .name').first()).toHaveText('Over desk');
+  });
+
+  test('+ Add lamp opens the new lamp prompting for a fixture; choosing one sets it; undo takes the fixture, then the lamp', async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    await waitForSession(page);
+    await openStep(page, 'lamps');
+    const part = page.locator('.lamps-part');
+    await part.getByRole('button', { name: '+ Add lamp' }).click();
+    await expect.poll(() => lampCount(page)).toBe(1);
+    await waitForApiIdle(page);
+
+    // Its row is open, the lamp is selected on the plan, the dropdown is focused on the prompt
+    const open = part.locator('.editor-row.open');
+    await expect(open.locator('.name')).toHaveText('Lamp 1');
+    await expect(planSvg(page).locator('circle.plan-lamp[aria-label="Lamp Lamp 1"]')).toHaveClass(/\bselected\b/);
+    const fixture = fixtureSelect(page);
+    await expect(fixture).toBeFocused();
+    await expect(fixture.locator('option:checked')).toHaveText('Choose a fixture…');
+    // No Lamp Type / Select Lamp pair; the placements wait for a fixture
+    await expect(lampEditor(page).locator('select#lamp-type, select#preset')).toHaveCount(0);
+    await expect(lampEditor(page).locator('button.placement').first()).toBeDisabled();
+
+    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
+    await fixture.selectOption({ label: 'Beacon' });
+    await waitForApiIdle(page);
+    await expect.poll(async () => (await getLampsFromStore(page))[0].preset_id).toBe('beacon');
+    await expect(open.locator('.subtitle')).toHaveText('Beacon');
+    await expect(lampEditor(page).locator('button.placement').first()).toBeEnabled({ timeout: 15_000 });
+
+    // Undo: first the fixture, then the lamp
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+z');
+    await expect.poll(async () => (await getLampsFromStore(page))[0]?.preset_id ?? null).not.toBe('beacon');
+    await expect.poll(() => lampCount(page)).toBe(1);
+    await page.keyboard.press('Control+z');
+    await expect.poll(() => lampCount(page)).toBe(0);
+    guard.assertClean();
   });
 });

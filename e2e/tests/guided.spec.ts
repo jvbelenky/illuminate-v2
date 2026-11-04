@@ -3,7 +3,7 @@ import { waitForApiIdle } from '../helpers/network';
 import { waitForSession } from '../helpers/session';
 import { attachErrorGuard } from '../helpers/errors';
 import { setRoomDimensions } from '../helpers/room';
-import { addLampWithType, lampEditor } from '../helpers/lamps';
+import { addLamp, fixtureSelect, lampEditor } from '../helpers/lamps';
 import { drawObject, expandObjectsPanel, objectEditor, setObjectField, getObjectsFromBackend } from '../helpers/objects';
 import { clickPlan, finishEditing, openStep, planTool } from '../helpers/workspace';
 
@@ -95,21 +95,23 @@ test.describe('Guided workspace', () => {
     const card = page.locator('.app-status-bar[data-next-step]');
     await expect(card).toHaveAttribute('data-next-step', 'no-lamps');
 
-    // A lamp of another type has no model yet: the hint asks for one and the editor hides placement
-    await addLampWithType(page, 'lp_254');
+    // A new lamp has no fixture yet: the hint asks for one, the editor prompts, and the placements wait
+    await addLamp(page);
     await expect(card).toHaveAttribute('data-next-step', 'lamp-needs-model', { timeout: 15_000 });
-    const preset = lampEditor(page).locator('select#preset');
-    await expect(preset).toBeVisible();
-    await expect(lampEditor(page).locator('button.placement')).toHaveCount(0);
+    const fixture = fixtureSelect(page);
+    await expect(fixture).toBeFocused();
+    await expect(fixture.locator('option:checked')).toHaveText('Choose a fixture…');
+    const placements = lampEditor(page).locator('button.placement');
+    await expect(placements).toHaveCount(4);
+    for (const b of await placements.all()) await expect(b).toBeDisabled();
 
-    // Only 222 nm lamps have presets: back to that type, then pick one
-    await lampEditor(page).locator('select#lamp-type').selectOption('krcl_222');
-    await expect(preset.locator('option:not([disabled])')).not.toHaveCount(0, { timeout: 15_000 });
-    const value = await preset.locator('option:not([disabled])').first().getAttribute('value');
-    await preset.selectOption(value!);
+    // Choose a fixture: the lamp is ready and the placements are usable
+    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
+    const value = await fixture.locator('option[value^="preset:"]').first().getAttribute('value');
+    await fixture.selectOption(value!);
 
     await expect(card).toHaveAttribute('data-next-step', 'never-calculated', { timeout: 15_000 });
-    await expect(lampEditor(page).locator('button.placement')).toHaveCount(4);
+    await expect(placements.first()).toBeEnabled({ timeout: 15_000 });
     await page.locator('button.calculate-btn').click();
     await expect(page.locator('button.calculate-btn')).toHaveClass(/up-to-date/, { timeout: 60_000 });
     await expect(card).not.toHaveAttribute('data-next-step', 'never-calculated');
