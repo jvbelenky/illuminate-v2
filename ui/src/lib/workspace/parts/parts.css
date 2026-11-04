@@ -131,20 +131,36 @@
 .ep-addbtns {
 	container-type: inline-size;
 }
-/* Lamp placement buttons: compact, 13 px label (Upper-room breaks at its hyphen), raised fill so they read as buttons on the editor body */
+/* Lamp placement buttons: compact, 13 px label (Upper-room breaks at its hyphen), raised fill
+   with an edge so they read as buttons on the editor body; the pictogram in the text colour;
+   cyan while pressed or placing */
 .ep-grid.ep-addbtns.add-placements > button.secondary,
 .ep-grid.ep-addbtns.placements > button.secondary {
 	gap: 4px;
 	min-height: 52px;
 	padding: 6px 0;
 	font-size: 13px;
+	font-weight: 500;
+	color: var(--color-text);
 	background: var(--color-btn-fill-raised);
-	border-color: transparent;
+	border: 1px solid color-mix(in srgb, var(--color-text) 28%, transparent);
 }
 .ep-grid.ep-addbtns.add-placements > button.secondary:hover:not(:disabled),
 .ep-grid.ep-addbtns.placements > button.secondary:hover:not(:disabled) {
 	background: var(--color-btn-fill-raised-hover);
-	border-color: transparent;
+	border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.ep-addbtns.add-placements > button.secondary svg,
+.ep-addbtns.placements > button.secondary svg {
+	color: var(--color-text);
+}
+.ep-grid.ep-addbtns.add-placements > button.secondary:active:not(:disabled),
+.ep-grid.ep-addbtns.placements > button.secondary:active:not(:disabled),
+.ep-grid.ep-addbtns.add-placements > button.secondary[aria-busy='true'],
+.ep-grid.ep-addbtns.placements > button.secondary[aria-busy='true'] {
+	opacity: 1;
+	background: color-mix(in srgb, var(--color-scene-selected) 30%, var(--color-btn-fill-raised));
+	border-color: var(--color-scene-selected);
 }
 .ep-grid.ep-addbtns.add-placements,
 .ep-grid.ep-addbtns.placements {

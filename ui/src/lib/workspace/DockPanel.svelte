@@ -75,7 +75,7 @@
 		align-items: center;
 		gap: 6px;
 		flex: none;
-		height: 26px;
+		height: 30px;
 		padding: 0 6px;
 		background: var(--color-bg-tertiary);
 		border-bottom: 1px solid var(--color-border);

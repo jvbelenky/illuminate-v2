@@ -105,7 +105,7 @@
 		<span class="actions">
 		{#if renamable}
 			<button type="button" class="action" onclick={startRename} aria-label="Rename {label}" title="Rename">
-				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 					<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
 					<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
 				</svg>
@@ -113,12 +113,12 @@
 		{/if}
 		{#if onCopy}
 			<button type="button" class="action" disabled={copyDisabled} onclick={(e) => { e.stopPropagation(); if (!copyDisabled) onCopy(); }} aria-label="Copy (Ctrl+D)" title="Copy (Ctrl+D)">
-				<Glyph name="copy" size={12} />
+				<Glyph name="copy" size={16} />
 			</button>
 		{/if}
 		{#if onDelete}
 			<button type="button" class="action" disabled={deleteDisabled} onclick={(e) => { e.stopPropagation(); if (!deleteDisabled) onDelete(); }} aria-label="Delete (Del)" title="Delete (Del)">
-				<Glyph name="trash" size={12} />
+				<Glyph name="trash" size={16} />
 			</button>
 		{/if}
 		</span>
@@ -177,23 +177,36 @@
 </div>
 
 <style>
+	/* A row is a filled button off the panel behind it; hover is a step lighter. The
+	   selected or open row is tinted with the selection cyan (no outline round the card) */
 	.editor-row {
 		display: flex;
 		flex-direction: column;
-		background: var(--color-bg-tertiary);
+		background: var(--color-btn-fill);
 		border: 1px solid transparent;
 		border-radius: var(--radius-sm);
+		transition: background 0.12s;
+	}
+	.editor-row:not(.open):not(.selected):hover {
+		background: var(--color-btn-fill-hover);
 	}
 	.editor-row.open,
 	.editor-row.selected {
-		border-color: var(--color-scene-selected);
-		background: color-mix(in srgb, var(--color-scene-selected) 10%, var(--color-bg-tertiary));
+		background: color-mix(in srgb, var(--color-scene-selected) 14%, var(--color-bg-tertiary));
+	}
+	.editor-row.open > .row-head,
+	.editor-row.selected > .row-head {
+		background: color-mix(in srgb, var(--color-scene-selected) 30%, var(--color-bg-tertiary));
+		border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+	}
+	.editor-row.selected:not(.open) > .row-head {
+		border-radius: var(--radius-sm);
 	}
 	.row-head {
 		display: flex;
 		align-items: center;
 		gap: 4px;
-		padding: 4px 6px;
+		padding: 3px 4px 3px 8px;
 	}
 	.row-main {
 		flex: 1;
@@ -253,7 +266,7 @@
 	.divider {
 		flex: none;
 		width: 1px;
-		height: 16px;
+		height: 18px;
 		margin: 0 3px;
 		background: var(--color-border);
 	}
@@ -263,8 +276,8 @@
 		align-items: center;
 		justify-content: center;
 		flex: none;
-		width: 22px;
-		height: 22px;
+		width: 28px;
+		height: 28px;
 		padding: 0;
 		background: var(--color-bg-tertiary);
 		border: 1px solid var(--color-border);
@@ -272,13 +285,24 @@
 		color: var(--color-text-muted);
 		cursor: pointer;
 	}
+	.icon-toggle svg {
+		width: 14px;
+		height: 14px;
+	}
+	/* Rename, copy and delete: bare 16 px glyphs in the text colour, a fill on hover */
 	.action {
 		background: none;
 		border-color: transparent;
+		color: var(--color-text);
+		opacity: 0.85;
+	}
+	.action :global(svg) {
+		stroke-width: 2.2;
 	}
 	.action:hover {
+		opacity: 1;
 		color: var(--color-text);
-		background: var(--color-btn-fill-hover);
+		background: color-mix(in srgb, var(--color-text) 16%, transparent);
 	}
 	.icon-toggle:hover {
 		color: var(--color-text);

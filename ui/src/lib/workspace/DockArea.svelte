@@ -8,6 +8,7 @@
 		fillPanel,
 		floatInArea,
 		floatPanel,
+		BAR_HEIGHT,
 		FLOAT_DEFAULTS,
 		minPanelHeight,
 		moveFloat,
@@ -379,7 +380,7 @@
 		// The grab point within the panel, kept inside a window of the floating size
 		const w = layout.floats?.[id]?.w ?? FLOAT_DEFAULTS[id].w;
 		const ox = pr ? Math.max(0, Math.min(w - 24, e.clientX - pr.left)) : 0;
-		const oy = pr ? Math.max(0, Math.min(26, e.clientY - pr.top)) : 0;
+		const oy = pr ? Math.max(0, Math.min(BAR_HEIGHT, e.clientY - pr.top)) : 0;
 		drag = { id, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, started: false, floating, ox, oy };
 		window.addEventListener('pointermove', onMove);
 		window.addEventListener('pointerup', onUp);
@@ -682,7 +683,7 @@
 	.dock-ghost {
 		position: fixed;
 		width: 240px;
-		height: 26px;
+		height: 30px;
 		padding: 4px 8px;
 		box-sizing: border-box;
 		pointer-events: none;
