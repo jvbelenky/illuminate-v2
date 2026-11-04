@@ -757,8 +757,10 @@
 		pointer-events: stroke;
 		cursor: grab;
 	}
+	/* The selected lamp (or point) wears the selection cyan, as its row in the editor
+	   (--color-accent is the slate scene wire inside the plan) */
 	.plan-lamp.selected {
-		stroke: var(--color-accent);
+		stroke: var(--color-scene-selected);
 	}
 	.plan-lamp.off {
 		stroke-opacity: 0.45;
@@ -774,7 +776,7 @@
 		cursor: crosshair;
 	}
 	.plan-aim.selected {
-		fill: var(--color-accent);
+		fill: var(--color-scene-selected);
 	}
 	.aim-line {
 		stroke: var(--color-warning, #f5a524);
@@ -782,7 +784,7 @@
 		pointer-events: none;
 	}
 	.aim-line.selected {
-		stroke: var(--color-accent);
+		stroke: var(--color-scene-selected);
 		opacity: 1;
 	}
 	.plan-lamp.point,
@@ -794,7 +796,7 @@
 	}
 	.plan-lamp.point.selected,
 	.aim-line.point.selected {
-		stroke: var(--color-accent);
+		stroke: var(--color-scene-selected);
 	}
 	.ro-zone {
 		fill: color-mix(in srgb, var(--color-scene-selected) 14%, transparent);
