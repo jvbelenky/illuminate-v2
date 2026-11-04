@@ -471,14 +471,15 @@ describe('Zones part', () => {
     expect(z.ctl.surface).toBe('wall:1');
   });
 
-  it('Plane on the ceiling faces down at the ceiling', async () => {
+  it('there is no ceiling view: Plane from the plan view goes on the floor at eye height', async () => {
     const calls: unknown[][] = [];
     const z = mount({ part: 'zones', calls });
     z.ctl.setSurface('ceiling');
+    expect(z.ctl.surface).toBe('floor');
     await fireEvent.click(screen.getByRole('button', { name: 'Plane' }));
     const [, type, geometry] = callsOf(calls, 'addZone')[0] as [string, string, Record<string, unknown>];
     expect(type).toBe('plane');
-    expect(geometry).toEqual({ surface: 'ceiling', fit_room: true, height: 2.7, direction: -1 });
+    expect(geometry).toEqual({ surface: 'floor', fit_room: true, height: 1.8 });
   });
 
   it('Volume and Point stay on the floor whatever surface shows', async () => {

@@ -68,42 +68,11 @@ describe('DockArea', () => {
 		expect(colEl(container, 'left').style.width).toBe('422px');
 	});
 
-	/** The bare Calculate control, checked to sit directly above the Results panel, outside any panel. */
-	function calcAboveResults(c: HTMLElement): HTMLElement {
-		expect(c.querySelectorAll('button.calculate-btn').length).toBe(1);
-		const btn = c.querySelector('button.calculate-btn') as HTMLElement;
-		const group = btn.closest('.dock-calc') as HTMLElement;
-		expect(group).not.toBeNull();
-		expect(btn.closest('[data-panel]')).toBeNull();
-		expect(group.nextElementSibling).toBe(panelEl(c, 'results'));
-		expect(c.querySelector('[data-panel=calculate]')).toBeNull();
-		return group;
-	}
-
-	test('Calculate sits above Results docked on the right, and above its minimized bar', () => {
-		const open = render(Host, base({ withCalculate: true }));
-		expect(calcAboveResults(open.container).closest('.dock-column')).toBe(colEl(open.container, 'right'));
-		open.unmount();
-		const min = render(Host, base({ withCalculate: true, layout: { ...DEFAULT_DOCK, left: ['editor'], right: ['mini', 'results'], minimized: ['results'] } }));
-		calcAboveResults(min.container);
-		expect(panelEl(min.container, 'results').querySelector('.dock-content')).toBeNull();
-	});
-
-	test('Calculate sits above Results docked on the left, below the gap after the panel above', () => {
-		const layout = { ...DEFAULT_DOCK, left: ['mini', 'results'], right: ['editor'], minimized: [] };
-		const { container } = render(Host, base({ withCalculate: true, layout }));
-		const group = calcAboveResults(container);
-		expect(group.closest('.dock-column')).toBe(colEl(container, 'left'));
-		expect(group.previousElementSibling!.classList.contains('dock-split')).toBe(true);
-		expect(group.previousElementSibling!.previousElementSibling).toBe(panelEl(container, 'mini'));
-	});
-
-	test('Calculate sits above Results while it floats, inside its window', () => {
-		const layout = { ...DEFAULT_DOCK, left: ['editor', 'mini'], right: [], minimized: [], floats: { results: { x: 100, y: 50, w: 420, h: 500 } } };
-		const { container } = render(Host, base({ withCalculate: true, layout }));
-		const group = calcAboveResults(container);
-		expect(group.parentElement!.classList.contains('dock-float')).toBe(true);
-		expect(group.parentElement!.dataset.float).toBe('results');
+	test('the Results column holds only Results: no Calculate in the dock', () => {
+		const { container } = render(Host, base());
+		expect(container.querySelector('button.calculate-btn')).toBeNull();
+		expect(container.querySelector('.dock-calc')).toBeNull();
+		expect(container.querySelector('[data-panel=calculate]')).toBeNull();
 	});
 
 	test('Done sits in the Editor title bar before the minimize control, docked or floating, and calls onDone', async () => {

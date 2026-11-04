@@ -82,7 +82,7 @@ test.describe('Mobile layout', () => {
     await expect(planSvg(page)).toBeVisible();
     await expect(view(page).locator('.view-slot[data-view="3d"] canvas')).toBeHidden();
     await expect(view(page).getByRole('button', { name: 'Fit' })).toBeVisible();
-    await expect(view(page).getByRole('combobox', { name: 'Surface' })).toBeAttached();
+    await expect(view(page).getByRole('combobox', { name: '2D view' })).toBeAttached();
     // No Pan / Zoom / − + and no units on the view
     await expect(view(page).locator('.view-controls')).toHaveCount(0);
     await expect(view(page).getByRole('button', { name: 'Pan' })).toHaveCount(0);
@@ -90,7 +90,7 @@ test.describe('Mobile layout', () => {
     await toggle.getByRole('button', { name: '3D', exact: true }).click();
     await expect(view(page).locator('.view-slot[data-view="3d"] canvas')).toBeVisible();
     await expect(planSvg(page)).toBeHidden();
-    await expect(view(page).getByRole('combobox', { name: 'Surface' })).toHaveCount(0);
+    await expect(view(page).getByRole('combobox', { name: '2D view' })).toHaveCount(0);
     await expect(view(page).getByRole('button', { name: 'Fit' })).toBeVisible();
 
     // The editor sits below the view

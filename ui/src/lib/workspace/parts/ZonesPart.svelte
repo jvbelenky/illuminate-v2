@@ -70,10 +70,10 @@
 		const eye = eyeHeight();
 		let geometry: Partial<CalcZone>;
 		if (type === 'plane') {
-			// On the surface the 2D view shows: a whole wall, the ceiling facing down, or the floor at eye height
+			// On the view the 2D view shows: a whole wall, or (the plan view) the floor at eye height;
+			// its Reference surface moves it to the ceiling
 			const surface = ctl.surface;
 			if (wallIndex(surface) !== null) geometry = { surface, fit_room: true, normal_offset: 0, flip: false };
-			else if (surface === 'ceiling') geometry = { surface, fit_room: true, height: roomZ, direction: -1 };
 			else geometry = { surface: 'floor', fit_room: true, height: eye };
 		} else if (type === 'volume') {
 			geometry = { fit_room: true, z_min: 0, z_max: roomZ };

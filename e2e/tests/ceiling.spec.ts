@@ -166,7 +166,7 @@ test.describe('Ceiling designer', () => {
     await expect(part.locator('.editor-row')).toHaveCount(2);
   });
 
-  test('minimised to the dock, the main 2D view still works; a ceiling item clicked there brings the window back on it', async ({ page }) => {
+  test('minimised to the dock, the main 2D view still works; the tiles and items stay in the window', async ({ page }) => {
     await waitForSession(page);
     const designer = await openCeilingDesigner(page);
     await designer.locator('.ceiling-part').getByRole('button', { name: 'Vent', exact: true }).click();
@@ -176,16 +176,17 @@ test.describe('Ceiling designer', () => {
     const tab = page.locator('.dock-tab').filter({ hasText: 'Ceiling designer' });
     await expect(tab).toBeVisible();
 
-    // The main view edits its own step meanwhile, and shows the ceiling on its Ceiling surface
+    // The main view edits its own step meanwhile; its plan view has no Ceiling view, tiles or items
     await openStep(page, 'room', 'structures');
-    await page.locator('.main-view-controls').getByRole('button', { name: 'Ceiling', exact: true }).click();
-    await expect(planSvg(page).locator('line.tile-line')).not.toHaveCount(0);
+    const pick = page.locator('.main-view-controls').getByRole('combobox', { name: '2D view' });
+    await expect(pick.locator('option')).toHaveText(['Plan view', 'Wall 1', 'Wall 2', 'Wall 3', 'Wall 4']);
+    await expect(planSvg(page).locator('line.tile-line')).toHaveCount(0);
+    await expect(planSvg(page).getByRole('button', { name: 'Sensor 1' })).toHaveCount(0);
     await expect(page.locator('.main-view-controls .plan-toolbar').getByRole('button', { name: 'Move grid' })).toHaveCount(0);
-    // The sensor, added last, lies over the vent (both start in the middle of the room)
-    await planSvg(page).getByRole('button', { name: 'Sensor 1' }).click();
+    // The dock tab brings the window back, its items kept
+    await tab.click();
     await expect(designer).toBeVisible();
-    await expect(tab).toHaveCount(0);
-    await expect(designer.locator('.ceiling-part .editor-row.open')).toHaveAttribute('data-id', 'ceiling-2');
+    await expect(designer.locator('.ceiling-part .editor-row')).toHaveCount(2);
   });
 
   test('a ceiling item clicked in the 3D view opens the window on it', async ({ page }) => {
@@ -209,25 +210,67 @@ test.describe('Ceiling designer', () => {
 
 test.describe('Main view corners', () => {
   for (const width of [1280, 1024]) {
-    test(`the edit strip and the view tools never overlap at ${width} px`, async ({ page }, testInfo) => {
+    test(`the edit strip and Undo | Redo never overlap Calculate at ${width} px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 800 });
       await waitForSession(page);
       const strip = page.locator('.main-view-controls .plan-toolbar');
-      const tools = page.locator('.view-slot[data-view="2d"]:not(.mini) .view-controls');
+      const left = page.locator('.main-view-controls .corner.tl');
+      const calc = page.locator('.main-view-controls .corner.tr');
       for (const [stage, part] of [['room', 'floorplan'], ['room', 'structures'], ['lamps', undefined]] as const) {
         await openStep(page, stage, part);
         await expect(strip).toBeVisible();
-        await expect(tools).toBeVisible();
-        // Measured once the strip has settled (beside the tools, or on its own row above them)
+        await expect(calc.locator('button.calculate-btn')).toBeVisible();
+        // Measured once the strip has settled (labelled, or glyphs only)
         await expect.poll(async () => {
-          const a = (await strip.boundingBox())!;
-          const b = (await tools.boundingBox())!;
+          const a = (await left.boundingBox())!;
+          const b = (await calc.boundingBox())!;
           return a.x + a.width <= b.x || a.y + a.height <= b.y;
-        }, { message: `${part ?? stage}: the strip clears the view tools` }).toBe(true);
+        }, { message: `${part ?? stage}: the strip clears Calculate` }).toBe(true);
         // Labels at desktop widths; glyphs only on a narrow view
         if (width >= 1280) await expect(strip).not.toHaveClass(/compact/);
         await page.screenshot({ path: testInfo.outputPath(`corners-${width}-${part ?? stage}.png`) });
       }
     });
   }
+});
+
+test.describe('Main view controls, 2D and 3D alike', () => {
+  test('Undo | Redo top-left, Calculate top-right, 2D | 3D bottom-middle; units and the image buttons bottom-right in both views', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await waitForSession(page);
+    const controls = page.locator('.main-view-controls');
+    await expect(controls.locator('.corner.tl').getByRole('button', { name: /^Undo/ })).toBeVisible();
+    await expect(controls.locator('.corner.tr button.calculate-btn')).toBeVisible();
+    await expect(controls.locator('.corner.tr').getByText('Autorecalculate')).toBeVisible();
+    // Results alone in its column: no Calculate in the dock's columns
+    await expect(page.locator('.dock-column button.calculate-btn')).toHaveCount(0);
+    await expect(controls.locator('.corner.bc').getByRole('group', { name: 'Main view' })).toBeVisible();
+
+    // 2D: the view picker bottom-left; units, Open in new tab and Save as image bottom-right; no Pan, Zoom or Fit buttons
+    await showMain(page, '2d');
+    await expect(controls.locator('.corner.bl').getByRole('combobox', { name: '2D view' })).toHaveValue('floor');
+    const tools2d = page.locator('.view-slot[data-view="2d"]:not(.mini) .view-controls');
+    await expect(tools2d.getByTitle('Units')).toBeVisible();
+    await expect(tools2d.getByRole('button', { name: 'Open in new tab' })).toBeVisible();
+    await expect(page.locator('.view-slot[data-view="2d"]:not(.mini)').getByRole('button', { name: /^(Pan|Zoom|Fit|Zoom in|Zoom out)$/ })).toHaveCount(0);
+    const download = page.waitForEvent('download');
+    await tools2d.getByRole('button', { name: 'Save as image' }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe('room-2d-view.png');
+    const chunks: Buffer[] = [];
+    for await (const chunk of await file.createReadStream()) chunks.push(chunk as Buffer);
+    const png = Buffer.concat(chunks);
+    expect(png.subarray(1, 4).toString()).toBe('PNG');
+    expect(png.length).toBeGreaterThan(2000);
+
+    // 3D: the same units select replaces the old label, and changes the same setting
+    await showMain(page, '3d');
+    const tools3d = page.locator('.view-slot[data-view="3d"]:not(.mini) .viewer-actions');
+    await expect(page.locator('.view-slot[data-view="3d"]:not(.mini)').getByText(/^Units:/)).toHaveCount(0);
+    await tools3d.getByTitle('Units').selectOption('feet');
+    await expect(tools3d.getByRole('button', { name: 'Open in new tab' })).toBeVisible();
+    await expect(tools3d.getByRole('button', { name: 'Save as image' })).toBeVisible();
+    await showMain(page, '2d');
+    await expect(tools2d.getByTitle('Units')).toHaveValue('feet');
+  });
 });

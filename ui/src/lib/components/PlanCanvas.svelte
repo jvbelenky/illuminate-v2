@@ -45,6 +45,8 @@
 	import Glyph from '$lib/workspace/Glyph.svelte';
 	import UnitsSelect from '$lib/workspace/UnitsSelect.svelte';
 	import UndoRedo from '$lib/workspace/UndoRedo.svelte';
+	import ViewImageActions from '$lib/workspace/ViewImageActions.svelte';
+	import { svgToCanvas, openImageInTab, downloadBlob } from '$lib/utils/viewImage';
 	import { fitPlanView, resizePlanView } from '$lib/utils/planFit';
 	import { unitAbbrev, gridCellSize, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
@@ -143,6 +145,11 @@
 		onEdit?: () => void;
 		/** Show the view tools (Pan | Zoom | Fit), bottom right. Without them the canvas navigates as in Pan mode, and the wheel zooms. */
 		navControls?: boolean;
+		/**
+		 * The main view's tools instead (with `navControls`): units, Open in new tab and
+		 * Save as image, bottom right. Pan and Zoom stay on H / Z, Fit on F, − + on the keys.
+		 */
+		imageTools?: boolean;
 		/** Pixels Fit keeps clear at the top and bottom, for controls drawn over the canvas (the main view's corner controls). */
 		fitInset?: number;
 		/** Fit centres the outline, keeping `fitInsetX` px clear left and right (the phone); otherwise it anchors bottom-left. */
@@ -183,6 +190,7 @@
 		invalid = false,
 		ariaLabel = 'Plan canvas',
 		navControls = true,
+		imageTools = false,
 		fitInset = 0,
 		fitCentre = false,
 		fitInsetX = 0,
@@ -249,9 +257,8 @@
 	/** Canvas width and height in CSS pixels, measured; 560 x 560 until the canvas has a size. */
 	let canvasW = $state(560);
 	/**
-	 * Below this canvas width the units select shows abbreviations, so Undo | Redo,
-	 * units and the view tools (about 420 px in full) leave room for the edit
-	 * strip's glyph-only form (up to four 36 px buttons) on the bottom row.
+	 * Below this canvas width the units select shows abbreviations, so the tools
+	 * bottom right leave room for the controls along the bottom of the main view.
 	 */
 	const COMPACT_TOOLS_BELOW = 600;
 	/** The canvas's measured width (null until laid out). */
@@ -1501,6 +1508,39 @@
 		return { degrees, path, label: [lx, ly] as [number, number], exact: Math.abs(degrees - Math.round(degrees / ANGLE_STEP) * ANGLE_STEP) < 1e-6 };
 	});
 
+	// --- Open in new tab | Save as image: the plan as drawn, on its own background
+	let savingImage = $state(false);
+	async function planCanvas(scale: number): Promise<HTMLCanvasElement | null> {
+		if (!svgEl) return null;
+		const bg = getComputedStyle(svgEl).backgroundColor;
+		const solid = bg && bg !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(bg) ? bg : getComputedStyle(document.documentElement).getPropertyValue('--color-bg-secondary') || '#ffffff';
+		return svgToCanvas(svgEl, solid, scale);
+	}
+	async function openImage() {
+		// Opened at the click, filled once the plan is drawn
+		const win = window.open('', '_blank');
+		try {
+			const c = await planCanvas(2);
+			if (c) openImageInTab(c.toDataURL('image/png'), 'Room 2D View', win);
+			else win?.close();
+		} catch (error) {
+			win?.close();
+			console.error('Failed to open the 2D view:', error);
+		}
+	}
+	async function saveImage() {
+		savingImage = true;
+		try {
+			const c = await planCanvas(4);
+			const blob = c ? await new Promise<Blob | null>((resolve) => c.toBlob(resolve, 'image/png')) : null;
+			if (blob) downloadBlob(blob, 'room-2d-view.png');
+		} catch (error) {
+			console.error('Failed to save the 2D view:', error);
+		} finally {
+			savingImage = false;
+		}
+	}
+
 	const ctx = $derived<CanvasContext>({ px, hitPx, handleR, toSvg, toScreen, gridLo, gridHi, spaceHeld });
 </script>
 
@@ -1718,7 +1758,12 @@
 		<rect x={zx} y={zy} width={Math.abs(zoomBox.b[0] - zoomBox.a[0])} height={Math.abs(zoomBox.b[1] - zoomBox.a[1])} class="zoom-box" stroke-width={px * 1.5} stroke-dasharray="{px * 5} {px * 3}" />
 	{/if}
 </svg>
-{#if navControls}
+{#if navControls && imageTools}
+<div class="view-controls">
+	{#if onUnitsChange}<UnitsSelect {units} onchange={onUnitsChange} compact={compactTools} />{/if}
+	<ViewImageActions onOpen={openImage} onSave={saveImage} saving={savingImage} />
+</div>
+{:else if navControls}
 <div class="view-controls">
 	<UndoRedo />
 	{#if onUnitsChange}<UnitsSelect {units} onchange={onUnitsChange} compact={compactTools} />{/if}

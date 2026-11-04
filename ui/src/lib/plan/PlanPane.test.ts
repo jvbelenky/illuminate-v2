@@ -1993,23 +1993,21 @@ describe('PlanPane ceiling context', () => {
 
   describe('surface switcher', () => {
     const lamp = { id: 'lamp-7', name: 'Beacon', lamp_type: 'krcl_222' as const, preset_id: 'beacon', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
-    it('shows Floor, Ceiling and Walls; choosing Wall 2 sets wall:1', async () => {
+    it('one dropdown: Plan view, then each wall; choosing Wall 2 sets wall:1', async () => {
       const { ctl } = mount();
-      const group = screen.getByRole('group', { name: 'Surface' });
-      expect(group).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Floor' }).getAttribute('aria-pressed')).toBe('true');
-      expect(screen.getByRole('button', { name: 'Ceiling' }).getAttribute('aria-pressed')).toBe('false');
-      const walls = screen.getByRole('combobox', { name: 'Walls' }) as HTMLSelectElement;
-      await fireEvent.change(walls, { target: { value: 'wall:1' } });
+      const pick = screen.getByRole('combobox', { name: '2D view' }) as HTMLSelectElement;
+      expect([...pick.options].map((o) => o.textContent)).toEqual(['Plan view', 'Wall 1', 'Wall 2', 'Wall 3', 'Wall 4']);
+      expect(pick.value).toBe('floor');
+      await fireEvent.change(pick, { target: { value: 'wall:1' } });
       expect(ctl.surface).toBe('wall:1');
-      expect(walls.closest('.walls')!.classList.contains('on')).toBe(true);
-      await fireEvent.click(screen.getByRole('button', { name: 'Ceiling' }));
-      expect(ctl.surface).toBe('ceiling');
+      expect(pick.value).toBe('wall:1');
+      await fireEvent.change(pick, { target: { value: 'floor' } });
+      expect(ctl.surface).toBe('floor');
     });
 
     it('is hidden when mini', () => {
       mount({ mini: true });
-      expect(screen.queryByRole('group', { name: 'Surface' })).toBeNull();
+      expect(screen.queryByRole('combobox', { name: '2D view' })).toBeNull();
     });
 
     it('wall view draws the wall outline and neighbour labels and no reference image', async () => {
@@ -2020,7 +2018,7 @@ describe('PlanPane ceiling context', () => {
       const box = { id: 'obj-1', name: 'Shelf', shape: 'box', x: 4, y: 2, z: 0.5, width: 1, length: 1, height: 1, yaw: 0, reflectance: 0.1, transmittance: 0, enabled: true };
       const { container, ctl } = mount({ floorplan: placement, image, lamps: [near, behind], objects: [box], roomZ: 3 });
       expect(container.querySelector('image.plan-image')).not.toBeNull();
-      await fireEvent.change(screen.getByRole('combobox', { name: 'Walls' }), { target: { value: 'wall:0' } });
+      await fireEvent.change(screen.getByRole('combobox', { name: '2D view' }), { target: { value: 'wall:0' } });
       await tick();
       expect(ctl.surface).toBe('wall:0');
       // The elevation of wall 1 (6 long), up to the 3 m ceiling
@@ -2046,8 +2044,8 @@ describe('PlanPane ceiling context', () => {
       expect(Math.min(...pts.map((p) => -p[1]))).toBeCloseTo(0.5);
       expect(Math.max(...pts.map((p) => -p[1]))).toBeCloseTo(1.5);
       expect(Number(shelf.style.opacity)).toBeLessThan(1);
-      // Back on the floor, the plan is as before
-      await fireEvent.click(screen.getByRole('button', { name: 'Floor' }));
+      // Back on the plan view, the plan is as before
+      await fireEvent.change(screen.getByRole('combobox', { name: '2D view' }), { target: { value: 'floor' } });
       await tick();
       expect(container.querySelector('image.plan-image')).not.toBeNull();
       expect(container.querySelectorAll('circle.vertex').length).toBeGreaterThan(0);
@@ -2057,7 +2055,7 @@ describe('PlanPane ceiling context', () => {
     it('wall view ignores clicks and drags on the canvas', async () => {
       const calls: unknown[][] = [];
       const { container } = mount({ calls, lamps: [{ ...lamp, y: 1 }], context: 'lamps' });
-      await fireEvent.change(screen.getByRole('combobox', { name: 'Walls' }), { target: { value: 'wall:0' } });
+      await fireEvent.change(screen.getByRole('combobox', { name: '2D view' }), { target: { value: 'wall:0' } });
       await tick();
       expect(container.querySelectorAll('circle.plan-lamp')).toHaveLength(0);
       expect(container.querySelector('.plan-toolbar')).toBeNull();

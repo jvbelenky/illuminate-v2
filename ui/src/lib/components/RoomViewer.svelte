@@ -8,14 +8,16 @@
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import type { CeilingLayout } from '$lib/ceiling/ceilingLayout';
 	import ProjectionToggle from './ProjectionToggle.svelte';
-	import UndoRedo from '$lib/workspace/UndoRedo.svelte';
+	import UnitsSelect from '$lib/workspace/UnitsSelect.svelte';
+	import ViewImageActions from '$lib/workspace/ViewImageActions.svelte';
+	import { openImageInTab, downloadBlob } from '$lib/utils/viewImage';
 	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
-	import { unitLabel } from '$lib/utils/unitConversion';
+	import { unitLabel, type LengthUnit } from '$lib/utils/unitConversion';
 	import { pickMode, activeViewPreset } from '$lib/stores/pickMode';
 	import type { SceneCaptureApi, SceneCaptureControls, VisibilityOverride } from '$lib/utils/reportCapture';
 	import type { PlanContext } from '$lib/workspace/editorNav';
-	import { surfaceName, type Surface } from '$lib/utils/surfaces';
+	import { viewName, planSurface, type Surface } from '$lib/utils/surfaces';
 	import { chooseClickTarget, nextSurface, type SceneHover } from './surfacePicking';
 
 	interface Props {
@@ -60,9 +62,12 @@
 		viewedSurface?: Surface | null;
 		/** The editor context deciding what a click selects; null (the summary) picks nothing */
 		clickContext?: PlanContext | null;
+		/** The project's length unit, and the units select bottom-right (the 2D view's same setting) */
+		units?: LengthUnit;
+		onUnitsChange?: (event: Event) => void;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, onCeilingItemClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false, touch = false, onSurfaceClick, onSurfaceHover, viewedSurface = null, clickContext = null }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, onCeilingItemClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false, touch = false, onSurfaceClick, onSurfaceHover, viewedSurface = null, clickContext = null, units, onUnitsChange }: Props = $props();
 
 	// Drag detection: suppress clicks that follow a drag (orbit/pan). The handlers
 	// stay attached in the mini view (Threlte registers them at creation) and do nothing there.
@@ -128,12 +133,14 @@
 		if (target?.kind !== 'surface') return null;
 		// Over a ceiling item the click opens the ceiling designer, not the next surface
 		if (onCeilingItemClick && hover.items.some((i) => i.type === 'ceiling')) return null;
-		const surface = nextSurface(target.order, viewedSurface);
+		// The ceiling shows on the 2D plan view, as the floor does
+		const order = [...new Set(target.order.map(planSurface))];
+		const surface = nextSurface(order, viewedSurface);
 		if (!surface) return null;
 		const rect = viewerContainer.getBoundingClientRect();
 		return {
 			surface,
-			text: `${surfaceName(surface)} ${target.order.indexOf(surface) + 1}/${target.order.length}`,
+			text: order.length > 1 ? `${viewName(surface)} ${order.indexOf(surface) + 1}/${order.length}` : viewName(surface),
 			x: hover.x - rect.left,
 			y: hover.y - rect.top,
 		};
@@ -181,6 +188,9 @@
 
 	// Canvas capture for save/preview
 	let viewerContainer = $state<HTMLDivElement | undefined>(undefined);
+	/** The view's width: under 600 px the units select shows abbreviations, as the 2D view's does. */
+	let viewerWidth = $state(0);
+	const compactTools = $derived(viewerWidth > 0 && viewerWidth < 600);
 	let savingImage = $state(false);
 	let captureControls = $state<SceneCaptureControls | null>(null);
 
@@ -267,13 +277,7 @@
 		savingImage = true;
 		try {
 			const blob = await captureToBlob(4);
-			if (!blob) return;
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = 'room-3d-view.png';
-			a.click();
-			URL.revokeObjectURL(url);
+			if (blob) downloadBlob(blob, 'room-3d-view.png');
 		} catch (error) {
 			console.error('Failed to save 3D view:', error);
 		} finally {
@@ -297,51 +301,17 @@
 		drawUnitsLabel(ctx2, canvas.width, canvas.height);
 
 		captureControls?.restore();
-		const dataUrl = offscreen.toDataURL('image/png');
-		const win = window.open('', '_blank');
-		if (!win) return;
-		win.document.title = 'Room 3D View';
-		win.document.body.style.margin = '0';
-		win.document.body.style.background = '#1a1a1a';
-		win.document.body.style.display = 'flex';
-		win.document.body.style.alignItems = 'center';
-		win.document.body.style.justifyContent = 'center';
-		win.document.body.style.height = '100vh';
-		const img = win.document.createElement('img');
-		img.src = dataUrl;
-		img.style.maxWidth = '100%';
-		img.style.maxHeight = '100%';
-		win.document.body.appendChild(img);
+		openImageInTab(offscreen.toDataURL('image/png'), 'Room 3D View');
 	}
 </script>
 
-<div class="viewer-container" class:mini class:raised={clickContext !== null} bind:this={viewerContainer} onpointerdown={handlePointerDown} onpointerup={handlePointerUp} onpointerleave={() => { hover = null; pointerHeld = false; }}>
+<div class="viewer-container" class:mini bind:this={viewerContainer} bind:clientWidth={viewerWidth} onpointerdown={handlePointerDown} onpointerup={handlePointerUp} onpointerleave={() => { hover = null; pointerHeld = false; }}>
 	{#if !mini && !touch}
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 	<ProjectionToggle isOrtho={useOrtho} onclick={handleToggleProjection} />
-	<span class="units-label">Units: {unitLabel($userSettings.units)}</span>
 	<div class="viewer-actions">
-		<UndoRedo />
-		<button class="viewer-action-btn" title="Open in new window" onclick={previewImage}>
-			<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-				<path d="M11 3h6v6" />
-				<path d="M17 3L9 11" />
-				<path d="M15 11v5a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1h5" />
-			</svg>
-		</button>
-		<button class="viewer-action-btn" title="Save as image" onclick={saveImage} disabled={savingImage}>
-			{#if savingImage}
-				<svg class="spinner" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
-					<circle cx="10" cy="10" r="7" stroke-dasharray="30 14" />
-				</svg>
-			{:else}
-				<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M10 3v10" />
-					<path d="M6 9l4 4 4-4" />
-					<path d="M3 14v2a1 1 0 001 1h12a1 1 0 001-1v-2" />
-				</svg>
-			{/if}
-		</button>
+		{#if units && onUnitsChange}<UnitsSelect {units} onchange={onUnitsChange} compact={compactTools} />{/if}
+		<ViewImageActions onOpen={previewImage} onSave={saveImage} saving={savingImage} />
 	</div>
 	{/if}
 	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: true })}>
@@ -379,91 +349,15 @@
 		}
 	}
 
-	/* The editor's edit strip sits bottom left: the view tools stand above it */
-	.viewer-container.raised :global(.view-overlay),
-	.viewer-container.raised :global(.proj-toggle) {
-		bottom: calc(var(--spacing-sm) + 48px);
-	}
-
-	.viewer-container.raised .units-label {
-		bottom: calc(var(--spacing-md) + 48px);
-	}
-
-	.units-label {
-		position: absolute;
-		bottom: var(--spacing-md);
-		left: calc(var(--spacing-sm) + 124px);
-		z-index: 10;
-		font-size: 0.75rem;
-		color: var(--color-text-muted);
-		line-height: 1;
-	}
-
-	@media (max-width: 767px) {
-		.units-label {
-			left: calc(var(--spacing-sm) + 132px);
-		}
-	}
-
+	/* Units, Open in new tab and Save as image: bottom right, on the main view's 8 px inset */
 	.viewer-actions {
 		position: absolute;
-		bottom: var(--spacing-sm);
-		right: var(--spacing-sm);
+		bottom: 8px;
+		right: 8px;
 		z-index: 10;
 		display: flex;
-		gap: 4px;
-	}
-
-	/* Undo | Redo in the same frosted fill as the buttons beside them */
-	.viewer-actions :global(.undo-redo) {
-		margin-right: 4px;
-	}
-	.viewer-actions :global(.undo-redo .mv-btn) {
-		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
-		backdrop-filter: blur(4px);
-	}
-	.viewer-actions :global(.undo-redo .mv-btn:hover:not(:disabled)) {
-		background: var(--color-bg-secondary);
-	}
-
-	.viewer-action-btn {
-		display: flex;
 		align-items: center;
-		justify-content: center;
-		width: 36px;
-		height: 36px;
-		padding: 6px;
-		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
-		backdrop-filter: blur(4px);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		color: var(--color-text-muted);
-		cursor: pointer;
-		transition: all 0.15s;
-	}
-
-	.viewer-action-btn:hover {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-accent);
-		color: var(--color-text);
-	}
-
-	.viewer-action-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.viewer-action-btn svg {
-		width: 20px;
-		height: 20px;
-	}
-
-	.viewer-action-btn .spinner {
-		animation: spin 1s linear infinite;
-	}
-
-	@keyframes spin {
-		to { transform: rotate(360deg); }
+		gap: 8px;
 	}
 
 	.surface-chip {
@@ -481,7 +375,8 @@
 
 	.pick-banner {
 		position: absolute;
-		bottom: var(--spacing-lg);
+		/* Above the 2D | 3D switch, bottom-middle */
+		bottom: 56px;
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 20;

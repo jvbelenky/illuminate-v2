@@ -28,7 +28,7 @@
 		controller: PlanController;
 		/** Summary use: no handles, no toolbar, nothing draggable, no keyboard. */
 		readonly?: boolean;
-		/** Show the surface switcher over the canvas and the edit strip under it (the desktop shows both on the main view instead). */
+		/** Show the 2D view picker over the canvas and the edit strip under it (the desktop shows both on the main view instead). */
 		toolbar?: boolean;
 		/** Route Escape to the controller; off for a host that forwards it itself (the page: +page.svelte passes handleEscape={false}). */
 		handleEscape?: boolean;
@@ -36,11 +36,11 @@
 		mini?: boolean;
 		/** The canvas's own units select and Pan | Zoom | − + | Fit (off on a phone: touch pans and pinches, and Fit sits with the view's corner controls). */
 		viewTools?: boolean;
-		/** The main view, on the Ceiling surface: a ceiling item clicked opens the ceiling designer (which edits the items in its own plan). */
-		onCeilingItemClick?: (id: string) => void;
+		/** The main view's tools bottom right (units, Open in new tab, Save as image) in place of Undo | Redo, units and Pan | Zoom | − + | Fit. */
+		imageTools?: boolean;
 	}
 
-	let { controller, readonly = false, toolbar = true, handleEscape = true, mini = false, viewTools = true, onCeilingItemClick }: Props = $props();
+	let { controller, readonly = false, toolbar = true, handleEscape = true, mini = false, viewTools = true, imageTools = false }: Props = $props();
 	const navTools = $derived(!mini && viewTools);
 
 	// Read-only rendering: the summary, or the mini view
@@ -54,20 +54,12 @@
 	const vertices = $derived(ctl.scene().vertices);
 	const lamps = $derived(ctl.scene().lamps);
 	// Ceiling: the room seen from above with the ceiling drawn over it; structures
-	// stand on the floor, so they are left out. The tiles and items show on the
-	// Ceiling surface in any context, editable only in the ceiling context (the designer's plan).
+	// stand on the floor, so they are left out. The tiles and items show only in
+	// the ceiling designer's own plan (the ceiling context).
 	const ceiling = $derived(ctl.scene().ceiling);
-	const onCeilingSurface = $derived(ctl.onCeiling || ctl.surface === 'ceiling');
+	const onCeilingSurface = $derived(ctl.onCeiling);
 	const ceilingItems = $derived(onCeilingSurface && ceiling.ceilingShown && ceiling.itemsShown ? ceiling.items.filter((i) => !i.hidden) : []);
-	// Elsewhere an item is a link to the designer, out of the way of a gesture or tool
-	const ceilingLinked = $derived(!ctl.onCeiling && !!onCeilingItemClick && !ctl.drawing && !ctl.placing && !ctl.pointPick && !ctl.activeTool);
-	function ceilingDown(e: PointerEvent, id: string) {
-		if (ctl.onCeiling) return ctl.onCeilingItemPointerDown(e, id);
-		if (!ceilingLinked || e.button !== 0) return;
-		e.preventDefault();
-		e.stopPropagation();
-		onCeilingItemClick?.(id);
-	}
+	const ceilingDown = (e: PointerEvent, id: string) => ctl.onCeilingItemPointerDown(e, id);
 	const points = (vs: Vertex[]) => vs.map(([x, y]) => `${x},${-y}`).join(' ');
 
 	// Read-only (summary, mini view): the selection and the hovered row still show
@@ -253,6 +245,7 @@
 				fitInsetX={phoneFit ? FIT_INSET_X : 0}
 				bind:this={roCanvas}
 				navControls={navTools}
+				{imageTools}
 				bind:draft={wallDraft}
 				{units}
 				onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
@@ -282,6 +275,7 @@
 				fitInsetX={phoneFit ? FIT_INSET_X : 0}
 				bind:this={ctl.canvas}
 				navControls={navTools}
+				{imageTools}
 				bind:draft={ctl.draft}
 				bind:drawing={ctl.drawing}
 				bind:selectedIndex={ctl.selectedIndex}
@@ -341,6 +335,7 @@
 				fitInsetX={phoneFit ? FIT_INSET_X : 0}
 			bind:this={roCanvas}
 			navControls={navTools}
+			{imageTools}
 			bind:draft={roDraft}
 			{units}
 			onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
@@ -385,6 +380,7 @@
 				fitInsetX={phoneFit ? FIT_INSET_X : 0}
 			bind:this={ctl.canvas}
 			navControls={navTools}
+			{imageTools}
 			bind:draft={ctl.draft}
 			bind:drawing={ctl.drawing}
 			bind:selectedIndex={ctl.selectedIndex}
@@ -457,12 +453,12 @@
 					{@const sel = it.id === ctl.selectedCeilingId}
 					{#if it.kind === 'keep'}
 						{#if !sel || ctl.drawing}
-							<polygon class="ceiling-keep" class:inert={!ctl.onCeiling && !ceilingLinked} points={points(it.vertices)} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 4}" role="button" tabindex="-1" aria-label={it.name} onpointerdown={(e) => ceilingDown(e, it.id)} />
+							<polygon class="ceiling-keep" points={points(it.vertices)} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 4}" role="button" tabindex="-1" aria-label={it.name} onpointerdown={(e) => ceilingDown(e, it.id)} />
 						{/if}
 					{:else}
 						{@const [ix, iy] = ctl.ceilingItemAt(it)}
 						{@const r = c.px * 9}
-						<g class="ceiling-item" class:selected={sel} class:linked={ceilingLinked} class:inert={!ctl.onCeiling && !ceilingLinked} role="button" tabindex="-1" aria-label={it.name} onpointerdown={(e) => ceilingDown(e, it.id)}>
+						<g class="ceiling-item" class:selected={sel} role="button" tabindex="-1" aria-label={it.name} onpointerdown={(e) => ceilingDown(e, it.id)}>
 							<circle class="ceiling-hit" cx={ix} cy={-iy} r={Math.max(c.hitPx * 11.7, r * 1.3)} />
 							{#if sel}<circle class="ceiling-ring" cx={ix} cy={-iy} r={r * 1.35} stroke-width={c.px * 2} />{/if}
 							<CeilingIcon kind={it.kind} size={r * 2} x={ix - r} y={-iy - r} />
@@ -868,14 +864,6 @@
 	}
 	.ceiling-item.selected {
 		color: var(--color-scene-selected);
-	}
-	.ceiling-item.linked {
-		cursor: pointer;
-	}
-	.ceiling-item.inert,
-	.ceiling-item.inert .ceiling-hit,
-	.ceiling-keep.inert {
-		pointer-events: none;
 	}
 	.ceiling-hit {
 		fill: transparent;

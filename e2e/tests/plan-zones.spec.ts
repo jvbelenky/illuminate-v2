@@ -129,7 +129,7 @@ test.describe('Calc zones in the workspace', () => {
     await addLampFromPreset(page);
 
     await showMain(page, '2d');
-    await page.getByRole('combobox', { name: 'Walls' }).selectOption({ label: 'Wall 2' });
+    await page.getByRole('combobox', { name: '2D view' }).selectOption({ label: 'Wall 2' });
     await addZone(page, 'plane');
     await expect(userZoneRows(page)).toHaveCount(1);
 
@@ -153,7 +153,7 @@ test.describe('Calc zones in the workspace', () => {
     await expect(surface).toHaveValue('floor');
 
     await surface.selectOption({ label: 'Wall 2' });
-    await expect(page.getByRole('combobox', { name: 'Walls' })).toHaveValue('wall:1');
+    await expect(page.getByRole('combobox', { name: '2D view' })).toHaveValue('wall:1');
     await expect(zoneEditor(page)).toBeVisible();
     await expect(zoneEditor(page).getByRole('switch', { name: 'Fit to wall' })).toBeChecked();
     await waitForApiIdle(page);
@@ -162,6 +162,9 @@ test.describe('Calc zones in the workspace', () => {
 
     await surface.selectOption({ label: 'Ceiling' });
     await expect(surface).toHaveValue('ceiling');
+    // There is no Ceiling view: a ceiling plane shows on the plan view, still selected
+    await expect(page.getByRole('combobox', { name: '2D view' })).toHaveValue('floor');
+    await expect(zoneEditor(page)).toBeVisible();
     await waitForApiIdle(page);
     plane = (await backendZones(page)).find((z) => !z.is_standard && z.type === 'plane');
     expect(plane?.wall ?? null).toBeNull();

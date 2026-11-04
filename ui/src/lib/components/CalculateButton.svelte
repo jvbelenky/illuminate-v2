@@ -13,13 +13,12 @@
 	interface Props {
 		onCalculated?: () => void;
 		/**
-		 * `floating`: compact button for the mobile bar.
-		 * `panel`: top of the Results panel: Auto, then a Calculate that fills the row.
-		 * `bar`: compact Calculate for the Results title bar (panel minimized).
+		 * `floating`: top-right of the main view: Calculate, Autorecalculate under it,
+		 *   and the spinner or error mark just left of the button, taking no room.
 		 * `sidebar`: full-width button with a spelled-out state line underneath.
 		 * `top`: compact Calculate for the phone's top bar.
 		 */
-		layout?: 'floating' | 'panel' | 'bar' | 'sidebar' | 'top';
+		layout?: 'floating' | 'sidebar' | 'top';
 	}
 
 	let { onCalculated, layout = 'floating' }: Props = $props();
@@ -118,19 +117,8 @@
 	}
 </script>
 
-{#if layout === 'panel' || layout === 'bar' || layout === 'top'}
-<div class="calculate-corner" class:bar={layout === 'bar'} class:top={layout === 'top'}>
-	{#if !$isMobile && layout === 'panel'}
-		<label class="autorecalc-label" title="Recalculate automatically">
-			<input
-				type="checkbox"
-				checked={autorecalculate}
-				onchange={(e) => toggleAutorecalculate(e.currentTarget.checked)}
-				use:enterToggle
-			/>
-			<span>Auto</span>
-		</label>
-	{/if}
+{#if layout === 'top'}
+<div class="calculate-corner top">
 	<button
 		class="calculate-btn"
 		class:needs-calc={needsCalculation}
@@ -149,10 +137,13 @@
 	{/if}
 </div>
 {:else}
-<div class="calculate-wrapper" class:sidebar={layout === 'sidebar'}>
+<div class="calculate-wrapper" class:sidebar={layout === 'sidebar'} class:floating={layout === 'floating'}>
 	<div class="calculate-row">
-		{#if isCalculating && layout === 'floating'}
-			<span class="spinner"></span>
+		{#if layout === 'floating' && (isCalculating || error)}
+			<!-- Beside the button, out of the layout: nothing under it moves -->
+			<span class="calc-status">
+				{#if isCalculating}<span class="spinner"></span>{:else}<span class="error-indicator" title={error}>!</span>{/if}
+			</span>
 		{/if}
 		<button
 			class="calculate-btn"
@@ -169,9 +160,6 @@
 			{/if}
 			{layout === 'sidebar' ? label : 'Calculate'}
 		</button>
-		{#if error && layout === 'floating'}
-			<span class="error-indicator" title={error}>!</span>
-		{/if}
 	</div>
 	{#if layout === 'sidebar'}
 		<p class="status-line" class:error={!!error} class:done={!needsCalculation && hasResults && !error && !isCalculating}>
@@ -218,16 +206,6 @@
 		flex: 1;
 		justify-content: center;
 	}
-	.calculate-corner.bar {
-		height: 20px;
-	}
-	.calculate-corner.bar .calculate-btn {
-		flex: none;
-		height: 20px;
-		padding: 0 8px;
-		gap: 4px;
-		font-size: var(--font-size-xs);
-	}
 	.calculate-corner.top {
 		height: 32px;
 	}
@@ -238,14 +216,40 @@
 		gap: 4px;
 		font-size: var(--font-size-sm);
 	}
-	.calculate-corner .autorecalc-label {
-		margin: 0;
-		padding: 0 8px;
+	/* The main view's corner: the button, then Autorecalculate right-aligned under it */
+	.calculate-wrapper.floating {
+		align-items: flex-end;
+		gap: 6px;
+	}
+	.floating .calculate-row {
+		position: relative;
+	}
+	.calc-status {
+		position: absolute;
+		right: calc(100% + 8px);
+		top: 50%;
+		transform: translateY(-50%);
+		display: flex;
+	}
+	.floating .calculate-btn {
 		height: 36px;
+		padding: 0 18px;
+		font-size: var(--font-size-base);
+		font-weight: 700;
+	}
+	.floating .autorecalc-label {
+		height: 26px;
+		padding: 0 8px;
 		box-sizing: border-box;
-		font-size: var(--font-size-sm);
+		font-size: 13px;
+		color: var(--color-text);
+		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
-		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
+		background: color-mix(in srgb, var(--color-bg-secondary) 88%, transparent);
+	}
+	.floating .autorecalc-label input[type='checkbox'] {
+		width: 13px;
+		height: 13px;
 	}
 	.calculate-corner .calculate-btn {
 		display: inline-flex;

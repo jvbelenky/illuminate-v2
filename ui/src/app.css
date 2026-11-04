@@ -713,8 +713,9 @@ select.mv-select {
   min-width: 36px;
   width: auto;
   padding: 0 8px;
-  background: var(--color-bg-secondary);
-  color: var(--color-text-muted);
+  /* Filled, so it stands off the view under it (both are bg-secondary otherwise) */
+  background: var(--color-btn-fill);
+  color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
@@ -745,7 +746,7 @@ select.mv-select {
 
 .mv-btn:hover:not(:disabled),
 select.mv-select:hover {
-  background: var(--color-bg-tertiary);
+  background: var(--color-btn-fill-hover);
   color: var(--color-text);
 }
 
@@ -766,7 +767,7 @@ select.mv-select:hover {
 
 /* Disabled keeps its own fill under the pointer (not the global button:hover red) */
 .mv-btn:disabled:not([aria-pressed="true"]):not(.on) {
-  background: var(--color-bg-secondary);
+  background: var(--color-btn-fill);
   color: var(--color-text-muted);
 }
 

@@ -11,11 +11,10 @@
 	import { undoKeyOf, inTextField, interceptUndo } from '$lib/utils/undoKeys';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
 	import { chooseClickTarget, nextSurface } from '$lib/components/surfacePicking';
-	import type { Surface } from '$lib/utils/surfaces';
+	import { planSurface, type Surface } from '$lib/utils/surfaces';
 	import LampEditor from '$lib/components/LampEditor.svelte';
 	import ZonePanel from '$lib/workspace/zones/ZonePanel.svelte';
 	import ObjectEditor from '$lib/components/ObjectEditor.svelte';
-	import CalculateButton from '$lib/components/CalculateButton.svelte';
 	import ZoneStatsPanel from '$lib/components/ZoneStatsPanel.svelte';
 	import HelpModal from '$lib/components/HelpModal.svelte';
 	import AboutModal from '$lib/components/AboutModal.svelte';
@@ -618,7 +617,8 @@
 		}
 		if (!choice) return;
 		if (choice.kind === 'surface') {
-			const next = nextSurface(choice.order, plan.surface);
+			// The ceiling shows on the plan view: a click there picks the plan view
+			const next = nextSurface([...new Set(choice.order.map(planSurface))], plan.surface);
 			if (next) plan.setSurface(next);
 			return;
 		}
@@ -1298,13 +1298,13 @@
 
 	{#snippet view2d(mini: boolean)}
 		<div class="plan-host" class:mini>
-			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} {mini} toolbar={false} viewTools={!isMobile} handleEscape={false} onCeilingItemClick={openCeilingDesigner} />
+			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} {mini} toolbar={false} viewTools={!isMobile} imageTools handleEscape={false} />
 		</div>
 	{/snippet}
 
 	{#snippet view3d(mini: boolean)}
 		<div class="viewer-host">
-			<RoomViewer bind:this={roomViewer} {mini} touch={isMobile} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={ceilingPlan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onCeilingItemClick={$workspaceUi.mode === 'editor' ? handleCeilingItemClick : undefined} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+			<RoomViewer bind:this={roomViewer} {mini} touch={isMobile} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={ceilingPlan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onCeilingItemClick={$workspaceUi.mode === 'editor' ? handleCeilingItemClick : undefined} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} units={$userSettings.units} onUnitsChange={plan.handleUnitsChange} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 		</div>
 	{/snippet}
 
@@ -1328,10 +1328,6 @@
 		{#if $workspaceUi.mode === 'editor'}
 			<EditorDone controller={plan} onDone={finishEditing} />
 		{/if}
-	{/snippet}
-
-	{#snippet dockCalculate()}
-		<CalculateButton layout="panel" />
 	{/snippet}
 
 	{#snippet dockMain()}
@@ -1390,7 +1386,7 @@
 		</div>
 	{:else}
 		<div class="app-layout desktop">
-			<DockArea layout={dock} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} calculate={dockCalculate} resultsTools={dockResultsTools} editorTools={dockEditorTools} onMiniFloat={(m) => (miniFloat = m)} />
+			<DockArea layout={dock} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} resultsTools={dockResultsTools} editorTools={dockEditorTools} onMiniFloat={(m) => (miniFloat = m)} />
 			<ViewHost main={dock.main} {mainAnchor} {miniAnchor} miniVisible={!dock.minimized.includes('mini')} miniFloating={!!dock.floats?.mini} miniZ={miniFloat?.z} {view2d} {view3d} layoutKey={[dock, miniFloat]} />
 		</div>
 	{/if}

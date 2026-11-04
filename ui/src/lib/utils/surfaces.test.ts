@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  allSurfaces, stepSurface, surfaceName, wallIndex, wallSegment, toWall, fromWall,
+  allSurfaces, viewSurfaces, planSurface, viewName, stepSurface, surfaceName, wallIndex, wallSegment, toWall, fromWall,
   wallIdForIndex, wallIndexForId, zoneSurface, parseSurface,
 } from './surfaces';
 import type { Vertex } from './roomGeometry';
@@ -12,10 +12,19 @@ describe('surfaces', () => {
   it('lists floor, ceiling, then the walls', () => {
     expect(allSurfaces(rect)).toEqual(['floor', 'ceiling', 'wall:0', 'wall:1', 'wall:2', 'wall:3']);
   });
-  it('steps with wrap-around', () => {
+  it('the main 2D view: the plan view, then the walls (no ceiling)', () => {
+    expect(viewSurfaces(rect)).toEqual(['floor', 'wall:0', 'wall:1', 'wall:2', 'wall:3']);
+    expect(planSurface('ceiling')).toBe('floor');
+    expect(planSurface('wall:2')).toBe('wall:2');
+    expect(viewName('floor')).toBe('Plan view');
+    expect(viewName('ceiling')).toBe('Plan view');
+    expect(viewName('wall:1')).toBe('Wall 2');
+  });
+  it('steps through the views with wrap-around, skipping the ceiling', () => {
     expect(stepSurface('wall:3', rect, 1)).toBe('floor');
     expect(stepSurface('floor', rect, -1)).toBe('wall:3');
-    expect(stepSurface('floor', rect, 1)).toBe('ceiling');
+    expect(stepSurface('floor', rect, 1)).toBe('wall:0');
+    expect(stepSurface('ceiling', rect, 1)).toBe('wall:0');
   });
   it('names surfaces', () => {
     expect(surfaceName('wall:0')).toBe('Wall 1');

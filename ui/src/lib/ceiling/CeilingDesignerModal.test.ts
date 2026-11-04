@@ -107,18 +107,14 @@ describe('Ceiling designer window', () => {
 });
 
 describe('the main view and the ceiling', () => {
-  it('on the Ceiling surface it draws the tiles and items; an item clicked opens the designer on it', async () => {
-    const onCeilingItemClick = vi.fn();
-    const { ctl, container } = mount({ context: 'lamps', onCeilingItemClick });
+  it('has no Ceiling view: the plan view draws no tiles or ceiling items (they stay in the designer)', async () => {
+    const { ctl, container } = mount({ context: 'lamps' });
     ctl.setSurface('ceiling');
     await tick();
-    expect(container.querySelectorAll('line.tile-line').length).toBeGreaterThan(0);
-    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Hall detector' }), { button: 0, pointerId: 1 });
-    expect(onCeilingItemClick).toHaveBeenCalledWith('ceiling-1');
-    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Duct' }), { button: 0, pointerId: 1 });
-    expect(onCeilingItemClick).toHaveBeenLastCalledWith('ceiling-2');
-    // Nothing is selected or moved in the main view
-    expect(ctl.selectedCeilingId).toBeNull();
+    expect(ctl.surface).toBe('floor');
+    expect(container.querySelectorAll('line.tile-line').length).toBe(0);
+    expect(screen.queryByRole('button', { name: 'Hall detector' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Duct' })).toBeNull();
   });
 
   it("the main view's strip has no ceiling tools", async () => {
