@@ -7,6 +7,7 @@
 	import { customLamps } from '$lib/stores/lampLibrary';
 	import { fromMeters, unitAbbrev, unitStep } from '$lib/utils/unitConversion';
 	import { attachCeiling, attachWall } from '$lib/utils/lampSticking';
+	import { moveLampKeepingAim } from '$lib/utils/lampMove';
 	import { roomVertices } from '$lib/utils/roomGeometry';
 	import { onMount, onDestroy, tick, untrack } from 'svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
@@ -54,13 +55,10 @@
 	function update(partial: Partial<LampInstance>) {
 		project.updateLamp(lamp.id, partial);
 	}
-	/** Move the lamp, carrying the aim point along so tilt and orientation stay put. */
+	/** Move the lamp alone: its aim point stays where it is, so the lamp re-aims at it. */
 	function moveTo(nx: number, ny: number, nz: number) {
-		const dx = nx - lamp.x;
-		const dy = ny - lamp.y;
-		const dz = nz - lamp.z;
-		if (dx === 0 && dy === 0 && dz === 0) return;
-		update({ x: nx, y: ny, z: nz, aimx: round6(lamp.aimx + dx), aimy: round6(lamp.aimy + dy), aimz: round6(lamp.aimz + dz) });
+		if (nx === lamp.x && ny === lamp.y && nz === lamp.z) return;
+		update(moveLampKeepingAim(lamp, nx, ny, nz));
 	}
 	// An aim point on the lamp itself has no direction (the backend rejects it).
 	// It is held back here, shown in the fields as invalid, and the next

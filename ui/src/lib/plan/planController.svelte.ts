@@ -10,6 +10,7 @@ import type { PlanActions, PlanScene } from './planActions';
 import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry, type ObstacleDraft } from '$lib/utils/obstacleDrafts';
 import { footprintUpdate } from '$lib/utils/objectGeometry';
 import { clipToRect, normalizeYaw, rotateShapeBy } from './shapeTransform';
+import { moveLampKeepingAim } from '$lib/utils/lampMove';
 import { zoneHasFootprint, zoneFootprint, footprintGeometry as zoneFootprintGeometry } from '$lib/utils/zoneFootprint';
 import { displayDimension } from '$lib/utils/formatting';
 import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
@@ -1287,6 +1288,8 @@ export class PlanController {
     if (!d || !d.group.includes(m.id)) return { x: m.x, y: m.y, ax: m.ax, ay: m.ay };
     if (d.part === 'aimAt') return d.target ? { x: m.x, y: m.y, ax: d.target[0], ay: d.target[1] } : { x: m.x, y: m.y, ax: m.ax, ay: m.ay };
     if (d.part === 'aim') return { x: m.x, y: m.y, ax: m.ax + d.dx, ay: m.ay + d.dy };
+    // A lamp moves alone (its aim point stays); a calc point carries its aim along
+    if (this.onLamps) return { x: m.x + d.dx, y: m.y + d.dy, ax: m.ax, ay: m.ay };
     return { x: m.x + d.dx, y: m.y + d.dy, ax: m.ax + d.dx, ay: m.ay + d.dy };
   };
 
@@ -1379,8 +1382,8 @@ export class PlanController {
     this.actions.updateZone(z.id, partial);
   };
   /**
-   * The click of a lamp pick. On the floor: Position moves x and y (z kept) and carries the
-   * aim along; Aim sets aimx and aimy (aimz kept). On a wall: (along, up) from the click at
+   * The click of a lamp pick. On the floor: Position moves x and y (z kept), the aim point
+   * staying; Aim sets aimx and aimy (aimz kept). On a wall: (along, up) from the click at
    * the lamp's (or the aim point's) depth from that wall, a lamp stuck to it staying on it.
    * One update; the store unsticks a lamp moved off its surface, as for a drag.
    */
@@ -1399,8 +1402,7 @@ export class PlanController {
         partial = { aimx: r6(w.x), aimy: r6(w.y), aimz: r6(w.z) };
       }
     } else if (type === 'lamp_position') {
-      const x = r6(cx), y = r6(cy);
-      partial = { x, y, aimx: r6(lamp.aimx + x - lamp.x), aimy: r6(lamp.aimy + y - lamp.y) };
+      partial = moveLampKeepingAim(lamp, cx, cy);
     } else {
       partial = { aimx: r6(cx), aimy: r6(cy) };
     }
@@ -1491,8 +1493,11 @@ export class PlanController {
       return;
     }
     const x = r6(m.x + dx), y = r6(m.y + dy), ax = r6(m.ax + dx), ay = r6(m.ay + dy);
-    if (this.onLamps) this.actions.updateLamp(m.id, { x, y, aimx: ax, aimy: ay });
-    else this.actions.updateZone(m.id, { x, y, aim_x: ax, aim_y: ay });
+    if (this.onLamps) {
+      // Only the lamp moves: its aim point stays, so it re-aims at it
+      const lamp = this.scene().lamps.find((l) => l.id === m.id);
+      if (lamp) this.actions.updateLamp(m.id, moveLampKeepingAim(lamp, x, y));
+    } else this.actions.updateZone(m.id, { x, y, aim_x: ax, aim_y: ay });
   };
   aimMarker = (m: Marker, dx: number, dy: number) => {
     const ax = r6(m.ax + dx), ay = r6(m.ay + dy);

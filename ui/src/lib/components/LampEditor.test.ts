@@ -405,7 +405,7 @@ describe('LampEditor', () => {
     expect(screen.getByText('Position (m)')).toBeTruthy();
   });
 
-  it('moving the lamp carries its aim point along, in one store write', async () => {
+  it('moving the lamp leaves its aim point in place (the lamp re-aims at it), in one store write', async () => {
     const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
     try {
       const lamp: LampInstance = { ...mockLamp, aimx: 4, aimy: 3, aimz: 0 };
@@ -417,7 +417,7 @@ describe('LampEditor', () => {
       await fireEvent.change(x, { target: { value: '3' } });
       await fireEvent.blur(x);
       expect(updateSpy).toHaveBeenCalledTimes(1);
-      expect(updateSpy).toHaveBeenCalledWith('lamp-1', { x: 3, y: 3, z: 2.5, aimx: 5, aimy: 3, aimz: 0 });
+      expect(updateSpy).toHaveBeenCalledWith('lamp-1', { x: 3, y: 3, z: 2.5 });
     } finally {
       updateSpy.mockRestore();
     }

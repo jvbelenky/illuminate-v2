@@ -733,7 +733,7 @@ describe('PlanPane', () => {
       expect(ctl.selectedLampIds).toEqual(['lamp-7']);
     });
 
-    it('dragging the ring moves the lamp and its aim together, applied once at the end', async () => {
+    it('dragging the ring moves the lamp alone (its aim point stays), applied once at the end', async () => {
       const calls: unknown[][] = [];
       const { container, ctl } = mount({ calls, lamps: [{ ...lamp, aimx: 3 }] as any, context: 'lamps' });
       const plan = stubPlan(container);
@@ -749,7 +749,7 @@ describe('PlanPane', () => {
       expect(updates[0][1]).toBe('lamp-7');
       const partial = updates[0][2] as Record<string, number>;
       expect(partial.x).toBeCloseTo(3, 6);
-      expect(partial.aimx).toBeCloseTo(4, 6);
+      expect(partial).not.toHaveProperty('aimx');
       expect(partial.y).toBeCloseTo(2, 6);
       expect(ctl.selectedLampIds).toEqual(['lamp-7']);
     });
@@ -821,7 +821,7 @@ describe('PlanPane', () => {
       expect(move.getAttribute('aria-pressed')).toBe('false');
     });
 
-    it('Delete removes the selected lamp; arrow keys nudge it with its aim', async () => {
+    it('Delete removes the selected lamp; arrow keys nudge it, its aim point staying', async () => {
       const calls: unknown[][] = [];
       const { ctl } = mount({ calls, lamps: [lamp] as any, context: 'lamps' });
       ctl.selectLamp('lamp-7');
@@ -829,7 +829,7 @@ describe('PlanPane', () => {
       await fireEvent.keyDown(window, { key: 'ArrowRight' });
       const [, , partial] = callsOf(calls, 'updateLamp')[0] as [string, string, Record<string, number>];
       expect(partial.x).toBeCloseTo(2.1, 6);
-      expect(partial.aimx).toBeCloseTo(2.1, 6);
+      expect(partial).not.toHaveProperty('aimx');
       await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
       expect(calls.at(-1)).toEqual(['removeLamp', 'lamp-7']);
     });
@@ -2124,7 +2124,7 @@ describe('PlanPane typing on the plan', () => {
   const lamp = { id: 'lamp-7', name: 'Beacon', lamp_type: 'krcl_222' as const, preset_id: 'beacon', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
   const field = (name: string) => screen.queryByRole('textbox', { name }) as HTMLInputElement | null;
 
-  it('double-click a lamp to type its X, Y and Z; the aim point comes along', async () => {
+  it('double-click a lamp to type its X, Y and Z; the aim point stays', async () => {
     const calls: unknown[][] = [];
     mount({ calls, lamps: [lamp] as any, context: 'lamps' });
     await tick();
@@ -2140,7 +2140,7 @@ describe('PlanPane typing on the plan', () => {
     expect(field('Beacon Z')).toBeNull();
     const [, id, partial] = callsOf(calls, 'updateLamp').at(-1) as [string, string, Record<string, number>];
     expect(id).toBe('lamp-7');
-    expect(partial).toMatchObject({ x: 2.5, y: 2, z: 3, aimx: 2.5, aimy: 2, aimz: 0.5 });
+    expect(partial).toEqual({ x: 2.5, y: 2, z: 3 });
   });
 
   it('a bad lamp value stays open, invalid; Escape cancels', async () => {

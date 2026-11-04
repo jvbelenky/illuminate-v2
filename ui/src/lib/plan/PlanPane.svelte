@@ -22,6 +22,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { pickMode } from '$lib/stores/pickMode';
 	import { surfaceName } from '$lib/utils/surfaces';
+	import { moveLampKeepingAim } from '$lib/utils/lampMove';
 	import { planShouldHandleKey, type PlanController } from './planController.svelte';
 
 	interface Props {
@@ -145,9 +146,9 @@
 		const z = parseCoordinateInput(c, units);
 		if (!lamp || x === null || y === null || z === null) return false;
 		closePaneInline();
-		const dx = x - lamp.x, dy = y - lamp.y, dz = z - lamp.z;
-		if (dx === 0 && dy === 0 && dz === 0) return true;
-		ctl.actions.updateLamp(id, { x: r6(x), y: r6(y), z: r6(z), aimx: r6(lamp.aimx + dx), aimy: r6(lamp.aimy + dy), aimz: r6(lamp.aimz + dz) });
+		if (x === lamp.x && y === lamp.y && z === lamp.z) return true;
+		// Only the lamp moves: its aim point stays
+		ctl.actions.updateLamp(id, moveLampKeepingAim(lamp, x, y, z));
 		return true;
 	}
 	function applyRename(target: 'lamp' | 'zone', id: string, old: string, [name]: string[]): boolean {
