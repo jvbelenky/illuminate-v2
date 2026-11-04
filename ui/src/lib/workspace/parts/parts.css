@@ -70,7 +70,7 @@
 	color: var(--color-text-muted);
 }
 .ep-field:focus-within {
-	border-color: var(--color-primary);
+	border-color: var(--color-focus);
 }
 .ep-field > span {
 	flex: none;
@@ -99,14 +99,26 @@
 .ep-field input:disabled {
 	opacity: 0.5;
 }
+/* An Add card: one spacing value (8 px) between its rows and controls and on all four sides */
 .ep-addcard {
+	--ep-card-gap: var(--spacing-sm);
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
-	padding: 8px 10px;
+	gap: var(--ep-card-gap);
+	padding: var(--ep-card-gap);
 	background: var(--color-bg-secondary);
 	border: 1px solid var(--color-border);
 	border-radius: var(--radius-md);
+}
+.ep-addcard .ep-grid {
+	gap: var(--ep-card-gap);
+}
+/* Light theme: on the cards' surface (an Add card, the open item card) the shared fill is
+   too close to the card, so buttons there take the stronger fill */
+[data-theme='light'] .ep-addcard,
+[data-theme='light'] .editor-row.open {
+	--color-btn-fill: var(--color-btn-fill-raised);
+	--color-btn-fill-hover: var(--color-btn-fill-raised-hover);
 }
 .ep-addcard-title {
 	margin: 0;
@@ -197,16 +209,8 @@
 	color: var(--color-text-muted);
 }
 @container (max-width: 299px) {
-	.ep-grid.ep-addbtns {
-		gap: 3px;
-	}
 	.ep-grid.ep-addbtns > button.secondary {
 		padding: 8px 0;
-	}
-}
-@container (max-width: 359px) {
-	.ep-addcard {
-		padding: 8px 4px;
 	}
 }
 @container (min-width: 340px) {

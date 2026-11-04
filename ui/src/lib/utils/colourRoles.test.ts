@@ -38,12 +38,27 @@ describe('colour roles', () => {
     }
   });
 
-  it('the open row is a raised card with no bar down its side', () => {
+  it('the open row is a card on the Add cards\' surface, its name bold in the text colour, no bar down its side', () => {
     const row = src('lib/workspace/parts/ItemRow.svelte');
     expect(row).not.toContain('inset 3px');
     const open = rule(row, '.editor-row.open');
-    expect(open).toContain('var(--color-card-raised)');
-    expect(open).toContain('var(--shadow-card-raised)');
+    expect(open).toContain('background: var(--color-bg-secondary)');
+    expect(rule(src('lib/workspace/parts/parts.css'), '.ep-addcard')).toContain('background: var(--color-bg-secondary)');
+    const name = rule(row, '.editor-row.open .name');
+    expect(name).toContain('var(--color-text)');
+    expect(name).not.toContain('--color-scene-selected');
+    expect(rule(row, '.editor-row.selected:not(.open) .name')).toContain('var(--color-scene-selected)');
+  });
+
+  it('keyboard focus and focused fields are the category blue, not red', () => {
+    const app = src('app.css');
+    expect(app).toContain('--color-focus: var(--color-highlight);');
+    for (const sel of ['input:not([type="checkbox"]):focus, select:focus', 'input:focus-visible', '[role="menuitem"]:focus-visible']) {
+      const body = rule(app, sel);
+      expect(body).toContain('var(--color-focus)');
+      expect(body).not.toContain('--color-accent');
+    }
+    expect(rule(src('lib/workspace/parts/parts.css'), '.ep-field:focus-within')).toContain('var(--color-focus)');
   });
 
   it('calculated zone cards keep the neutral border', () => {

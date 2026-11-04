@@ -164,7 +164,7 @@
 	.form-group :global(input):focus,
 	.form-group select:focus {
 		outline: none;
-		border-color: var(--color-accent);
+		border-color: var(--color-focus);
 		box-shadow: 0 0 0 2px var(--color-accent-alpha, rgba(99, 102, 241, 0.2));
 	}
 

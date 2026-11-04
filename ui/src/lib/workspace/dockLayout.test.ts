@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  DEFAULT_DOCK, sanitizeDock, movePanel, toggleMinimized, swapMain, columnWidth, panelWidth, dropIndex,
+  DEFAULT_DOCK, sanitizeDock, openingDock, chooseMain, withMain, movePanel, toggleMinimized, swapMain, columnWidth, panelWidth, dropIndex,
   resizeColumn, resetColumnWidth, COLUMN_LIMITS, fitColumns, MIN_MAIN_WIDTH,
   floatPanel, moveFloat, resizeFloat, dockFloating, floatInArea, FLOAT_DEFAULTS, FLOAT_MINS,
   splitPanels, resetSplit, splitPairs, fillPanel, minPanelHeight, BAR_HEIGHT,
@@ -11,6 +11,35 @@ import {
 const OLD: DockLayout = { left: ['editor'], right: ['mini', 'results'], minimized: [], main: '2d' };
 
 describe('dockLayout', () => {
+  describe('the main view a session opens on', () => {
+    it('defaults to 2D with the 3D view in the mini panel', () => {
+      expect(DEFAULT_DOCK.main).toBe('2d');
+      expect([...DEFAULT_DOCK.left, ...DEFAULT_DOCK.right]).toContain('mini');
+    });
+
+    it('chooseMain records the choice; withMain (a flow) does not, and clears an earlier one', () => {
+      const chosen = chooseMain(DEFAULT_DOCK, '3d');
+      expect(chosen).toMatchObject({ main: '3d', mainChosen: true });
+      const flowed = withMain(DEFAULT_DOCK, '3d');
+      expect(flowed.main).toBe('3d');
+      expect(flowed.mainChosen).toBeUndefined();
+      expect(withMain(chooseMain(DEFAULT_DOCK, '2d'), '3d').mainChosen).toBeUndefined();
+      expect(withMain(chosen, '3d')).toBe(chosen);
+    });
+
+    it('sanitizeDock keeps the main view and the choice within a session', () => {
+      expect(sanitizeDock(withMain(DEFAULT_DOCK, '3d')).main).toBe('3d');
+      expect(sanitizeDock(chooseMain(DEFAULT_DOCK, '3d')).mainChosen).toBe(true);
+      expect(sanitizeDock({ ...DEFAULT_DOCK, mainChosen: 'yes' }).mainChosen).toBeUndefined();
+    });
+
+    it('openingDock opens on 2D unless 3D was chosen', () => {
+      expect(openingDock(withMain(DEFAULT_DOCK, '3d')).main).toBe('2d');
+      expect(openingDock(chooseMain(DEFAULT_DOCK, '3d')).main).toBe('3d');
+      expect(openingDock(undefined)).toEqual(DEFAULT_DOCK);
+    });
+  });
+
   it('the default: editor over the mini view on the left, Results on the right, 2D main', () => {
     expect(DEFAULT_DOCK).toEqual({ left: ['editor', 'mini'], right: ['results'], minimized: [], main: '2d' });
     expect(sanitizeDock(undefined)).toEqual(DEFAULT_DOCK);
@@ -72,9 +101,10 @@ describe('dockLayout', () => {
     expect(toggleMinimized(once, 'mini')).toEqual(DEFAULT_DOCK);
   });
 
-  it('swapMain flips main', () => {
+  it('swapMain flips main, a choice the layout records', () => {
     expect(swapMain(DEFAULT_DOCK).main).toBe('3d');
-    expect(swapMain(swapMain(DEFAULT_DOCK))).toEqual(DEFAULT_DOCK);
+    expect(swapMain(DEFAULT_DOCK).mainChosen).toBe(true);
+    expect(swapMain(swapMain(DEFAULT_DOCK))).toEqual({ ...DEFAULT_DOCK, mainChosen: true });
   });
 
   it('default widths follow the window: the editor 22%, Results 24% (at most 420), within their limits', () => {

@@ -13,6 +13,11 @@ export interface DockLayout {
   right: DockPanelId[];
   minimized: DockPanelId[];
   main: MainView;
+  /**
+   * The user picked the main view (the 2D | 3D switch or the swap button). A stored
+   * layout without it opens on 2D: a flow that brought 3D forward is not a choice.
+   */
+  mainChosen?: boolean;
   /** Widths the user dragged, per column; a column without one follows its panels. */
   widths?: Partial<Record<DockColumn, number>>;
   /** Floating panels (px from the workspace's top left); a floating panel is in neither column. */
@@ -108,6 +113,7 @@ function withWidths(l: DockLayout, widths: Partial<Record<DockColumn, number>>):
 
 function fresh(l: DockLayout): DockLayout {
   let next: DockLayout = { left: [...l.left], right: [...l.right], minimized: [...l.minimized], main: l.main };
+  if (l.mainChosen) next.mainChosen = true;
   if (l.widths) next = withKey(next, 'widths', { ...l.widths });
   if (l.floats) {
     const floats: Partial<Record<DockPanelId, FloatBox>> = {};
@@ -239,9 +245,16 @@ export function sanitizeDock(raw: unknown): DockLayout {
     minimized: [...(minimized as DockPanelId[])],
     main: r.main,
   };
+  if (r.mainChosen === true) layout.mainChosen = true;
   layout = withWidths(layout, sanitizeWidths(r.widths));
   layout = withKey(layout, 'floats', floats);
   return withKey(layout, 'heights', sanitizeHeights(r.heights, [...layout.left, ...layout.right]));
+}
+
+/** A stored layout as a new session opens it: on 2D unless the user chose the main view. */
+export function openingDock(raw: unknown): DockLayout {
+  const l = sanitizeDock(raw);
+  return l.mainChosen || l.main === '2d' ? l : { ...fresh(l), main: '2d' };
 }
 
 /** Move a panel to a column at an index (in that column once the panel is lifted out, clamped). */
@@ -259,13 +272,25 @@ export function toggleMinimized(l: DockLayout, id: DockPanelId): DockLayout {
   return next;
 }
 
+/** The user swapped the views: their choice, kept across sessions. */
 export function swapMain(l: DockLayout): DockLayout {
-  return { ...fresh(l), main: l.main === '2d' ? '3d' : '2d' };
+  return chooseMain(l, l.main === '2d' ? '3d' : '2d');
 }
 
-/** The layout with `view` as the main view (the same object when it already is). */
+/** The user picked `view` as the main view: their choice, kept across sessions. */
+export function chooseMain(l: DockLayout, view: MainView): DockLayout {
+  return { ...fresh(l), main: view, mainChosen: true };
+}
+
+/**
+ * A flow brings `view` to the main view (the same object when it already is). It is not
+ * the user's choice: a later session opens on 2D again.
+ */
 export function withMain(l: DockLayout, view: MainView): DockLayout {
-  return l.main === view ? l : { ...fresh(l), main: view };
+  if (l.main === view) return l;
+  const next: DockLayout = { ...fresh(l), main: view };
+  delete next.mainChosen;
+  return next;
 }
 
 /** The window width default widths assume when none is known (px). */
