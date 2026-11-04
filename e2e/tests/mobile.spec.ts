@@ -2,7 +2,7 @@ import { type Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import { waitForApiIdle } from '../helpers/network';
 import { addLampFromPreset } from '../helpers/lamps';
-import { clickPlan, finishEditing, planSvg } from '../helpers/workspace';
+import { clickPlan, finishEditing, openStep, planSvg } from '../helpers/workspace';
 
 // The phone layout: a top bar (☰, file name, Calculate), the Design tab (one
 // view pinned over the editor, ⤢ for full screen) and the Results tab.
@@ -103,6 +103,7 @@ test.describe('Mobile layout', () => {
 
   test('⤢ takes the view full screen and ⤡, Escape or Back leave it', async ({ page }) => {
     await openMobile(page);
+    await openStep(page, 'room', 'floorplan');
     const viewHeight = async () => (await view(page).boundingBox())!.height;
     const pinned = await viewHeight();
 
@@ -129,7 +130,8 @@ test.describe('Mobile layout', () => {
 
   test('Draw new outline goes full screen and returns when the drawing ends', async ({ page }) => {
     await openMobile(page);
-    // A new project opens the editor at Room › Floorplan
+    // A new project opens on the summary; the editor at Room › Floorplan
+    await openStep(page, 'room', 'floorplan');
     await editor(page).getByRole('button', { name: 'Draw new outline' }).click();
     await expect(exitButton(page)).toBeVisible();
     await expect(editor(page)).toBeHidden();
@@ -146,6 +148,7 @@ test.describe('Mobile layout', () => {
 
   test('one finger pans the plan, in the editor and in the summary', async ({ page }) => {
     await openMobile(page);
+    await openStep(page, 'room', 'floorplan');
     await expectTouchPans(page);
     await finishEditing(page);
     await expectTouchPans(page);

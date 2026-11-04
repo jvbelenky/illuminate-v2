@@ -5,7 +5,7 @@ import { attachErrorGuard } from '../helpers/errors';
 import { setRoomDimensions } from '../helpers/room';
 import { addLampWithType, lampEditor } from '../helpers/lamps';
 import { drawObject, expandObjectsPanel, objectEditor, setObjectField, getObjectsFromBackend } from '../helpers/objects';
-import { clickPlan, finishEditing, planTool } from '../helpers/workspace';
+import { clickPlan, finishEditing, openStep, planTool } from '../helpers/workspace';
 
 test.describe('Guided workspace', () => {
   test('start chooser: See an example places a lamp, calculates and lands on the summary', async ({ page }) => {
@@ -81,6 +81,14 @@ test.describe('Guided workspace', () => {
     await expect(page.locator('button.landing-card')).toHaveCount(0);
   });
 
+  test('with the welcome turned off, a fresh empty project opens on the summary with the editor closed', async ({ page }) => {
+    await waitForSession(page);
+    await expect(page.locator('.summary-panel')).toBeVisible();
+    await expect(page.locator('button.editor-done')).toHaveCount(0);
+    await expect(page.locator('.editor-part')).toHaveCount(0);
+    await expect(page.locator('button.landing-card')).toHaveCount(0);
+  });
+
   test('status-bar hint walks from no lamps to a calculation', async ({ page }) => {
     await waitForSession(page);
 
@@ -144,6 +152,7 @@ test.describe('Guided workspace', () => {
 
   test('the Structures tab leads on from the floor plan; an added one lands in the room at once, named Structure 1', async ({ page }) => {
     await waitForSession(page);
+    await openStep(page, 'room', 'floorplan');
     await page.locator('button.editor-part[data-part="structures"]').click();
     await expect(page.locator('.editor-part[data-part="structures"][aria-selected="true"]')).toBeVisible();
     // Nothing selected: no shape tools in the strip
