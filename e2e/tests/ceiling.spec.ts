@@ -191,6 +191,8 @@ test.describe('Ceiling designer', () => {
 
   test('a ceiling item clicked in the 3D view opens the window on it', async ({ page }) => {
     await waitForSession(page);
+    // In the editor: the summary's 3D view does not pick ceiling items
+    await openStep(page, 'room', 'floorplan');
     const designer = await openCeilingDesigner(page);
     // A keep-out area starts in the middle of the room
     await designer.locator('.ceiling-part').getByRole('button', { name: 'Keep-out', exact: true }).click();

@@ -779,13 +779,13 @@
 
 			// With the start chooser turned off: a restored project with content lands on
 			// its summary (unless this tab already had a place); a new empty project
-			// opens the editor at Room › Floorplan.
+			// opens on the summary too, the editor closed.
 			if (!previewLampId && !$userSettings.showStartChooser) {
 				const hasContent = $lamps.length > 0 || $objects.length > 0 || $zones.some((z) => !z.isStandard);
 				if (wasRestoredFromStorage() && hasContent) {
 					if (!workspaceUiWasRestored()) finishEditing();
 				} else if (!wasRestoredFromStorage()) {
-					workspaceUi.reset('editor');
+					workspaceUi.reset('summary');
 					syncPlanContext();
 				}
 			}
