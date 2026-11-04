@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { FULL_SCREEN_OFF, followCanvasTool, toggleFullScreen, wantsFullScreen } from './mobileView';
 
 describe('mobile full-screen view', () => {
-	it('a drawing or Edit corners wants the full screen; other tools do not', () => {
+	it('a drawing or Edit vertices wants the full screen; other tools do not', () => {
 		expect(wantsFullScreen({ drawing: true, activeTool: null })).toBe(true);
 		expect(wantsFullScreen({ drawing: false, activeTool: 'corners' })).toBe(true);
 		expect(wantsFullScreen({ drawing: false, activeTool: 'move' })).toBe(false);

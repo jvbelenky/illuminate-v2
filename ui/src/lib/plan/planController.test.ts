@@ -264,7 +264,7 @@ describe('flows that need the 2D canvas', () => {
 
   test('with the canvas away, a flow asks for it and runs once it is there', async () => {
     const flows: [string, (c: PlanController) => void, string][] = [
-      ['Draw outline', (c) => c.requestNewOutline(), 'startDraw'],
+      ['Draw new outline', (c) => c.requestNewOutline(), 'startDraw'],
       ['structure draw', (c) => c.startObstacleDraw(), 'startDraw'],
       ['zone draw', (c) => c.startZoneDraw('plane'), 'startDraw'],
       ['placing', (c) => c.setPlacing(true), 'focus'],
@@ -539,7 +539,7 @@ describe('planes on surfaces', () => {
     expect(geometry).toMatchObject({ surface: 'floor', height: 1.8, fit_room: false });
   });
 
-  test('Edit corners is offered for a selected plane or volume whose outline the canvas shows', () => {
+  test('Edit vertices is offered for a selected plane or volume whose outline the canvas shows', () => {
     const floorPlane = { id: 'zf', type: 'plane', name: 'F', surface: 'floor', height: 1, fit_room: false, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
     const ceilPlane = { ...floorPlane, id: 'zc', surface: 'ceiling', height: 2.7, direction: -1 } as unknown as CalcZone;
     const vol = { id: 'zv', type: 'volume', name: 'V', fit_room: false, x_min: 1, x_max: 3, y_min: 1, y_max: 3, z_min: 0, z_max: 2, isStandard: false } as unknown as CalcZone;
@@ -556,7 +556,7 @@ describe('planes on surfaces', () => {
     expect(ctl.zoneCornersEditable).toBe(false);
   });
 
-  test('a zone is selected in select mode; Edit corners stays on through edits until Esc; a zone with no outline has no box', () => {
+  test('a zone is selected in select mode; Edit vertices stays on through edits until Esc; a zone with no outline has no box', () => {
     const floorPlane = { id: 'zf', type: 'plane', name: 'F', surface: 'floor', height: 1, fit_room: false, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
     const pt = { id: 'zp', type: 'point', name: 'P', x: 1, y: 1, z: 1, isStandard: false } as unknown as CalcZone;
     const { ctl, actions } = make({ zones: [floorPlane, pt] });
@@ -902,7 +902,7 @@ describe('one-shot edit-strip tools', () => {
     expect(ctl.onBackgroundDragStart(ptr(5, 5))).toBe(false);
   });
 
-  test('Edit corners ends after one corner edit; Escape cancels it', () => {
+  test('Edit vertices ends after one corner edit; Escape cancels it', () => {
     const { ctl } = make();
     ctl.canvas = canvas();
     ctl.toggleTool('corners');
@@ -927,7 +927,7 @@ describe('one-shot edit-strip tools', () => {
   });
 });
 
-describe('structure footprint: Draw footprint and Edit corners', () => {
+describe('structure footprint: Draw footprint and Edit vertices', () => {
   // A fake canvas that tracks drawing the way PlanCanvas does
   function drawCanvas(ctl: PlanController) {
     let before: Vertex[] = [];
@@ -987,7 +987,7 @@ describe('structure footprint: Draw footprint and Edit corners', () => {
     expect(onNeedCanvas).toHaveBeenCalledTimes(1);
   });
 
-  test('Edit corners toggles the selected structure between select and corners; deselecting goes back to select', () => {
+  test('Edit vertices toggles the selected structure between select and corners; deselecting goes back to select', () => {
     const { ctl, actions } = make();
     ctl.setContext('obstacles');
     ctl.canvas = drawCanvas(ctl);

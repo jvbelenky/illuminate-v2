@@ -33,6 +33,42 @@ test.describe('Guided workspace', () => {
     guard.assertClean();
   });
 
+  test('the welcome shows over the summary, editor closed; Esc leaves the summary; showing it again clears the checkmarks', async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    // No init script here: this test wants the chooser.
+    await page.goto('/');
+    await expect(page.locator('.app-status-bar')).toBeVisible({ timeout: 15_000 });
+    await waitForApiIdle(page);
+    const cards = page.locator('button.landing-card');
+    await expect(cards.first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.summary-panel')).toBeVisible();
+    await expect(page.locator('.editor-part')).toHaveCount(0);
+
+    // Esc dismisses it: the summary stays
+    await page.keyboard.press('Escape');
+    await expect(cards).toHaveCount(0);
+    await expect(page.locator('.summary-panel')).toBeVisible();
+    await expect(page.locator('.editor-part')).toHaveCount(0);
+
+    // Open the editor and tick Structures
+    await page.locator('.summary-section[data-edit="room:structures"]').click();
+    await expect(page.locator('.editor-part[data-part="structures"].visited')).toHaveCount(1);
+
+    // Help › Getting Started brings the welcome back: summary showing, every checkmark cleared
+    await page.locator('.menu-bar-item', { hasText: 'Help' }).locator('[role="button"]').click();
+    await page.getByRole('menuitem', { name: /Getting Started/ }).click();
+    await expect(cards.first()).toBeVisible();
+    await expect(page.locator('.summary-panel')).toBeVisible();
+    await expect(page.locator('.editor-part')).toHaveCount(0);
+    expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('illuminate_workspace_ui') || '{}').visited)).toEqual([]);
+
+    // Start designing opens the editor at the floor plan, with no Structures tick
+    await page.locator('button.landing-card[data-choice="empty"]').click();
+    await expect(page.locator('.editor-part[data-part="floorplan"][aria-selected="true"]')).toBeVisible();
+    await expect(page.locator('.editor-part[data-part="structures"].visited')).toHaveCount(0);
+    guard.assertClean();
+  });
+
   test('start chooser: Start designing opens the editor at the floor plan', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.app-status-bar')).toBeVisible({ timeout: 15_000 });
@@ -79,11 +115,10 @@ test.describe('Guided workspace', () => {
     await drawObject(page);
     const editor = objectEditor(page);
     const row = page.locator('.structures-part .editor-row');
-    // A drawn obstacle starts floor to ceiling
-    await expect(editor.locator('#object-full-height')).toBeChecked();
+    // A new structure is a box on the floor, its redrawn footprint keeping its bottom and top
+    await expect(editor.locator('#object-full-height')).not.toBeChecked();
     // The row carries no size readout; the editor shows the heights
     await expect(row.locator('.subtitle')).toHaveCount(0);
-    await editor.locator('#object-full-height').uncheck();
     await expect(editor.locator('#object-bottom')).toHaveValue(/^0(\.0+)?$/);
 
     // Bottom and top map onto z and height
@@ -107,19 +142,21 @@ test.describe('Guided workspace', () => {
     await expect(row).toHaveCount(1);
   });
 
-  test('the Structures tab leads on from the floor plan; a drawn one lands in the room at once', async ({ page }) => {
+  test('the Structures tab leads on from the floor plan; an added one lands in the room at once, named Structure 1', async ({ page }) => {
     await waitForSession(page);
     await page.locator('button.editor-part[data-part="structures"]').click();
     await expect(page.locator('.editor-part[data-part="structures"][aria-selected="true"]')).toBeVisible();
-    await planTool(page, 'Polygon').click();
-    await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(1);
-    await clickPlan(page, [[0.4, 0.6], [0.6, 0.6], [0.6, 0.4], [0.4, 0.4]], { close: true });
+    // Nothing selected: no shape tools in the strip
+    for (const name of ['Rectangle', 'Polygon']) await expect(planTool(page, name)).toHaveCount(0);
+    await page.getByRole('button', { name: '+ Add structure' }).click();
     await expect(page.locator('.structures-part .editor-row')).toHaveCount(1);
-    // Applied as soon as it closed, before the editor is left
+    // Applied at once, before the editor is left
     await expect.poll(async () => (await getObjectsFromBackend(page)).length).toBe(1);
+    await page.getByRole('button', { name: '+ Add structure' }).click();
+    await expect(page.locator('.structures-part .editor-row')).toHaveCount(2);
+    await expect(page.locator('.structures-part .editor-row .name')).toHaveText(['Structure 1', 'Structure 2']);
     await finishEditing(page);
-    const [o] = await getObjectsFromBackend(page);
-    expect(o.height).toBeCloseTo(2.7, 6);
-    expect(o.name).toBe('Structure 1');
+    const objects = await getObjectsFromBackend(page);
+    expect(objects.map((o) => o.name)).toEqual(['Structure 1', 'Structure 2']);
   });
 });

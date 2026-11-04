@@ -21,6 +21,10 @@
 	flex-direction: column;
 	gap: 2px;
 }
+/* One-line rows (structures, zones): spaced out to the pitch of the two-line lamp rows */
+.ep-list.roomy {
+	gap: 6px;
+}
 .ep-chip {
 	display: inline-block;
 	align-self: flex-start;

@@ -401,6 +401,12 @@
 	// Sizes in room units so they stay constant on screen: px is one CSS pixel at
 	// the canvas's current size and zoom (the short side shows view.size units).
 	const px = $derived(view.size / shortSide);
+	/**
+	 * The dash of a dimmed or disabled footprint, in screen pixels. Drawn in world
+	 * units (as a CSS dasharray would be) a 4 m dash with 3 m gaps left outlines
+	 * looking incomplete.
+	 */
+	const dash = $derived(`${px * 4} ${px * 3}`);
 	// The old fixed-560 reference scale, kept for pointer targets only (snapping measures real pixels, `px`)
 	const snapPx = $derived(view.size / 560);
 	// Minimums on screen: text 11 px, lamp dots 13 px across, corner handles 12 px, "+" handles 10 px
@@ -1372,7 +1378,7 @@
 			return {
 				at: [sx, sy - 30],
 				fields: [{ label: coordLabels[0], value: fmt(vx) }, { label: coordLabels[1], value: fmt(vy) }],
-				label: `Corner ${e.index + 1}`,
+				label: `Vertex ${e.index + 1}`,
 				blur: true,
 				select: true,
 				apply: ([a, b]) => {
@@ -1657,7 +1663,7 @@
 	<!-- Object footprints for context -->
 	{#each objects as obj (obj.id)}
 		{@const corners = objectFootprint(obj).map(([ox, oy]) => toSvg(ox, oy))}
-		<polygon points={corners.map(([cx, cy]) => `${cx},${cy}`).join(' ')} class="object-footprint" class:disabled={obj.enabled === false} stroke-width={px} />
+		<polygon points={corners.map(([cx, cy]) => `${cx},${cy}`).join(' ')} class="object-footprint" class:disabled={obj.enabled === false} stroke-width={px} stroke-dasharray={obj.enabled === false ? dash : undefined} />
 	{/each}
 
 	<!-- Host shapes (obstacles): filled, labelled, clickable with the edit tool -->
@@ -1676,6 +1682,7 @@
 			style:opacity={shape.opacity}
 			style:pointer-events={shape.inert ? 'none' : undefined}
 			stroke-width={px * (shape.selected || shape.highlighted ? 2 : 1.2)}
+			stroke-dasharray={shape.dimmed || shape.disabled ? dash : undefined}
 			role={onShapeClick ? 'button' : undefined}
 			tabindex={onShapeClick ? -1 : undefined}
 			aria-label={shape.name ?? shape.id}
@@ -1699,11 +1706,11 @@
 		<text x={lx + lampR + px * 4} y={ly + px * 4} class="lamp-label" style:opacity={lampOpacity[lamp.id]} font-size={px * 11}>{lamp.name || lamp.id}</text>
 	{/each}
 
-	<!-- Midpoint handles: click to insert a corner -->
+	<!-- Midpoint handles: click to insert a vertex -->
 	{#if editing && !drag && draft.length >= 3 && !transformBox}
 		{#each midpoints as [mx, my], i}
 			{@const [sx, sy] = toSvg(mx, my)}
-			<g class="mid-handle" role="button" tabindex="-1" aria-label="Insert corner on wall {i + 1}"
+			<g class="mid-handle" role="button" tabindex="-1" aria-label="Insert vertex on wall {i + 1}"
 				onpointerdown={(e) => onMidpointPointerDown(e, i)}>
 				{#if showHit}<circle cx={sx} cy={sy} r={5 * hitPx} class="mid-hit" />{/if}
 				<circle cx={sx} cy={sy} r={midR} stroke-width={px} />
@@ -1728,7 +1735,7 @@
 			stroke-width={drawing && i === 0 && draft.length >= 3 ? px * 3 : px * 2}
 			role="button"
 			tabindex="-1"
-			aria-label="Corner {i + 1}"
+			aria-label="Vertex {i + 1}"
 			onpointerdown={(e) => beginDrag(e, 'vertex', i)}
 			ondblclick={(e) => onVertexDblClick(e, i)}
 		/>
@@ -1987,7 +1994,6 @@
 	}
 	.object-footprint.disabled {
 		fill: none;
-		stroke-dasharray: 4 3;
 	}
 	.shape {
 		fill: color-mix(in srgb, var(--color-text, #1f2328) 22%, transparent);
@@ -2009,15 +2015,12 @@
 	.shape.highlighted {
 		fill: color-mix(in srgb, var(--color-scene-selected) 14%, transparent);
 		stroke: color-mix(in srgb, var(--color-scene-selected) 60%, transparent);
-		stroke-dasharray: none;
 	}
 	.shape.dimmed {
 		fill: color-mix(in srgb, var(--color-text-muted, #6b7280) 14%, transparent);
-		stroke-dasharray: 4 3;
 	}
 	.shape.disabled {
 		fill: none;
-		stroke-dasharray: 4 3;
 	}
 	.shape-label {
 		fill: var(--color-text, #1f2328);

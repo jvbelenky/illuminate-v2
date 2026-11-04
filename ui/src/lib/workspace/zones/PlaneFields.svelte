@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A plane: its Surface, Calculation, its distance from its surface with Flip,
-	// Fit to room, Redraw outline and Edit corners, then Geometry, Grid points and Display folded
+	// Fit to room, Redraw outline and Edit vertices, then Vertices (or a rectangle's ranges), Grid points and Display folded
 	// away. A vertical plane parallel to no wall (legacy) shows its geometry read-only.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
@@ -21,7 +21,7 @@
 	import {
 		CALC_MODES, DEFAULT_CUSTOM_FLAGS, calcModeFlags, showsFov, isLegacyPlane,
 		distanceLabel, distanceOf, distancePartial, flipPartial, type CustomFlags,
-		surfaceChoice, surfacePartial, fitPartial, rangePartial, shownFootprint, type Ranges,
+		surfaceChoice, surfacePartial, fitPartial, rangePartial, shownFootprint, geometryLabel, type Ranges,
 	} from './zoneFields';
 
 	interface Props {
@@ -229,13 +229,13 @@
 		</label>
 		<div class="shape-pair">
 			<button type="button" class="secondary plan-btn" class:active={drawing} aria-pressed={drawing} onclick={() => ctl.startZoneDraw('plane')}>Redraw outline</button>
-			<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing} onclick={() => ctl.editZoneCorners(zone.id)}>Edit corners</button>
+			<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing} onclick={() => ctl.editZoneCorners(zone.id)}>Edit vertices</button>
 		</div>
 	</div>
 {/if}
 
 {#if geometry}
-	<ZoneFold label="Geometry">
+	<ZoneFold label={geometryLabel(geometry.vertices, legacy)}>
 		<ZoneGeometry
 			vertices={geometry.vertices}
 			axes={geometry.axes}

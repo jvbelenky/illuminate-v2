@@ -24,7 +24,8 @@ export interface WorkspaceUiState {
 
 const STORAGE_KEY = 'illuminate_workspace_ui';
 
-const DEFAULTS: WorkspaceUiState = { mode: 'editor', stage: 'room', part: 'floorplan', visited: [] };
+// A fresh tab opens on the summary, the editor closed
+const DEFAULTS: WorkspaceUiState = { mode: 'summary', stage: 'room', part: 'floorplan', visited: [] };
 
 // True when this tab already had a saved place (a reload or back-navigation)
 let restored = false;

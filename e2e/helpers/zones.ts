@@ -27,7 +27,7 @@ export async function closeZone(page: Page): Promise<void> {
 }
 
 /** Open one of the zone editor's fold-outs (Geometry, Grid points, Display, Advanced); a no-op while open. */
-export async function openZoneFold(page: Page, name: 'Geometry' | 'Grid points' | 'Display' | 'Advanced'): Promise<void> {
+export async function openZoneFold(page: Page, name: 'Geometry' | 'Vertices' | 'Grid points' | 'Display' | 'Advanced'): Promise<void> {
   const fold = zoneEditor(page).locator('button.ep-disc').filter({ hasText: new RegExp(`^\\s*${name}`) });
   if ((await fold.getAttribute('aria-expanded')) !== 'true') await fold.click();
   await expect(fold).toHaveAttribute('aria-expanded', 'true');

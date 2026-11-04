@@ -16,7 +16,7 @@
 	}
 </script>
 
-<button type="button" class="editor-done" class:tabs={placement === 'tabs'} onclick={done}>Done</button>
+<button type="button" class="editor-done" class:tabs={placement === 'tabs'} title="Close the editor and show the summary" onclick={done}>Done</button>
 
 <style>
 	.editor-done {

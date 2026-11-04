@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { defaultZone, defaultRoom, defaultObject } from './project';
+import { defaultZone, defaultRoom, defaultObject, nextStructureName } from './project';
 
 describe('defaultZone', () => {
   it('honors minutes and seconds overrides for dose time', () => {
@@ -17,6 +17,18 @@ describe('defaultZone', () => {
     const zone = defaultZone(defaultRoom(), 0, { dose: true });
     expect(zone.minutes).toBe(0);
     expect(zone.seconds).toBe(0);
+  });
+});
+
+describe('nextStructureName', () => {
+  it('names structures as lamps are named: one past the count', () => {
+    expect(nextStructureName([])).toBe('Structure 1');
+    expect(nextStructureName([{ name: 'Desk' }, { name: 'object-2' }])).toBe('Structure 3');
+  });
+  it('steps past a name already taken', () => {
+    expect(nextStructureName([{ name: 'Structure 2' }])).toBe('Structure 3');
+    expect(nextStructureName([{ name: 'Structure 2' }, { name: 'Structure 3' }])).toBe('Structure 4');
+    expect(nextStructureName([{ name: 'Structure 1' }, { name: undefined }])).toBe('Structure 3');
   });
 });
 

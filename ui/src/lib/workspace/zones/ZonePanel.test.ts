@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe('ZonePanel', () => {
-  it('plane on floor shows Height and Flip, Redraw outline and Edit corners, Fit to room, and folded Geometry, Grid points and Display', async () => {
+  it('plane on floor shows Height and Flip, Redraw outline and Edit vertices, Fit to room, and folded Geometry, Grid points and Display', async () => {
     const { container, spy, controller } = renderPanel(floorPlane);
     expect(container.querySelector('.zone-panel')).not.toBeNull();
     expect(calcType()).toBeTruthy();
@@ -79,7 +79,7 @@ describe('ZonePanel', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Redraw outline' }));
     expect(controller.startZoneDraw).toHaveBeenCalledWith('plane');
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit corners' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit vertices' }));
     expect(controller.editZoneCorners).toHaveBeenCalledWith('zone-1');
 
     // Fit to room is a switch: off keeps the geometry as explicit bounds
@@ -140,15 +140,17 @@ describe('ZonePanel', () => {
     expect(spy).toHaveBeenLastCalledWith('zone-1', { x1: 0, x2: 3, y1: 0, y2: 4, vertices: undefined, fit_room: false });
   });
 
-  it('Geometry of a drawn outline: the corners table, its headings with no units', async () => {
+  it('a drawn outline: the fold is headed Vertices and holds the vertex table, its headings with no units', async () => {
     const { spy, container } = renderPanel({ ...floorPlane, fit_room: false, vertices: [[0.5, 0.5], [3, 0.5], [3, 2.5]] });
-    await fireEvent.click(fold('Geometry'));
+    expect(screen.queryByRole('button', { name: /^Geometry/ })).toBeNull();
+    await fireEvent.click(fold('Vertices'));
     expect(screen.queryByText('X Range')).toBeNull();
     const table = container.querySelector('.zp-corners')!;
-    expect(table.querySelector('.zp-label')!.textContent).toBe('Corners');
+    expect(table.querySelector('.zp-label')).toBeNull();
+    expect(container.querySelector('.zone-panel')!.textContent).not.toMatch(/Corner/);
     expect([...table.querySelectorAll('.zp-corner-head span')].map((s) => s.textContent)).toEqual(['', 'X', 'Y']);
     expect(table.textContent).not.toMatch(/\(m\)/);
-    await fireEvent.change(screen.getByLabelText('Corner 2 X'), { target: { value: '4' } });
+    await fireEvent.change(screen.getByLabelText('Vertex 2 X'), { target: { value: '4' } });
     expect(spy.mock.calls.at(-1)![1]).toMatchObject({ fit_room: false, x1: 0.5, x2: 4, y1: 0.5, y2: 2.5 });
   });
 
@@ -190,11 +192,11 @@ describe('ZonePanel', () => {
     expect(spy).toHaveBeenLastCalledWith('zone-3', { wall_vertices: [[0, 0], [4, 0], [4, 2], [0, 2]], fit_room: false });
   });
 
-  it('a wall plane with a drawn outline shows its corners as Along and Up', async () => {
+  it('a wall plane with a drawn outline shows its vertices as Along and Up', async () => {
     renderPanel({ ...wallPlane, fit_room: false, wall_vertices: [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5]] });
-    await fireEvent.click(fold('Geometry'));
-    expect(screen.getByLabelText('Corner 1 Along')).toBeTruthy();
-    expect(screen.getByLabelText('Corner 1 Up')).toBeTruthy();
+    await fireEvent.click(fold('Vertices'));
+    expect(screen.getByLabelText('Vertex 1 Along')).toBeTruthy();
+    expect(screen.getByLabelText('Vertex 1 Up')).toBeTruthy();
   });
 
   it('no Type switch, no presets, no Whole room checkbox, no Delete/Copy/Close', () => {
@@ -247,6 +249,8 @@ describe('ZonePanel', () => {
     expect(screen.getByRole('button', { name: 'Aim' })).toBeTruthy();
     expect(fold('Display').getAttribute('aria-expanded')).toBe('false');
     expect(fold('Advanced').getAttribute('aria-expanded')).toBe('false');
+    // Display comes after Advanced
+    expect(fold('Advanced').compareDocumentPosition(fold('Display')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Grid points/ })).toBeNull();
   });
 
@@ -272,7 +276,7 @@ describe('ZonePanel', () => {
     expect(fold('Grid points').getAttribute('aria-expanded')).toBe('true');
     expect(screen.queryByRole('group', { name: 'Calculation type' })).toBeNull();
     expect(screen.queryByLabelText(/^Height/)).toBeNull();
-    for (const name of ['Geometry', 'Display', 'Flip', 'Redraw outline', 'Edit corners']) {
+    for (const name of ['Geometry', 'Display', 'Flip', 'Redraw outline', 'Edit vertices']) {
       expect(screen.queryByRole('button', { name: new RegExp(`^${name}`) })).toBeNull();
     }
     expect(screen.queryByRole('switch')).toBeNull();

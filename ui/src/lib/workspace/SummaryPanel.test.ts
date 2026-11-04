@@ -53,7 +53,7 @@ describe('SummaryPanel', () => {
   it('describes a polygon room by its corner count', () => {
     const five: [number, number][] = [[0, 0], [10, 0], [10, 6], [5, 9], [0, 6]];
     setup({ vertices: five }, { shape: 'polygon' });
-    expect(kv('Dimensions')).toContain('5-corner outline · 9 ft high');
+    expect(kv('Dimensions')).toContain('5-vertex outline · 9 ft high');
   });
 
   it('section buttons open the matching editor step', async () => {

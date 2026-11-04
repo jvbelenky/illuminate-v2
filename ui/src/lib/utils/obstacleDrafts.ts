@@ -10,7 +10,7 @@
  * its yaw.
  */
 import type { SceneObject } from '$lib/types/project';
-import { ROOM_DEFAULTS } from '$lib/types/project';
+import { ROOM_DEFAULTS, nextStructureName } from '$lib/types/project';
 import { objectFootprint, polygonCentroid, type Vertex } from '$lib/utils/objectGeometry';
 import { polygonBoundingBox, normalizeCCW } from '$lib/utils/roomGeometry';
 
@@ -59,11 +59,10 @@ export function draftsFromObjects(objects: SceneObject[]): ObstacleDraft[] {
 
 /** A fresh draft from a drawn polygon: floor to ceiling (partitions are the common case), named "Structure N". */
 export function draftFromPolygon(vertices: Vertex[], roomZ: number, existing: ObstacleDraft[]): ObstacleDraft {
-  const n = existing.filter((d) => /^Structure \d+$/.test(d.name)).length;
   return {
     key: newDraftKey(),
     id: null,
-    name: `Structure ${n + 1}`,
+    name: nextStructureName(existing),
     vertices: normalizeCCW(vertices),
     z: 0,
     height: roomZ,

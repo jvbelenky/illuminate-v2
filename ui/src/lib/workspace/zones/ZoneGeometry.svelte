@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A zone's geometry, as the old calc zone editor showed it: a rectangle as two
 	// ranges (X Range, Y Range; on a wall Along and Up), a drawn outline as its
-	// corners table. Headings carry no units.
+	// vertex table (the fold above it is headed Vertices). Headings carry no units.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
 	import { isAxisRectangle } from '$lib/utils/zoneFootprint';
 	import { validatePolygon, type Vertex } from '$lib/utils/roomGeometry';
@@ -58,13 +58,12 @@
 	{/each}
 {:else}
 	<div class="zp-corners">
-		<span class="zp-label">Corners</span>
 		<div class="zp-corner-head"><span></span><span>{axes[0]}</span><span>{axes[1]}</span></div>
 		{#each vertices as [vx, vy], i (i)}
 			<div class="zp-corner-row">
 				<span>{i + 1}</span>
-				<label><span class="sr-only">Corner {i + 1} {axes[0]}</span><ValidatedNumberInput value={vx} {precision} {step} disabled={readonly} validate={(v) => validatePolygon(cornerMoved(i, 0, v)) === null} oncommit={(v) => setCorner(i, 0, v)} /></label>
-				<label><span class="sr-only">Corner {i + 1} {axes[1]}</span><ValidatedNumberInput value={vy} {precision} {step} disabled={readonly} validate={(v) => validatePolygon(cornerMoved(i, 1, v)) === null} oncommit={(v) => setCorner(i, 1, v)} /></label>
+				<label><span class="sr-only">Vertex {i + 1} {axes[0]}</span><ValidatedNumberInput value={vx} {precision} {step} disabled={readonly} validate={(v) => validatePolygon(cornerMoved(i, 0, v)) === null} oncommit={(v) => setCorner(i, 0, v)} /></label>
+				<label><span class="sr-only">Vertex {i + 1} {axes[1]}</span><ValidatedNumberInput value={vy} {precision} {step} disabled={readonly} validate={(v) => validatePolygon(cornerMoved(i, 1, v)) === null} oncommit={(v) => setCorner(i, 1, v)} /></label>
 			</div>
 		{/each}
 	</div>

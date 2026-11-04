@@ -40,7 +40,7 @@ function row(id: string): HTMLElement {
 
 /** Open the Floorplan part's collapsed Geometry disclosure. */
 async function openGeometry() {
-  await fireEvent.click(screen.getByRole('button', { name: /Geometry/ }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Vertices' }));
 }
 
 describe('Floorplan part', () => {
@@ -72,10 +72,10 @@ describe('Floorplan part', () => {
     expect(document.querySelector('input[type="file"]')).not.toBeNull();
   });
 
-  it('Draw outline sits below a divider; Upload floor plan image is on its own card after the outline', () => {
+  it('Draw new outline sits below a divider; Upload floor plan image is on its own card after the outline, Vertices below it', () => {
     mount({ part: 'floorplan' });
     const buttons = [...document.querySelectorAll('.plan-actions button')].map((b) => b.textContent?.trim());
-    expect(buttons).toEqual(['Draw outline']);
+    expect(buttons).toEqual(['Draw new outline']);
     const card = screen.getByRole('region', { name: 'Floor plan image' });
     expect(card.classList.contains('ep-addcard')).toBe(true);
     // No heading: the card itself is the separation
@@ -83,8 +83,9 @@ describe('Floorplan part', () => {
     expect(screen.queryByText('Floor plan image')).toBeNull();
     expect(card.contains(screen.getByRole('button', { name: 'Upload floor plan image' }))).toBe(true);
     expect(card.querySelector('input[type="file"]')).not.toBeNull();
-    const geometry = screen.getByRole('button', { name: /Geometry/ });
-    expect(geometry.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const vertices = screen.getByRole('button', { name: 'Vertices' });
+    expect(card.compareDocumentPosition(vertices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Geometry/ })).toBeNull();
     // No image: the card holds the upload alone
     expect(card.querySelectorAll('button')).toHaveLength(1);
   });
@@ -98,13 +99,15 @@ describe('Floorplan part', () => {
     expect(card.contains(screen.getByLabelText('Reference image opacity'))).toBe(true);
   });
 
-  it('Geometry holds only the corners', async () => {
+  it('Vertices holds only the vertex table, with Add vertex', async () => {
     mount({ part: 'floorplan' });
-    const disc = screen.getByRole('button', { name: /Geometry/ });
+    const disc = screen.getByRole('button', { name: 'Vertices' });
     expect(disc.getAttribute('aria-expanded')).toBe('false');
     expect(document.querySelector('.vertex-row')).toBeNull();
     await openGeometry();
     expect(document.querySelectorAll('.vertex-row')).toHaveLength(4);
+    expect(screen.getByRole('button', { name: 'Add vertex' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove vertex 1' })).toBeTruthy();
     expect(document.querySelector('.vertex-table')?.querySelector('.dims')).toBeNull();
     expect(screen.getByLabelText('Width')).toBeTruthy();
   });
@@ -185,7 +188,7 @@ describe('Structures part', () => {
     await tick();
     const adds = callsOf(calls, 'addObstacle');
     expect(adds).toHaveLength(1);
-    expect(adds[0][1]).toMatchObject({ shape: 'box' });
+    expect(adds[0][1]).toMatchObject({ shape: 'box', name: 'Structure 1' });
     const r = row('object-1');
     expect(r.classList.contains('open')).toBe(true);
     expect(r.querySelector('.stub-object-panel')).not.toBeNull();
@@ -213,6 +216,9 @@ describe('Structures part', () => {
     // The pencil sits with copy and delete, ahead of the eye and calculator
     const names = Array.from(row('object-9').querySelectorAll('.row-head button:not(.row-main)')).map((b) => b.getAttribute('aria-label'));
     expect(names.map((n) => n!.split(' ')[0])).toEqual(['Rename', 'Copy', 'Delete', 'Hide', 'Exclude']);
+    // Every icon button says what it does on hover
+    const titles = Array.from(row('object-9').querySelectorAll('.row-head button:not(.row-main)')).map((b) => b.getAttribute('title'));
+    expect(titles).toEqual(['Rename', 'Copy (Ctrl+D)', 'Delete (Del)', 'Hide in views', 'Exclude from calculation']);
     expect(row('object-9').querySelector('.actions + .divider + .toggles')).not.toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: /Rename/ }));
     let input = row('object-9').querySelector('input[type="text"]') as HTMLInputElement;
@@ -677,7 +683,7 @@ describe('Ceiling part', () => {
     for (const label of ['X', 'Y', 'Reference', 'Width', 'Length', 'Rotation']) expect(screen.getByLabelText(label)).toBeTruthy();
     expect((screen.getByLabelText('Width') as HTMLInputElement).value).toBe('2');
     expect((screen.getByLabelText('Length') as HTMLInputElement).value).toBe('1');
-    expect(screen.getAllByLabelText(/^Corner \d [XY]$/)).toHaveLength(8);
+    expect(screen.getAllByLabelText(/^Vertex \d [XY]$/)).toHaveLength(8);
     expect(screen.queryByRole('button', { name: /Geometry/ })).toBeNull();
     // Reference starts at Centre; Width keeps the middle fixed
     expect(screen.getByRole('radio', { name: 'Centre' }).getAttribute('aria-checked')).toBe('true');
@@ -763,14 +769,14 @@ function rowActions(id: string) {
 }
 
 describe('Copy and Delete in every item editor', () => {
-  it('a structure: the shape line with Redraw footprint and Edit corners; Copy and Delete are row icons', async () => {
+  it('a structure: the shape line with Redraw footprint and Edit vertices; Copy and Delete are row icons', async () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'structures', calls, objects: [box] });
     await fireEvent.click(main('object-9'));
     const r = row('object-9');
     expect(r.querySelector('.structure-shape')?.textContent).toMatch(/Rectangle/);
     const draw = within(r).getByRole('button', { name: 'Redraw footprint' });
-    const corners = within(r).getByRole('button', { name: 'Edit corners' });
+    const corners = within(r).getByRole('button', { name: 'Edit vertices' });
     expect(draw.getAttribute('aria-pressed')).toBe('false');
     // Copy and Delete are icons in the row header, not in the editor
     expect(r.querySelector('.row-body .structure-shape')).not.toBeNull();
@@ -787,39 +793,39 @@ describe('Copy and Delete in every item editor', () => {
     ctl.cancelDraw();
     await tick();
     expect(ctl.drawing).toBe(false);
-    // Edit corners is a toggle: pressed while the corners are edited
+    // Edit vertices is a toggle: pressed while the corners are edited
     await fireEvent.click(corners);
     await tick();
     expect(ctl.shapeMode).toBe('corners');
-    expect(within(row('object-9')).getByRole('button', { name: 'Edit corners' }).getAttribute('aria-pressed')).toBe('true');
-    await fireEvent.click(within(row('object-9')).getByRole('button', { name: 'Edit corners' }));
+    expect(within(row('object-9')).getByRole('button', { name: 'Edit vertices' }).getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(within(row('object-9')).getByRole('button', { name: 'Edit vertices' }));
     await tick();
     expect(ctl.shapeMode).toBe('select');
     expect(ctl.selectedId).toBe('object-9');
-    expect(within(row('object-9')).getByRole('button', { name: 'Edit corners' }).getAttribute('aria-pressed')).toBe('false');
+    expect(within(row('object-9')).getByRole('button', { name: 'Edit vertices' }).getAttribute('aria-pressed')).toBe('false');
   });
 
-  it("a keep-out area's editor: Redraw footprint and Edit corners", async () => {
+  it("a keep-out area's editor: Redraw footprint and Edit vertices", async () => {
     const keep = { id: 'ceiling-2', kind: 'keep' as const, name: 'Duct', vertices: [[1, 1], [3, 1], [3, 2], [1, 2]] as [number, number][], yaw: 0 };
     const { ctl } = mount({ part: 'ceiling', ceiling: { tileSize: 'none', align: 'tl', offset: [0, 0], ceilingShown: true, tilesShown: true, itemsShown: true, items: [keep] } });
     ctl.selectCeilingItem('ceiling-2');
     await tick();
     const r = row('ceiling-2');
-    await fireEvent.click(within(r).getByRole('button', { name: 'Edit corners' }));
+    await fireEvent.click(within(r).getByRole('button', { name: 'Edit vertices' }));
     await tick();
     expect(ctl.shapeMode).toBe('corners');
-    expect(within(row('ceiling-2')).getByRole('button', { name: 'Edit corners' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(row('ceiling-2')).getByRole('button', { name: 'Edit vertices' }).getAttribute('aria-pressed')).toBe('true');
     await fireEvent.click(within(row('ceiling-2')).getByRole('button', { name: 'Redraw footprint' }));
     await tick();
     expect(ctl.drawing).toBe(true);
     expect(ctl.redrawKeepOutId).toBe('ceiling-2');
   });
 
-  it('a polygon structure reads Polygon, N corners', async () => {
+  it('a polygon structure reads Polygon, N vertices', async () => {
     const poly = { ...box, shape: 'extrusion' as const, vertices: [[-1, -1], [1, -1], [1, 1], [0, 2], [-1, 1]] as [number, number][] };
     mount({ part: 'structures', objects: [poly] });
     await fireEvent.click(main('object-9'));
-    expect(row('object-9').querySelector('.structure-shape')?.textContent).toMatch(/Polygon, 5 corners/);
+    expect(row('object-9').querySelector('.structure-shape')?.textContent).toMatch(/Polygon, 5 vertices/);
   });
 
   it('a structure: a finished Redraw footprint replaces its footprint', async () => {
@@ -837,7 +843,7 @@ describe('Copy and Delete in every item editor', () => {
     expect(updates[0][1]).toBe('object-9');
     expect(updates[0][2]).toMatchObject({ shape: 'extrusion', yaw: 0 });
     await tick();
-    expect(row('object-9').querySelector('.structure-shape')?.textContent).toMatch(/Polygon, 5 corners/);
+    expect(row('object-9').querySelector('.structure-shape')?.textContent).toMatch(/Polygon, 5 vertices/);
   });
 
   it('a structure: Copy duplicates it and opens the copy; Delete removes it', async () => {

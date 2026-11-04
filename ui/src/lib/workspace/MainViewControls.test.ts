@@ -9,6 +9,7 @@ import type { PlanController } from '$lib/plan/planController.svelte';
 vi.mock('$lib/utils/calculate', () => ({ performCalculation: vi.fn().mockResolvedValue({ success: true }) }));
 
 const rect: [number, number][] = [[0, 0], [6, 0], [6, 4], [0, 4]];
+const box = { id: 'object-9', name: 'Desk', shape: 'box' as const, width: 1, length: 1, height: 0.75, x: 2, y: 2, z: 0, yaw: 0, pitch: 0, roll: 0, reflectance: 0.1, transmittance: 0, enabled: true };
 const lamp = { id: 'lamp-7', name: 'Beacon', lamp_type: 'krcl_222' as const, preset_id: 'beacon', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
 
 function mount(props: Record<string, unknown> = {}) {
@@ -25,12 +26,12 @@ describe('MainViewControls', () => {
 
   it('Undo | Redo, a divider and the edit strip top-left; Calculate top-right; the view picker bottom-left; 2D | 3D bottom-middle', async () => {
     const onSelectMain = vi.fn();
-    const { container, ctl } = mount({ controls: '2d', context: 'obstacles', onSelectMain });
+    const { container, ctl } = mount({ controls: '2d', context: 'lamps', lamps: [lamp], onSelectMain });
     const tl = corner(container, 'tl');
     const strip = tl.querySelector('.plan-toolbar') as HTMLElement;
     const tools = [...strip.querySelectorAll('button')];
-    expect(tools.map((b) => b.getAttribute('aria-label'))).toEqual(['Rectangle', 'Polygon']);
-    expect(tools.map((b) => b.title)).toEqual(['Rectangle', 'Polygon']);
+    expect(tools.map((b) => b.getAttribute('aria-label'))).toEqual(['Move', 'Aim', 'Copy', 'Delete']);
+    expect(tools.map((b) => b.title)).toEqual(['Move (M)', 'Aim (A)', 'Copy (Ctrl+D)', 'Delete (Del)']);
     for (const b of tools) expect(b.textContent?.trim()).toBe(b.getAttribute('aria-label'));
     // Undo | Redo first, then the divider, then the strip
     expect(tl.firstElementChild!.getAttribute('aria-label')).toBe('History');
@@ -104,11 +105,30 @@ describe('MainViewControls', () => {
     expect(onNeedCanvas).toHaveBeenCalledTimes(1);
   });
 
-  it('Rectangle in 3D (structures) asks for the 2D view', async () => {
+  it('Edit vertices in 3D (a selected structure) asks for the 2D view', async () => {
     const onNeedCanvas = vi.fn();
-    const { container } = mount({ controls: '3d', mini: true, context: 'obstacles', onNeedCanvas });
-    await fireEvent.click(within(corner(container, 'tl')).getByRole('button', { name: 'Rectangle' }));
+    const { container, ctl } = mount({ controls: '3d', mini: true, context: 'obstacles', objects: [box], onNeedCanvas });
+    ctl.selectObstacle('object-9');
+    await tick();
+    await fireEvent.click(within(corner(container, 'tl')).getByRole('button', { name: 'Edit vertices' }));
     expect(onNeedCanvas).toHaveBeenCalledTimes(1);
+  });
+
+  it('with no structure or zone selected the strip has no shape tools, and its divider hides', async () => {
+    for (const context of ['obstacles', 'zones'] as const) {
+      const { container, unmount } = mount({ controls: '2d', context, objects: [box] });
+      const tl = corner(container, 'tl');
+      expect(tl.querySelector('.plan-toolbar')).toBeNull();
+      for (const name of ['Rectangle', 'Polygon']) expect(within(tl).queryByRole('button', { name })).toBeNull();
+      expect(tl.lastElementChild!.classList.contains('tl-divider')).toBe(true);
+      unmount();
+    }
+    // A selected structure gets its tools
+    const { container, ctl } = mount({ controls: '2d', context: 'obstacles', objects: [box] });
+    ctl.selectObstacle('object-9');
+    await tick();
+    const strip = corner(container, 'tl').querySelector('.plan-toolbar') as HTMLElement;
+    expect([...strip.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Edit vertices', 'Rotate 90°', 'Copy', 'Delete']);
   });
 
   it('the summary shows Undo | Redo alone top-left, and keeps the view picker and Calculate', () => {

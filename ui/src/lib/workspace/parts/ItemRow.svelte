@@ -131,7 +131,7 @@
 			class:pressed={!hidden}
 			onclick={onToggleHidden}
 			aria-label={hidden ? `Show ${label}` : `Hide ${label}`}
-			title={hidden ? 'Show' : 'Hide'}
+			title={hidden ? 'Show in views' : 'Hide in views'}
 		>
 			<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 				{#if !hidden}
@@ -152,7 +152,7 @@
 			class:pressed={enabled}
 			onclick={onToggleEnabled}
 			aria-label={enabled ? `Exclude ${label} from calculations` : `Include ${label} in calculations`}
-			title={enabled ? 'Exclude from calc' : 'Include in calc'}
+			title={enabled ? 'Exclude from calculation' : 'Include in calculation'}
 		>
 			<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 				<rect x="4" y="2" width="16" height="20" rx="2" />

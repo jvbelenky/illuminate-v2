@@ -39,7 +39,7 @@ export function unitsSelect(page: Page) {
   return page.locator('.floorplan-part').getByLabel('Units', { exact: true });
 }
 
-/** Open the Floorplan part's Geometry disclosure, which holds the Corners table (no-op when open). */
+/** Open the Floorplan part's Vertices disclosure, which holds the vertex table (no-op when open). */
 export async function openGeometry(page: Page): Promise<void> {
   await expandRoomPanel(page);
   const toggle = page.locator('.floorplan-part button.ep-disc');

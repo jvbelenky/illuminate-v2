@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A point: Position and Aim at (X / Y / Z each), Place and Aim picks, then
-	// Display and Advanced (the custom flags and field of view).
+	// Advanced (the custom flags and field of view), then Display.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
 	import { userSettings } from '$lib/stores/settings';
 	import { pickMode } from '$lib/stores/pickMode';
@@ -57,8 +57,6 @@
 	<button type="button" class="secondary plan-btn" class:active={$pickMode?.type === 'aim_point'} aria-pressed={$pickMode?.type === 'aim_point'} onclick={() => togglePick('aim_point', aim)}>Aim</button>
 </div>
 
-<DisplayFold {zone} {commit} kind="point" />
-
 <ZoneFold label="Advanced">
 	<label class="ep-check"><input type="checkbox" checked={zone.horiz ?? false} onchange={(e) => commit({ horiz: e.currentTarget.checked })} /><span>cos(&theta;) weighting</span></label>
 	<label class="ep-check"><input type="checkbox" checked={zone.vert ?? false} onchange={(e) => commit({ vert: e.currentTarget.checked })} /><span>sin(&theta;) weighting</span></label>
@@ -68,3 +66,5 @@
 		<label class="zp-field"><span>Horizontal FOV (°)</span><ValidatedNumberInput id="point-fov-horiz" value={zone.fov_horiz ?? 360} oncommit={(v) => set('fov_horiz', zone.fov_horiz ?? 360, v)} min={0} step={1} /></label>
 	</div>
 </ZoneFold>
+
+<DisplayFold {zone} {commit} kind="point" />

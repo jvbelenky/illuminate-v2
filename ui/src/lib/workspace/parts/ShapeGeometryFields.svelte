@@ -164,12 +164,12 @@
 		</div>
 	{/if}
 	<div class="sg-corners">
-		<span class="sg-label">Corners</span>
+		<span class="sg-label">Vertices</span>
 		{#each vertices as [vx, vy], i (i)}
 			<div class="sg-corner">
 				<span>{i + 1}</span>
-				<input type="number" step="any" aria-label="Corner {i + 1} {axes[0]}" value={shown(vx)} disabled={readonly} onchange={(e) => setCorner(i, 0, e)} />
-				<input type="number" step="any" aria-label="Corner {i + 1} {axes[1]}" value={shown(vy)} disabled={readonly} onchange={(e) => setCorner(i, 1, e)} />
+				<input type="number" step="any" aria-label="Vertex {i + 1} {axes[0]}" value={shown(vx)} disabled={readonly} onchange={(e) => setCorner(i, 0, e)} />
+				<input type="number" step="any" aria-label="Vertex {i + 1} {axes[1]}" value={shown(vy)} disabled={readonly} onchange={(e) => setCorner(i, 1, e)} />
 			</div>
 		{/each}
 	</div>

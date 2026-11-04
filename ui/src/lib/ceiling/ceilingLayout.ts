@@ -82,7 +82,7 @@ export const CeilingLayoutSchema = z.object({
   itemsShown: z.boolean(),
   items: z.array(ItemSchema).max(MAX_CEILING_ITEMS)
     .refine((items) => new Set(items.map((i) => i.id)).size === items.length, 'Duplicate ceiling item ids')
-    .refine((items) => items.reduce((n, i) => n + ('vertices' in i ? i.vertices.length : 0), 0) <= MAX_CEILING_VERTICES, 'Too many keep-out corners'),
+    .refine((items) => items.reduce((n, i) => n + ('vertices' in i ? i.vertices.length : 0), 0) <= MAX_CEILING_VERTICES, 'Too many keep-out vertices'),
 });
 
 /** A saved layout, validated; null when absent or malformed. */

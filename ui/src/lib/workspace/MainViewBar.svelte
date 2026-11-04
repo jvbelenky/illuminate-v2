@@ -9,9 +9,9 @@
 
 	let { main, onSelect }: Props = $props();
 
-	const OPTIONS: { value: MainView; label: string }[] = [
-		{ value: '2d', label: '2D' },
-		{ value: '3d', label: '3D' }
+	const OPTIONS: { value: MainView; label: string; title: string }[] = [
+		{ value: '2d', label: '2D', title: 'Show the 2D plan' },
+		{ value: '3d', label: '3D', title: 'Show the 3D view' }
 	];
 </script>
 
@@ -21,6 +21,7 @@
 			type="button"
 			class="mv-btn"
 			data-view={o.value}
+			title={o.title}
 			aria-pressed={main === o.value}
 			onclick={() => main !== o.value && onSelect(o.value)}>{o.label}</button
 		>

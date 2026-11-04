@@ -333,7 +333,7 @@ describe('each block drops alone', () => {
     }
   });
 
-  it('a ceiling layout with more than 20 000 keep-out corners in all drops only the ceiling block', () => {
+  it('a ceiling layout with more than 20 000 keep-out vertices in all drops only the ceiling block', () => {
     const keep = (n: number) => ({ id: `ceiling-${n}`, kind: 'keep', name: 'K', yaw: 0, vertices: Array.from({ length: 1000 }, (_, i) => [Math.cos(i / 159.155), Math.sin(i / 159.155)]) });
     const parsed = full();
     parsed.illuminate.ceilingLayout = { ...layout, items: Array.from({ length: 20 }, (_, i) => keep(i + 1)) };

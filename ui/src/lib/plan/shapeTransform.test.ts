@@ -178,7 +178,7 @@ describe('snapping helpers', () => {
 describe('shapeKind', () => {
   it('names rectangles in their own frame and polygons by corner count', () => {
     expect(shapeKind(rect([0, 0], 2, 1, 37), 37)).toBe('Rectangle');
-    expect(shapeKind([[0, 0], [2, 0], [3, 1], [0, 1]], 0)).toBe('Polygon, 4 corners');
-    expect(shapeKind([[0, 0], [2, 0], [0, 1]], 0)).toBe('Polygon, 3 corners');
+    expect(shapeKind([[0, 0], [2, 0], [3, 1], [0, 1]], 0)).toBe('Polygon, 4 vertices');
+    expect(shapeKind([[0, 0], [2, 0], [0, 1]], 0)).toBe('Polygon, 3 vertices');
   });
 });

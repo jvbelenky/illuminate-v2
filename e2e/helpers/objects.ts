@@ -35,19 +35,20 @@ export async function addObject(page: Page): Promise<void> {
 }
 
 /**
- * Draw an obstacle footprint on the 2D plan with the edit strip's Polygon. The
- * corners (fractions of the canvas) default to a square over the middle of the plan.
+ * A structure with a drawn footprint: + Add structure (with nothing selected the
+ * strip has no shape tools), then its Redraw footprint on the 2D plan. The
+ * vertices (fractions of the canvas) default to a square over the middle of the plan.
  */
 export async function drawObject(
   page: Page,
   corners: [number, number][] = [[0.4, 0.6], [0.6, 0.6], [0.6, 0.4], [0.4, 0.4]]
 ): Promise<void> {
-  await expandObjectsPanel(page);
-  const before = await objectCount(page);
-  await planTool(page, 'Polygon').click();
+  await addObject(page);
+  const id = await page.locator('.structures-part .editor-row.open').getAttribute('data-id');
+  await page.locator('.structures-part .editor-row.open').getByRole('button', { name: 'Redraw footprint' }).click();
   await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(1);
   await clickPlan(page, corners, { close: true });
-  await expect.poll(() => objectCount(page)).toBe(before + 1);
+  await expect.poll(async () => (await getObjectsFromStore(page)).find((o) => o.id === id)?.vertices?.length).toBe(corners.length);
   await waitForApiIdle(page);
   // The drawn obstacle is selected; open its editor if the row is not open yet
   if ((await page.locator('.structures-part .editor-row.open').count()) === 0) {

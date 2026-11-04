@@ -53,7 +53,7 @@
 	const area = $derived(polygonArea(scene.vertices));
 	const dimensions = $derived(
 		scene.room.shape === 'polygon'
-			? `${scene.vertices.length}-corner outline · ${len(scene.roomZ)} ${abbrev} high`
+			? `${scene.vertices.length}-vertex outline · ${len(scene.roomZ)} ${abbrev} high`
 			: `${len(scene.room.x)} × ${len(scene.room.y)} × ${len(scene.roomZ)} ${abbrev}`,
 	);
 	const reflections = $derived.by(() => {
@@ -87,7 +87,7 @@
 <div class="summary-panel">
 	{#each SECTIONS as s (s.edit)}
 		<section class="summary-block">
-			<button type="button" class="summary-section" data-edit={s.edit} onclick={() => open(s.edit)}>
+			<button type="button" class="summary-section" data-edit={s.edit} title="Edit {s.label.toLowerCase()}" onclick={() => open(s.edit)}>
 				<span>{s.label}</span>
 				<svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
 			</button>

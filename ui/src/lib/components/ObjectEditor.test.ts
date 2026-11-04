@@ -139,9 +139,9 @@ describe('ObjectEditor', () => {
     const spy = vi.spyOn(project, 'updateObject').mockImplementation(() => {});
     renderEditor();
     await openGeometry();
-    expect(num('Corner 1 X')).toBeCloseTo(1.4, 6);
-    expect(num('Corner 1 Y')).toBeCloseTo(2.7, 6);
-    await fireEvent.change(screen.getByLabelText('Corner 3 X'), { target: { value: '3' } });
+    expect(num('Vertex 1 X')).toBeCloseTo(1.4, 6);
+    expect(num('Vertex 1 Y')).toBeCloseTo(2.7, 6);
+    await fireEvent.change(screen.getByLabelText('Vertex 3 X'), { target: { value: '3' } });
     const [, partial] = lastUpdate(spy);
     expect(partial.shape).toBe('extrusion');
     expect(partial.vertices).toHaveLength(4);
@@ -153,7 +153,7 @@ describe('ObjectEditor', () => {
     const l: SceneObject = { ...box, shape: 'extrusion', vertices: [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]], width: 2, length: 2, yaw: 30 };
     renderEditor(l);
     await openGeometry();
-    expect(screen.getByLabelText('Corner 6 X')).toBeTruthy();
+    expect(screen.getByLabelText('Vertex 6 X')).toBeTruthy();
     const shownX = num('X');
     await fireEvent.change(screen.getByLabelText('X'), { target: { value: String(shownX + 1) } });
     const [, partial] = lastUpdate(spy);

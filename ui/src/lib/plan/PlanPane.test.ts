@@ -112,14 +112,14 @@ describe('PlanPane', () => {
     expect(labels(container)).toEqual(['Move', 'Aim', 'Copy', 'Delete']);
     unmount();
     const out = render(Harness, { props: { ...baseProps, context: 'outline' } });
-    expect(labels(out.container)).toEqual(['Draw', 'Edit corners']);
+    expect(labels(out.container)).toEqual(['Draw', 'Edit vertices']);
     out.unmount();
-    // Shapes: with nothing selected, a new Rectangle or Polygon
+    // Structures and zones: nothing selected, no shape tools (their Add cards make them)
     const zones = render(Harness, { props: { ...baseProps, context: 'zones' } });
-    expect(labels(zones.container)).toEqual(['Rectangle', 'Polygon']);
+    expect(zones.container.querySelector('.plan-toolbar')).toBeNull();
     zones.unmount();
     const obst = render(Harness, { props: { ...baseProps, context: 'obstacles' } });
-    expect(labels(obst.container)).toEqual(['Rectangle', 'Polygon']);
+    expect(obst.container.querySelector('.plan-toolbar')).toBeNull();
     obst.unmount();
     const ceil = render(Harness, { props: { ...baseProps, context: 'ceiling' } });
     expect(labels(ceil.container)).toEqual(['Rectangle', 'Polygon', 'Move grid']);
@@ -894,16 +894,16 @@ describe('PlanPane', () => {
       expect((partial.vertices as unknown[]).length).toBe(4);
     });
 
-    it('a selected plane shows its box; Edit corners in the strip shows its corners until Done', async () => {
+    it('a selected plane shows its box; Edit vertices in the strip shows its corners until Done', async () => {
       const calls: unknown[][] = [];
       const { container, ctl } = mount({ calls, zones: [wholePlane] as any, context: 'zones' });
       const labels = () => Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.getAttribute('aria-label'));
       ctl.selectZone('zone-9');
       await tick();
-      expect(labels()).toEqual(['Edit corners', 'Rotate 90°', 'Copy', 'Delete']);
+      expect(labels()).toEqual(['Edit vertices', 'Rotate 90°', 'Copy', 'Delete']);
       expect(container.querySelector('.transform-box')).not.toBeNull();
       expect(container.querySelectorAll('circle.vertex')).toHaveLength(0);
-      await fireEvent.click(screen.getByRole('button', { name: 'Edit corners' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Edit vertices' }));
       expect(labels()).toEqual(['Done']);
       const done = screen.getByRole('button', { name: 'Done' });
       expect(done.getAttribute('aria-pressed')).toBe('true');
@@ -920,7 +920,7 @@ describe('PlanPane', () => {
       // Still editing corners until Done
       expect(labels()).toEqual(['Done']);
       await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
-      expect(labels()).toEqual(['Edit corners', 'Rotate 90°', 'Copy', 'Delete']);
+      expect(labels()).toEqual(['Edit vertices', 'Rotate 90°', 'Copy', 'Delete']);
       expect(ctl.selectedZoneId).toBe('zone-9');
     });
 
@@ -994,7 +994,9 @@ describe('PlanPane', () => {
       const { container, ctl } = mount({ calls, context: 'zones' });
       ctl.setSurface('wall:1');
       await tick();
-      await fireEvent.click(screen.getByRole('button', { name: 'Polygon' }));
+      ctl.startShapeDraw('polygon');
+      await tick();
+      expect(screen.getByRole('button', { name: 'Polygon' }).getAttribute('aria-pressed')).toBe('true');
       await drawTriangle(container);
       await tick();
       const [, type, geometry] = callsOf(calls, 'addZone')[0] as [string, string, Record<string, unknown>];
@@ -1124,7 +1126,7 @@ describe('PlanPane reference image and calibration', () => {
   it('offers every length unit and shows the converted outline after switching to centimeters', async () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'floorplan', calls });
-    await fireEvent.click(screen.getByRole('button', { name: /Geometry/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Vertices' }));
     const select = screen.getByLabelText('Units') as HTMLSelectElement;
     expect(Array.from(select.options).map((o) => o.value)).toEqual([...LENGTH_UNITS]);
     await fireEvent.change(select, { target: { value: 'centimeters' } });
@@ -1242,7 +1244,7 @@ describe('PlanPane reference image and calibration', () => {
     const { container } = mount({ part: 'floorplan', vertices: [], floorplan: placement, image });
     const plan = container.querySelector('svg.plan') as SVGSVGElement;
     const before = plan.getAttribute('viewBox')!.split(' ').map(Number);
-    await fireEvent.click(screen.getByRole('button', { name: /Geometry/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Vertices' }));
     await fireEvent.change(screen.getByLabelText('Units'), { target: { value: 'centimeters' } });
     await tick();
     const after = plan.getAttribute('viewBox')!.split(' ').map(Number);
@@ -1352,7 +1354,7 @@ describe('PlanPane reference image and calibration', () => {
       await tick();
       const plan = stubPlan(container);
       const labels = () => Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.getAttribute('aria-label'));
-      expect(labels()).toEqual(['Edit corners', 'Rotate 90°', 'Copy', 'Delete']);
+      expect(labels()).toEqual(['Edit vertices', 'Rotate 90°', 'Copy', 'Delete']);
       const move = async (target: Element, from: [number, number], to: [number, number], altKey = false) => {
         const [x0, y0] = px(plan, ...from);
         const [x1, y1] = px(plan, ...to);
@@ -1436,7 +1438,8 @@ describe('PlanPane reference image and calibration', () => {
       const calls: unknown[][] = [];
       const { container, ctl } = mount({ calls, context: 'obstacles' });
       const plan = stubPlan(container);
-      await fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
+      ctl.startShapeDraw('rect');
+      await tick();
       expect(screen.getByRole('button', { name: 'Rectangle' }).getAttribute('aria-pressed')).toBe('true');
       const [x0, y0] = px(plan, 1, 1);
       const [x1, y1] = px(plan, 3, 2);
@@ -1650,7 +1653,7 @@ describe('PlanPane reference image and calibration', () => {
       const fitted = vb(container);
       await fireEvent.wheel(container.querySelector('svg.plan')!, { deltaY: -200, ctrlKey: true });
       expect(vb(container)).not.toBe(fitted);
-      await fireEvent.click(screen.getByRole('button', { name: /Geometry/ }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Vertices' }));
       const w = screen.getByLabelText('Width') as HTMLInputElement;
       w.value = '9';
       await fireEvent.change(w);
@@ -1829,18 +1832,18 @@ describe('PlanPane ceiling context', () => {
     // The selected area is the canvas's draft, in select mode: its box with eight resize handles and a rotate handle
     expect(screen.getAllByRole('button', { name: /^Resize / })).toHaveLength(8);
     expect(screen.getByRole('button', { name: 'Rotate' })).toBeTruthy();
-    expect(screen.queryAllByRole('button', { name: /^Corner \d$/ })).toHaveLength(0);
+    expect(screen.queryAllByRole('button', { name: /^Vertex \d$/ })).toHaveLength(0);
     await drag(plan, [7, 5], [8, 5]);
     const [, id, partial] = callsOf(calls, 'updateCeilingItem').at(-1) as [string, string, { vertices: [number, number][] }];
     expect(id).toBe('ceiling-2');
     const xs = partial.vertices.map((v) => v[0]);
     expect(Math.min(...xs)).toBeCloseTo(7, 6);
     expect(Math.max(...xs)).toBeCloseTo(9, 6);
-    // Edit corners: corners and "+" handles
+    // Edit vertices: corners and "+" handles
     ctl.editCorners();
     await tick();
-    expect(screen.getAllByRole('button', { name: /^Corner \d$/ })).toHaveLength(4);
-    expect(screen.getAllByRole('button', { name: /^Insert corner/ })).toHaveLength(4);
+    expect(screen.getAllByRole('button', { name: /^Vertex \d$/ })).toHaveLength(4);
+    expect(screen.getAllByRole('button', { name: /^Insert vertex/ })).toHaveLength(4);
   });
 
   it('a keep-out area turns with its rotate handle and resizes from a handle; each is one update with its yaw', async () => {
@@ -1881,7 +1884,7 @@ describe('PlanPane ceiling context', () => {
     await tick();
     await fireEvent.wheel(plan, { deltaY: -200, ctrlKey: true, clientX: 300, clientY: 300 });
     const zoomed = plan.getAttribute('viewBox');
-    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 4' }), { shiftKey: true });
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Vertex 4' }), { shiftKey: true });
     let partial = callsOf(calls, 'updateCeilingItem').at(-1)![2] as { vertices: [number, number][] };
     expect(partial.vertices).toHaveLength(4);
     const [ex, ey] = px(plan, 7, 4);
@@ -1931,7 +1934,7 @@ describe('PlanPane ceiling context', () => {
     // A corner dragged past the wall snaps back too
     ctl.editCorners();
     await tick();
-    await drag(plan, [8, 6], [12, 6], { target: screen.getByRole('button', { name: 'Corner 3' }) });
+    await drag(plan, [8, 6], [12, 6], { target: screen.getByRole('button', { name: 'Vertex 3' }) });
     expect(callsOf(calls, 'updateCeilingItem')).toEqual([]);
     // Inside the room it applies
     await drag(plan, [7, 5], [8, 5]);
@@ -1952,7 +1955,7 @@ describe('PlanPane ceiling context', () => {
     ctl.editCorners();
     await tick();
     // A corner pulled back to the wall: applied
-    await drag(plan, [11, 4], [10, 4], { target: screen.getByRole('button', { name: 'Corner 2' }) });
+    await drag(plan, [11, 4], [10, 4], { target: screen.getByRole('button', { name: 'Vertex 2' }) });
     expect(callsOf(calls, 'updateCeilingItem')).toHaveLength(2);
   });
 
@@ -1985,7 +1988,7 @@ describe('PlanPane ceiling context', () => {
       const m = mountCeiling({ ceiling: { ...ceiling, ...hidden } });
       m.ctl.selectCeilingItem('ceiling-2');
       await tick();
-      expect(screen.queryAllByRole('button', { name: /^Corner \d$/ })).toHaveLength(0);
+      expect(screen.queryAllByRole('button', { name: /^Vertex \d$/ })).toHaveLength(0);
       expect(m.container.querySelector('polygon.outline')).toBeNull();
       m.unmount();
     }

@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A volume: Bottom and Top like a structure, Fit to room (the room outline,
-	// floor to ceiling), Redraw outline and Edit corners, then Geometry, Grid points and Display.
+	// floor to ceiling), Redraw outline and Edit vertices, then Vertices (or ranges), Grid points and Display.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
 	import { userSettings } from '$lib/stores/settings';
 	import { unitAbbrev, unitStep } from '$lib/utils/unitConversion';
@@ -12,7 +12,7 @@
 	import ZoneGeometry from './ZoneGeometry.svelte';
 	import GridPointsFold from './GridPointsFold.svelte';
 	import DisplayFold from './DisplayFold.svelte';
-	import { fitPartial, rangePartial, shownFootprint } from './zoneFields';
+	import { fitPartial, geometryLabel, rangePartial, shownFootprint } from './zoneFields';
 
 	interface Props {
 		zone: CalcZone;
@@ -59,11 +59,11 @@
 	</label>
 	<div class="shape-pair">
 		<button type="button" class="secondary plan-btn" class:active={drawing} aria-pressed={drawing} onclick={() => ctl.startZoneDraw('volume')}>Redraw outline</button>
-		<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing} onclick={() => ctl.editZoneCorners(zone.id)}>Edit corners</button>
+		<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing} onclick={() => ctl.editZoneCorners(zone.id)}>Edit vertices</button>
 	</div>
 </div>
 
-<ZoneFold label="Geometry">
+<ZoneFold label={geometryLabel(footprint)}>
 	<ZoneGeometry
 		vertices={footprint}
 		axes={['X', 'Y']}

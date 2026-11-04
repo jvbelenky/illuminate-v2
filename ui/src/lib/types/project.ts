@@ -869,8 +869,20 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
 }
 
 /**
+ * The next default structure name, as lamps are named: "Structure N" with N one
+ * past the count of structures, stepped on past any name already taken.
+ */
+export function nextStructureName(existing: ReadonlyArray<{ name?: string | null }>): string {
+  const taken = new Set(existing.map((o) => o.name ?? ''));
+  let n = existing.length + 1;
+  while (taken.has(`Structure ${n}`)) n++;
+  return `Structure ${n}`;
+}
+
+/**
  * A new box object: 1 m (or 3 ft) on each side, standing on the floor at the
- * centre of the room, opaque and non-reflective. Named by its id once minted.
+ * centre of the room, opaque and non-reflective. Callers name it (nextStructureName);
+ * without a name the backend names it by its id.
  */
 export function defaultObject(
   room: RoomConfig,
