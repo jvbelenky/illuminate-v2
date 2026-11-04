@@ -172,4 +172,20 @@ test.describe('Calc zones in the workspace', () => {
     await expect.poll(async () => (await backendZones(page)).find((z) => !z.is_standard && z.type === 'plane')?.wall?.wall_id).toBe('east');
     guard.assertClean();
   });
+
+  test('Add zone makes a plane, a volume or a point, named CalcPlane N, CalcVol N, CalcPoint N; the editor has no type switch', async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    await waitForSession(page);
+    for (const type of ['plane', 'volume', 'point', 'plane'] as const) {
+      await addZone(page, type);
+      // The type was chosen once, at creation: nothing in the editor changes it
+      for (const name of ['Plane', 'Volume', 'Point']) await expect(zoneEditor(page).getByRole('button', { name, exact: true })).toHaveCount(0);
+    }
+    const names = await userZoneRows(page).locator('.name').allTextContents();
+    expect(names.map((n) => n.trim())).toEqual(['CalcPlane 1', 'CalcVol 1', 'CalcPoint 1', 'CalcPlane 2']);
+    await waitForApiIdle(page);
+    const zones = (await backendZones(page)).filter((z) => !z.is_standard);
+    expect(zones.map((z) => [z.type, z.name])).toEqual([['plane', 'CalcPlane 1'], ['volume', 'CalcVol 1'], ['point', 'CalcPoint 1'], ['plane', 'CalcPlane 2']]);
+    guard.assertClean();
+  });
 });

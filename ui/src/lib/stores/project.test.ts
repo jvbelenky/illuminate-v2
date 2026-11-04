@@ -3716,8 +3716,8 @@ describe('zone footprints (whole room, drawn outlines)', () => {
     const { get: getStore } = await import('svelte/store');
     await project.initSession();
     const room = getStore(project).room;
-    const whole = await project.addZone(defaultZone(room, 0));
-    const drawn = await project.addZone({ ...defaultZone(room, 1), fit_room: false, x1: 1, x2: 2, y1: 1, y2: 2, vertices: undefined });
+    const whole = await project.addZone(defaultZone(room, []));
+    const drawn = await project.addZone({ ...defaultZone(room, []), fit_room: false, x1: 1, x2: 2, y1: 1, y2: 2, vertices: undefined });
     await vi.runAllTimersAsync();
     expect(get(zones).find((z) => z.id === whole)?.fit_room).toBe(true);
 
@@ -3745,7 +3745,7 @@ describe('zone footprints (whole room, drawn outlines)', () => {
     const { defaultZone } = await import('$lib/types/project');
     const { get: getStore } = await import('svelte/store');
     await project.initSession();
-    const id = await project.addZone({ ...defaultZone(getStore(project).room, 0), vertices: [[1, 1], [5, 1], [1, 3]], fit_room: false });
+    const id = await project.addZone({ ...defaultZone(getStore(project).room, []), vertices: [[1, 1], [5, 1], [1, 3]], fit_room: false });
     project.updateZone(id, { x1: 1, x2: 3, y1: 1, y2: 2, vertices: undefined });
     await vi.runAllTimersAsync();
     expect(patches.at(-1)!.vertices).toEqual([[1, 1], [3, 1], [3, 2], [1, 2]]);
@@ -3757,7 +3757,7 @@ describe('zone footprints (whole room, drawn outlines)', () => {
     const { get: getStore } = await import('svelte/store');
     await project.initSession();
     const room = getStore(project).room;
-    const id = await project.addZone(defaultZone(room, 0, { type: 'volume' }));
+    const id = await project.addZone(defaultZone(room, [], { type: 'volume' }));
     project.updateRoom({ z: room.z + 1 });
     await vi.runAllTimersAsync();
     const v = get(zones).find((z) => z.id === id)!;
@@ -4277,7 +4277,7 @@ describe('zone surfaces', () => {
     const { defaultZone } = await import('$lib/types/project');
     await project.initSession();
     const room = get(project).room;
-    const id = await project.addZone({ ...defaultZone(room, 0), surface: 'wall:1', normal_offset: 0.25, flip: true });
+    const id = await project.addZone({ ...defaultZone(room, []), surface: 'wall:1', normal_offset: 0.25, flip: true });
     expect(posts.at(-1)).toMatchObject({ wall: { wall_id: 'east', normal_offset: 0.25, flip: true }, vertices: null });
     expect(posts.at(-1)!.height).toBeUndefined();
 
@@ -4307,7 +4307,7 @@ describe('zone surfaces', () => {
     const { project } = await import('./project');
     const { defaultZone } = await import('$lib/types/project');
     await project.initSession();
-    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:0' });
+    const id = await project.addZone({ ...defaultZone(get(project).room, []), surface: 'wall:0' });
     project.updateZone(id, { name: 'Wall A' });
     await vi.runAllTimersAsync();
     expect(patches.at(-1)).toEqual({ name: 'Wall A' });
@@ -4332,7 +4332,7 @@ describe('zone surfaces', () => {
     const { defaultZone } = await import('$lib/types/project');
     await project.initSession();
     const room = get(project).room;
-    const id = await project.addZone({ ...defaultZone(room, 0), surface: 'wall:1' });
+    const id = await project.addZone({ ...defaultZone(room, []), surface: 'wall:1' });
     await vi.runAllTimersAsync();
     patches.length = 0;
 
@@ -4392,7 +4392,7 @@ describe('wall planes keep their outline', () => {
     const { project } = await import('./project');
     const { defaultZone } = await import('$lib/types/project');
     await project.initSession();
-    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:1', normal_offset: 0.25, flip: true, wall_vertices: W });
+    const id = await project.addZone({ ...defaultZone(get(project).room, []), surface: 'wall:1', normal_offset: 0.25, flip: true, wall_vertices: W });
     project.updateZone(id, { surface: 'floor', height: 0.8 });
     await vi.runAllTimersAsync();
     const floor = get(project).zones.find((z) => z.id === id)!;
@@ -4435,7 +4435,7 @@ describe('wall planes keep their outline', () => {
     const before = structuredClone(get(project).zones);
 
     // Add zone › Plane on Wall 2: a whole-wall plane
-    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:1', fit_room: true, normal_offset: 0, flip: false });
+    const id = await project.addZone({ ...defaultZone(get(project).room, []), surface: 'wall:1', fit_room: true, normal_offset: 0, flip: false });
     await vi.runAllTimersAsync();
     expect(posts.at(-1)).toMatchObject({ wall: { wall_id: 'east' }, vertices: null });
     const added = structuredClone(get(project).zones);
@@ -4473,7 +4473,7 @@ describe('wall planes keep their outline', () => {
     const { project } = await import('./project');
     const { defaultZone } = await import('$lib/types/project');
     await project.initSession();
-    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:1', wall_vertices: W });
+    const id = await project.addZone({ ...defaultZone(get(project).room, []), surface: 'wall:1', wall_vertices: W });
     server.use(http.post(`${API_BASE}/session/nudge-into-bounds`, () => HttpResponse.json({
       lamps: [],
       zones: [{ id, type: 'plane', wall: { wall_id: 'east', normal_offset: 0.1, flip: false }, vertices: [[0, 0], [1, 0], [1, 1]] }],
@@ -4502,7 +4502,7 @@ describe('wall planes keep their outline', () => {
     const { defaultZone } = await import('$lib/types/project');
     await project.initSession();
     const room = get(project).room;
-    await project.addZone({ ...defaultZone(room, 0), surface: 'wall:0', fit_room: true, normal_offset: 0, flip: false });
+    await project.addZone({ ...defaultZone(room, []), surface: 'wall:0', fit_room: true, normal_offset: 0, flip: false });
     await vi.runAllTimersAsync();
     patches.length = 0;
     project.updateRoom({ x: room.x * 2, z: room.z + 1 });
@@ -4510,7 +4510,7 @@ describe('wall planes keep their outline', () => {
     expect(patches.at(-1)).toEqual({ wall: { wall_id: 'south', normal_offset: 0, flip: false }, vertices: null });
 
     // A plane added without fit_room and no outline is a whole-wall plane too
-    const id2 = await project.addZone({ ...defaultZone(get(project).room, 1), surface: 'wall:1' });
+    const id2 = await project.addZone({ ...defaultZone(get(project).room, []), surface: 'wall:1' });
     await vi.runAllTimersAsync();
     patches.length = 0;
     project.updateRoom({ y: room.y + 1 });
@@ -4539,7 +4539,7 @@ describe('wall planes keep their outline', () => {
     await project.initSession();
     project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 3], [3, 5], [0, 3]] });
     await vi.runAllTimersAsync();
-    const id = await project.addZone({ ...defaultZone(get(project).room, 0), name: 'Gable', surface: 'wall:2', wall_vertices: W });
+    const id = await project.addZone({ ...defaultZone(get(project).room, []), name: 'Gable', surface: 'wall:2', wall_vertices: W });
     await vi.runAllTimersAsync();
     patches.length = 0;
 
@@ -4582,7 +4582,7 @@ describe('wall planes keep their outline', () => {
     const { project } = await import('./project');
     const { defaultZone } = await import('$lib/types/project');
     await project.initSession();
-    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:2', wall_orphan: true });
+    const id = await project.addZone({ ...defaultZone(get(project).room, []), surface: 'wall:2', wall_orphan: true });
     await vi.runAllTimersAsync();
     project.updateZone(id, { fit_room: true, x1: 0, x2: 4, y1: 0, y2: 6 });
     await vi.runAllTimersAsync();
@@ -4620,7 +4620,7 @@ describe('wall planes keep their outline', () => {
       const { project } = await import('./project');
       const { defaultZone } = await import('$lib/types/project');
       await project.initSession();
-      const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:2', wall_orphan: true, normal_offset: 0.4, wall_vertices: W });
+      const id = await project.addZone({ ...defaultZone(get(project).room, []), surface: 'wall:2', wall_orphan: true, normal_offset: 0.4, wall_vertices: W });
       await vi.runAllTimersAsync();
       return { ...sent, project, id };
     }
@@ -4689,7 +4689,7 @@ describe('wall planes keep their outline', () => {
       await project.initSession();
       project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 3], [3, 5], [0, 3]] });
       await vi.runAllTimersAsync();
-      const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:2', wall_vertices: W });
+      const id = await project.addZone({ ...defaultZone(get(project).room, []), surface: 'wall:2', wall_vertices: W });
       await vi.runAllTimersAsync();
       project.updateRoom({ vertices: [[0, 0], [6, 0], [6, 3], [0, 3]] });
       await vi.runAllTimersAsync();
@@ -4723,7 +4723,7 @@ describe('wall planes keep their outline', () => {
     const { project } = await import('./project');
     const { defaultZone } = await import('$lib/types/project');
     await project.initSession();
-    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:1', ref_surface: 'xz', normal_offset: 0.2 });
+    const id = await project.addZone({ ...defaultZone(get(project).room, []), surface: 'wall:1', ref_surface: 'xz', normal_offset: 0.2 });
     await vi.runAllTimersAsync();
     project.updateZone(id, { surface: 'floor', height: 1 });
     await vi.runAllTimersAsync();
@@ -4742,7 +4742,7 @@ describe('wall planes keep their outline', () => {
     const { project } = await import('./project');
     const { defaultZone } = await import('$lib/types/project');
     await project.initSession();
-    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:1', normal_offset: 1, wall_vertices: [[1, 1], [2, 1], [2, 2]] });
+    const id = await project.addZone({ ...defaultZone(get(project).room, []), surface: 'wall:1', normal_offset: 1, wall_vertices: [[1, 1], [2, 1], [2, 2]] });
     server.use(http.patch(`${API_BASE}/session/units`, () => HttpResponse.json({
       success: true,
       units: 'feet',

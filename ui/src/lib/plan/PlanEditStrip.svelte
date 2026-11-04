@@ -29,8 +29,7 @@
 		disabled?: boolean;
 		/** A one-shot tool (or a drawing): armed until its gesture ends, exposed as aria-pressed. */
 		pressed?: boolean;
-		/** The way out of a mode (Done): filled in the selection colour. */
-		primary?: boolean;
+
 	}
 
 	const COPY = 'Copy (Ctrl+D)';
@@ -51,7 +50,7 @@
 	/** A selected shape's tools, or Done while its vertices are edited. */
 	function shapeTools(copy: () => void, remove: () => void, disabled = false): Tool[] {
 		if (ctl.shapeMode === 'corners') {
-			return [{ label: 'Done', glyph: 'check', title: 'Done editing vertices (Esc)', onclick: ctl.endCorners, pressed: true, primary: true }];
+			return [{ label: 'Done', glyph: 'check', title: 'Done editing vertices (Esc)', onclick: ctl.endCorners, pressed: true }];
 		}
 		return [
 			{ label: 'Edit vertices', glyph: 'corners', title: 'Drag, add or remove vertices', onclick: () => ctl.inCanvas(ctl.editCorners), disabled },
@@ -119,7 +118,7 @@
 			<button
 				type="button"
 				class="mv-btn tool"
-				class:primary={t.primary}
+
 				aria-label={t.label}
 				title={t.title ?? t.label}
 				aria-pressed={t.pressed}
@@ -137,15 +136,8 @@
 	.tool {
 		white-space: nowrap;
 	}
-	/* An armed tool wears the shared pressed fill (.mv-btn[aria-pressed]), the category blue.
-	   Done, the way back to select mode, is a primary action: red */
-	.tool.primary,
-	.tool.primary:hover:not(:disabled) {
-		background: var(--color-primary);
-		border-color: var(--color-primary);
-		color: #fff;
-		font-weight: 600;
-	}
+	/* An armed tool, and Done (the way out of Edit vertices, a mode), wear the shared
+	   pressed fill (.mv-btn[aria-pressed]), the category blue */
 	.plan-toolbar.compact {
 		flex-wrap: wrap;
 		height: auto;
