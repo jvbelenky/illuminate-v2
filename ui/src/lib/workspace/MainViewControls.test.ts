@@ -23,7 +23,7 @@ const labelsOf = (el: Element) => [...el.querySelectorAll('button')].map((b) => 
 describe('MainViewControls', () => {
   beforeEach(() => userSettings.update((s) => ({ ...s, planNavMode: 'hand', autoRecalculate: false })));
 
-  it('the edit strip, a divider and Undo | Redo top-left; Calculate top-right; the view picker bottom-left; 2D | 3D bottom-middle', async () => {
+  it('Undo | Redo, a divider and the edit strip top-left; Calculate top-right; the view picker bottom-left; 2D | 3D bottom-middle', async () => {
     const onSelectMain = vi.fn();
     const { container, ctl } = mount({ controls: '2d', context: 'obstacles', onSelectMain });
     const tl = corner(container, 'tl');
@@ -32,9 +32,11 @@ describe('MainViewControls', () => {
     expect(tools.map((b) => b.getAttribute('aria-label'))).toEqual(['Rectangle', 'Polygon']);
     expect(tools.map((b) => b.title)).toEqual(['Rectangle', 'Polygon']);
     for (const b of tools) expect(b.textContent?.trim()).toBe(b.getAttribute('aria-label'));
-    expect(strip.nextElementSibling!.classList.contains('tl-divider')).toBe(true);
-    expect(strip.nextElementSibling!.nextElementSibling!.getAttribute('aria-label')).toBe('History');
-    expect(labelsOf(tl).slice(-2)).toEqual(['Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)']);
+    // Undo | Redo first, then the divider, then the strip
+    expect(tl.firstElementChild!.getAttribute('aria-label')).toBe('History');
+    expect(strip.previousElementSibling!.classList.contains('tl-divider')).toBe(true);
+    expect(strip.previousElementSibling!.previousElementSibling!.getAttribute('aria-label')).toBe('History');
+    expect(labelsOf(tl).slice(0, 2)).toEqual(['Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)']);
 
     // Calculate, with Autorecalculate under it
     const tr = corner(container, 'tr');

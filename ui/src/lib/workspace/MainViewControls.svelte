@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The controls over the main view, one group per corner, on an 8 px inset (the
 	// same in 2D and 3D):
-	// - top-left: the edit strip while editing (in either view), a thin divider,
-	//   then Undo | Redo (alone there in the summary);
+	// - top-left: Undo | Redo, then while editing (in either view) a thin divider
+	//   and the edit strip (Undo | Redo alone there in the summary);
 	// - top-right: Calculate, Autorecalculate under it;
 	// - bottom-left (2D): the view picker, Plan view or a wall; in 3D the view's
 	//   own arrow grid and projection toggle sit there (RoomViewer);
@@ -129,11 +129,11 @@
 		</div>
 	{:else}
 		<div class="corner tl" data-plan-scope style:max-width={compact && room !== null ? `${Math.max(80, room)}px` : undefined}>
-			{#if editing}
-				<PlanEditStrip controller={ctl} {compact} />
-				<span class="tl-divider" aria-hidden="true"></span>
-			{/if}
 			<UndoRedo />
+			{#if editing}
+				<span class="tl-divider" aria-hidden="true"></span>
+				<PlanEditStrip controller={ctl} {compact} />
+			{/if}
 		</div>
 		<div class="corner tr" data-plan-scope>
 			<CalculateButton layout="floating" />
@@ -171,7 +171,7 @@
 		left: 8px;
 		align-items: flex-start;
 	}
-	/* A thin rule between the edit strip and Undo | Redo; none when the strip shows nothing */
+	/* A thin rule between Undo | Redo and the edit strip; none when the strip shows nothing */
 	.tl-divider {
 		flex: none;
 		align-self: stretch;
@@ -179,7 +179,7 @@
 		margin: 4px 0;
 		background: var(--color-border);
 	}
-	.tl > .tl-divider:first-child {
+	.tl > .tl-divider:last-child {
 		display: none;
 	}
 	.tl > :global(.undo-redo) {
