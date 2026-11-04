@@ -133,12 +133,15 @@
 }
 /* Lamp placement buttons: compact, 13 px label (Upper-room breaks at its hyphen), raised fill
    with an edge so they read as buttons on the editor body; the pictogram in the text colour;
-   cyan while pressed or placing */
+   cyan while pressed or placing. A flex row of equal buttons, each at least as wide as its
+   label plus 5 px a side, so a long label (Downlight) widens its own button, never touching its edges */
 .ep-grid.ep-addbtns.add-placements > button.secondary,
 .ep-grid.ep-addbtns.placements > button.secondary {
+	flex: 1 1 0;
+	min-width: min-content;
 	gap: 4px;
 	min-height: 52px;
-	padding: 6px 0;
+	padding: 6px 5px;
 	font-size: 13px;
 	font-weight: 500;
 	color: var(--color-text);
@@ -164,10 +167,12 @@
 }
 .ep-grid.ep-addbtns.add-placements,
 .ep-grid.ep-addbtns.placements {
+	display: flex;
 	gap: 4px;
 }
 .ep-addbtns.add-placements > button.secondary > span,
 .ep-addbtns.placements > button.secondary > span {
+	max-width: none;
 	white-space: normal;
 	letter-spacing: -0.2px;
 	overflow: visible;

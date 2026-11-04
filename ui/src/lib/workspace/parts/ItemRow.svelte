@@ -178,7 +178,8 @@
 
 <style>
 	/* A row is a filled button off the panel behind it; hover is a step lighter. The
-	   selected or open row is tinted with the selection cyan (no outline round the card) */
+	   selected or open row is tinted with the selection cyan, with a 3 px cyan bar down its
+	   left side and its name in bold (no outline round the card) */
 	.editor-row {
 		display: flex;
 		flex-direction: column;
@@ -193,11 +194,17 @@
 	.editor-row.open,
 	.editor-row.selected {
 		background: color-mix(in srgb, var(--color-scene-selected) 14%, var(--color-bg-tertiary));
+		box-shadow: inset 3px 0 0 var(--color-scene-selected);
 	}
 	.editor-row.open > .row-head,
 	.editor-row.selected > .row-head {
-		background: color-mix(in srgb, var(--color-scene-selected) 30%, var(--color-bg-tertiary));
+		background: color-mix(in srgb, var(--color-scene-selected) 42%, var(--color-bg-tertiary));
+		box-shadow: inset 3px 0 0 var(--color-scene-selected);
 		border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+	}
+	.editor-row.open .name,
+	.editor-row.selected .name {
+		font-weight: 600;
 	}
 	.editor-row.selected:not(.open) > .row-head {
 		border-radius: var(--radius-sm);
