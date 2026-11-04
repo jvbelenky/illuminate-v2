@@ -135,7 +135,7 @@ describe('Fit to room', () => {
 
   it('on a wall: on clears the outline, off keeps the whole wall as an outline', () => {
     const z = plane({ surface: 'wall:0', fit_room: true, normal_offset: 0 });
-    expect(fitPartial(z, room, true)).toEqual({ fit_room: true, wall_vertices: undefined });
+    expect(fitPartial(z, room, true)).toMatchObject({ fit_room: true, wall_vertices: undefined });
     expect(fitPartial(z, room, false)).toEqual({ fit_room: false, wall_vertices: [[0, 0], [6, 0], [6, 2.7], [0, 2.7]] });
   });
 
@@ -143,6 +143,45 @@ describe('Fit to room', () => {
     const v: CalcZone = { id: 'v', type: 'volume', fit_room: false, x_min: 1, x_max: 2, y_min: 1, y_max: 2, z_min: 0.5, z_max: 1 };
     expect(fitPartial(v, room, true)).toMatchObject({ fit_room: true, x_min: 0, x_max: 6, y_min: 0, y_max: 4, z_min: 0, z_max: 2.7 });
     expect(fitPartial({ ...v, fit_room: true, x_min: undefined }, room, false)).toEqual({ fit_room: false, x_min: 0, x_max: 6, y_min: 0, y_max: 4, vertices: undefined });
+  });
+
+  /** The zone after applying a partial, as the store does. */
+  const apply = (z: CalcZone, partial: Partial<CalcZone>): CalcZone => ({ ...z, ...partial });
+
+  it('off brings back the geometry it had before on (a floor plane, a drawn one)', () => {
+    const z = plane({ surface: 'floor', height: 1, fit_room: false, x1: 1, x2: 3, y1: 1, y2: 2, vertices: [[1, 1], [3, 1], [2, 2]] });
+    const on = apply(z, fitPartial(z, room, true));
+    expect(on).toMatchObject({ fit_room: true, x1: 0, x2: 6, vertices: undefined });
+    expect(fitPartial(on, room, false)).toEqual({ fit_room: false, x1: 1, x2: 3, y1: 1, y2: 2, vertices: [[1, 1], [3, 1], [2, 2]] });
+  });
+
+  it('off brings back a volume footprint and its bottom and top', () => {
+    const v: CalcZone = { id: 'v', type: 'volume', fit_room: false, x_min: 1, x_max: 2, y_min: 1, y_max: 2, z_min: 0.5, z_max: 1 };
+    const on = apply(v, fitPartial(v, room, true));
+    expect(fitPartial(on, room, false)).toEqual({ fit_room: false, x_min: 1, x_max: 2, y_min: 1, y_max: 2, vertices: undefined, z_min: 0.5, z_max: 1 });
+  });
+
+  it('off brings back a wall outline', () => {
+    const z = plane({ surface: 'wall:0', fit_room: false, normal_offset: 0, wall_vertices: [[1, 0.5], [3, 0.5], [3, 1.5], [1, 1.5]] });
+    const on = apply(z, fitPartial(z, room, true));
+    expect(fitPartial(on, room, false)).toEqual({ fit_room: false, wall_vertices: [[1, 0.5], [3, 0.5], [3, 1.5], [1, 1.5]] });
+  });
+
+  it('a room that shrank in between: the remembered geometry comes back clamped into it', () => {
+    const z = plane({ surface: 'floor', height: 1, fit_room: false, x1: 4, x2: 5.5, y1: 1, y2: 3 });
+    const on = apply(z, fitPartial(z, room, true));
+    const small = { ...room, x: 5, y: 4 };
+    expect(fitPartial(on, small, false)).toEqual({ fit_room: false, x1: 4, x2: 5, y1: 1, y2: 3, vertices: undefined });
+    // Clamped to nothing: what it shows (the room, which it followed) becomes explicit instead
+    const tiny = { ...room, x: 3, y: 4 };
+    expect(fitPartial({ ...on, x2: 3 }, tiny, false)).toEqual({ fit_room: false, x1: 0, x2: 3, y1: 0, y2: 4, vertices: undefined });
+  });
+
+  it('a memory from another surface is not brought back', () => {
+    const z = plane({ surface: 'floor', height: 1, fit_room: false, x1: 1, x2: 3, y1: 1, y2: 2 });
+    const on = apply(z, fitPartial(z, room, true));
+    const ceiling = { ...on, surface: 'ceiling' as const, height: 2.7, direction: -1 };
+    expect(fitPartial(ceiling, room, false)).toEqual({ fit_room: false, x1: 0, x2: 6, y1: 0, y2: 4, vertices: undefined });
   });
 });
 
