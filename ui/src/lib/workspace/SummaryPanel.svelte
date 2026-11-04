@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The read-only summary shown after Done: room facts and the item lists, each
-	// under a full-width section button that reopens the editor at that step. Rows
-	// are the editor's rows with nothing to open; only the eye and calculator work.
+	// under a section heading (plain text on a rule, with a chevron) that reopens the
+	// editor at that step. Rows are the editor's filled rows with nothing to open; only
+	// the eye and calculator work.
 	import './parts/parts.css';
 	import ItemRow from './parts/ItemRow.svelte';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
@@ -86,7 +87,10 @@
 <div class="summary-panel">
 	{#each SECTIONS as s (s.edit)}
 		<section class="summary-block">
-			<button type="button" class="summary-section" data-edit={s.edit} onclick={() => open(s.edit)}>{s.label}</button>
+			<button type="button" class="summary-section" data-edit={s.edit} onclick={() => open(s.edit)}>
+				<span>{s.label}</span>
+				<svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
+			</button>
 
 			{#if s.edit === 'room:floorplan'}
 				<div class="ep-kv"><span>Dimensions</span><b>{dimensions}</b></div>
@@ -203,31 +207,46 @@
 		gap: var(--spacing-xs);
 		min-width: 0;
 	}
+	/* A section heading, not a button-shaped box: text on a rule, unfilled, so the
+	   filled item rows under it read as the things to click */
 	.summary-section {
 		display: flex;
 		width: 100%;
-		margin: 0 0 6px;
+		margin: 0 0 4px;
 		align-items: center;
-		padding: 7px 10px;
-		border: 1px solid var(--color-border);
-		border-radius: 6px;
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-		font-size: var(--font-size-xs);
+		justify-content: space-between;
+		gap: 6px;
+		padding: 4px 2px 5px;
+		border: 0;
+		border-bottom: 1px solid var(--color-border);
+		border-radius: 0;
+		background: none;
+		color: var(--color-text-muted);
+		font-size: 13px;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		text-align: left;
 		cursor: pointer;
 		box-shadow: none;
-		transition: border-color 0.12s, background 0.12s;
+		transition: color 0.12s, border-color 0.12s;
 	}
 	.summary-section:hover {
-		border-color: var(--color-primary);
-		background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-tertiary));
+		color: var(--color-text);
+		border-bottom-color: var(--color-text-muted);
+		background: none;
 	}
-	.summary-section:active {
-		transform: translateY(1px);
+	.summary-section svg {
+		flex: none;
+		opacity: 0.7;
+	}
+	.summary-section:hover svg {
+		opacity: 1;
+	}
+	.summary-section:focus-visible {
+		outline: 2px solid var(--color-scene-selected);
+		outline-offset: 1px;
+		box-shadow: none;
 	}
 	.std-disc {
 		border-top: 0;

@@ -277,10 +277,10 @@ describe('dockLayout', () => {
 
   describe('heights of stacked panels', () => {
     it('minimum heights: the bar plus 80, the mini view the bar plus 100', () => {
-      expect(BAR_HEIGHT).toBe(26);
-      expect(minPanelHeight('editor')).toBe(106);
-      expect(minPanelHeight('results')).toBe(106);
-      expect(minPanelHeight('mini')).toBe(126);
+      expect(BAR_HEIGHT).toBe(30);
+      expect(minPanelHeight('editor')).toBe(110);
+      expect(minPanelHeight('results')).toBe(110);
+      expect(minPanelHeight('mini')).toBe(130);
     });
 
     it('dragging the editor/mini divider stores the mini view height; widths stay', () => {
@@ -303,8 +303,8 @@ describe('dockLayout', () => {
     });
 
     it('height clamps: neither panel goes below its minimum', () => {
-      expect(splitPanels(DEFAULT_DOCK, 'editor', 'mini', 500, 340, 9999).heights).toEqual({ mini: 126 });
-      expect(splitPanels(DEFAULT_DOCK, 'editor', 'mini', 500, 340, -9999).heights).toEqual({ mini: 840 - 106 });
+      expect(splitPanels(DEFAULT_DOCK, 'editor', 'mini', 500, 340, 9999).heights).toEqual({ mini: 130 });
+      expect(splitPanels(DEFAULT_DOCK, 'editor', 'mini', 500, 340, -9999).heights).toEqual({ mini: 840 - 110 });
       expect(splitPanels(DEFAULT_DOCK, 'editor', 'mini', 500, 340.4, 0.2).heights).toEqual({ mini: 340 });
     });
 
@@ -336,7 +336,7 @@ describe('dockLayout', () => {
       const base = { left: ['editor', 'mini'], right: ['results'], minimized: [], main: '2d' };
       expect(sanitizeDock({ ...base, heights: 'tall' })).toEqual(DEFAULT_DOCK);
       expect(sanitizeDock({ ...base, heights: { mini: NaN, editor: 'x', nope: 300, calculate: 200 } })).toEqual(DEFAULT_DOCK);
-      expect(sanitizeDock({ ...base, heights: { mini: 10, editor: 300.6 } }).heights).toEqual({ mini: 126, editor: 301 });
+      expect(sanitizeDock({ ...base, heights: { mini: 10, editor: 300.6 } }).heights).toEqual({ mini: 130, editor: 301 });
       // A floating panel has no docked height
       expect(sanitizeDock({ ...base, left: ['editor'], floats: { mini: { x: 0, y: 0, w: 300, h: 225 } }, heights: { mini: 200 } }).heights).toBeUndefined();
     });

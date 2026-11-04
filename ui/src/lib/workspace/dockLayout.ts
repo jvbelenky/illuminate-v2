@@ -50,7 +50,7 @@ export const FLOAT_MINS: Record<DockPanelId, { w: number; h: number }> = {
 };
 
 /** A panel's title bar height (px). */
-export const BAR_HEIGHT = 26;
+export const BAR_HEIGHT = 30;
 /** The largest docked height kept (px). */
 const MAX_HEIGHT = 10000;
 

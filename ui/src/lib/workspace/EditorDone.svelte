@@ -21,8 +21,8 @@
 <style>
 	.editor-done {
 		flex: none;
-		height: 20px;
-		padding: 0 10px;
+		height: 22px;
+		padding: 0 16px;
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--color-primary);
 		background: var(--color-primary);
@@ -32,6 +32,10 @@
 		font-weight: 600;
 		line-height: 1;
 		cursor: pointer;
+	}
+	/* In the title bar: 22 px tall in the 30 px bar, clear of the title and of the minimise button */
+	.editor-done:not(.tabs) {
+		margin: 0 6px 0 12px;
 	}
 	.editor-done:hover {
 		background: var(--color-primary-hover);

@@ -181,12 +181,15 @@
 		line-height: 1.2;
 		white-space: nowrap;
 	}
-	/* The outer tabs keep their side border and rounded corner, laid over the card's own edge */
+	/* The outer tabs meet the card's own edge, which draws their outer side (a tab laid
+	   1 px over it was clipped by the panel and made the panel scroll sideways) */
 	.editor-stage:first-child {
-		margin-left: -1px;
+		border-left-width: 0;
+		border-top-left-radius: 0;
 	}
 	.editor-stages:not(.with-done) .editor-stage:last-child {
-		margin-right: -1px;
+		border-right-width: 0;
+		border-top-right-radius: 0;
 	}
 	.editor-stage:hover:not(.on) {
 		background: var(--color-btn-fill-hover);
