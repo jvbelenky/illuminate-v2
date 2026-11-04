@@ -243,14 +243,14 @@
 		border-color: var(--color-text);
 	}
 	.sg-ref-target.selected .sg-ref-dot {
-		border-color: var(--color-scene-selected);
-		background: var(--color-scene-selected);
+		border-color: var(--color-highlight);
+		background: var(--color-highlight);
 	}
 	.sg-ref-target:focus-visible {
 		outline: none;
 	}
 	.sg-ref-target:focus-visible .sg-ref-dot {
-		box-shadow: 0 0 0 2px var(--color-scene-selected);
+		box-shadow: 0 0 0 2px var(--color-highlight);
 	}
 	.sg-corners {
 		display: flex;

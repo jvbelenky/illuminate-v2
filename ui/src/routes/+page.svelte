@@ -1795,9 +1795,9 @@
 		color: var(--color-text);
 	}
 
-	/* The tab showing: the selection colour (red is for Calculate) */
+	/* The tab showing: the category blue (red is for Calculate) */
 	.mobile-tab.active {
-		color: var(--color-scene-selected);
+		color: var(--color-highlight);
 		background: none;
 	}
 

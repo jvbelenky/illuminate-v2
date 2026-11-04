@@ -90,14 +90,14 @@
 
 	.view-btn:hover {
 		background: var(--color-bg-secondary);
-		border-color: var(--color-accent);
+		border-color: var(--color-text-muted);
 		color: var(--color-text);
 	}
 
 	.view-btn.active {
-		background: var(--color-accent);
-		border-color: var(--color-accent);
-		color: var(--color-bg-primary);
+		background: var(--color-highlight);
+		border-color: var(--color-highlight);
+		color: var(--color-on-highlight);
 	}
 
 	@media (max-width: 767px) {

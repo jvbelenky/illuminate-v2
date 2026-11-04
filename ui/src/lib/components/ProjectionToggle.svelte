@@ -55,7 +55,7 @@
 
 	.proj-toggle:hover {
 		background: var(--color-bg-secondary);
-		border-color: var(--color-accent);
+		border-color: var(--color-text-muted);
 		color: var(--color-text);
 	}
 

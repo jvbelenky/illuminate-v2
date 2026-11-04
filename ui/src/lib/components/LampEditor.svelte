@@ -964,18 +964,18 @@
 
 	.pick-btn:hover {
 		background: var(--color-bg-tertiary);
-		color: var(--color-primary);
+		color: var(--color-text);
 	}
 
 	.pick-btn.pick-active {
-		background: var(--color-primary);
-		color: white;
-		border-color: var(--color-primary);
+		background: var(--color-highlight);
+		color: var(--color-on-highlight);
+		border-color: var(--color-highlight);
 		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
 	}
 
 	.pick-hint {
-		color: var(--color-primary);
+		color: var(--color-highlight);
 		font-size: var(--font-size-sm);
 		font-weight: 500;
 		animation: pick-pulse 1.5s ease-in-out infinite;

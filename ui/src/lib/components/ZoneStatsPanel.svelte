@@ -1533,10 +1533,6 @@ values: result.values as number[][][],
 		margin-bottom: var(--spacing-sm);
 	}
 
-	.zone-card.calculated {
-		border-color: var(--color-highlight);
-	}
-
 	.zone-header {
 		display: flex;
 		justify-content: space-between;
@@ -1654,7 +1650,7 @@ values: result.values as number[][][],
 		font-family: inherit;
 		color: var(--color-text);
 		padding: 0 3px;
-		border: 1px solid var(--color-primary);
+		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		background: var(--color-bg);
 		/* Roughly the width of "88h 88m 88s" so the footer does not jump */
@@ -1962,8 +1958,8 @@ values: result.values as number[][][],
 	}
 
 	.explore-data-btn:hover {
-		background: var(--color-highlight);
-		color: var(--color-bg);
+		background: var(--color-btn-fill-hover);
+		color: var(--color-text);
 	}
 
 	/* Dimming note */

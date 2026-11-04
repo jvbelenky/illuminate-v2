@@ -228,9 +228,9 @@
 	}
 
 	.seg button.active {
-		background: var(--color-bg-tertiary);
+		background: var(--color-highlight);
 		border-color: var(--color-highlight);
-		color: var(--color-text);
+		color: var(--color-on-highlight);
 	}
 
 	.seg button:disabled {

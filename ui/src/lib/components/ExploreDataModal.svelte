@@ -643,7 +643,7 @@
 		border: none;
 		border-bottom: 2px solid transparent;
 		padding: var(--spacing-xs) var(--spacing-md);
-		font-size: 0.8rem;
+		font-size: var(--font-size-sm);
 		font-weight: 500;
 		color: var(--color-text-muted);
 		cursor: pointer;

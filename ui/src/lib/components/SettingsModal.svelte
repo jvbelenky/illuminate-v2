@@ -686,7 +686,7 @@
 
 	.tab-btn.active {
 		color: var(--color-text);
-		border-bottom-color: var(--color-accent);
+		border-bottom-color: var(--color-highlight);
 		font-weight: 500;
 	}
 
@@ -940,7 +940,7 @@
 	}
 
 	.category-header:hover {
-		color: var(--color-accent);
+		color: var(--color-text);
 	}
 
 	.category-chevron {
@@ -956,8 +956,8 @@
 	.category-count {
 		font-size: var(--font-size-xs);
 		font-weight: 500;
-		color: var(--color-accent);
-		background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+		color: var(--color-text-muted);
+		background: var(--color-btn-fill);
 		padding: 1px 6px;
 		border-radius: 8px;
 	}

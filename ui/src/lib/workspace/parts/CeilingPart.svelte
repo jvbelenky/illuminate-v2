@@ -277,7 +277,7 @@
 	}
 	.cp-pills > button.on {
 		background: var(--color-highlight);
-		color: #fff;
+		color: var(--color-on-highlight);
 	}
 	.cp-pills > button:focus-visible {
 		outline: 2px solid var(--color-scene-selected);
@@ -295,7 +295,7 @@
 		gap: 6px;
 	}
 	.cp-add > button :global(svg) {
-		color: var(--color-warning);
+		color: var(--color-scene-item);
 	}
 	.cp-add > button.keep :global(svg) {
 		color: var(--color-danger);
@@ -305,7 +305,7 @@
 	}
 	.cp-lead {
 		display: inline-flex;
-		color: var(--color-warning);
+		color: var(--color-scene-item);
 	}
 	.cp-lead.keep {
 		color: var(--color-danger);

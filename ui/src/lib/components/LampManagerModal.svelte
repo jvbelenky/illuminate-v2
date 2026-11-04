@@ -1030,22 +1030,20 @@
 		font-style: italic;
 	}
 
-	/* Lighter blue for the primary actions (Add custom lamp / Save). Uses the
-	   app's defined blue token (--color-info) rather than the undefined
-	   --color-primary, which previously computed to a transparent background. */
+	/* The primary actions (Add custom lamp / Save): the primary red */
 	button.primary {
-		background: var(--color-info);
+		background: var(--color-primary);
 		color: white;
 		border: none;
 		border-radius: var(--radius-sm);
 		padding: 6px 14px;
-		font-size: 0.8rem;
+		font-size: var(--font-size-sm);
 		cursor: pointer;
 		font-weight: 500;
 	}
 
 	button.primary:hover {
-		background: color-mix(in srgb, var(--color-info) 85%, black);
+		background: var(--color-primary-hover);
 	}
 
 	button.danger {

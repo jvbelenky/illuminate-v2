@@ -1873,6 +1873,10 @@
 	.plan.custom {
 		cursor: crosshair;
 	}
+	/* A draft being drawn (its outline, corners and rubber band) is in the category blue */
+	.plan.drawing {
+		--color-accent: var(--color-highlight);
+	}
 	.plan.pannable {
 		cursor: grab;
 	}
@@ -1955,8 +1959,8 @@
 		stroke: var(--color-accent);
 	}
 	.rect-draw {
-		fill: color-mix(in srgb, var(--color-scene-selected) 10%, transparent);
-		stroke: var(--color-scene-selected);
+		fill: color-mix(in srgb, var(--color-highlight) 10%, transparent);
+		stroke: var(--color-highlight);
 		pointer-events: none;
 	}
 	.edge-hit {
@@ -2005,8 +2009,9 @@
 		pointer-events: auto;
 		cursor: pointer;
 	}
-	.shape.clickable:hover {
-		fill: color-mix(in srgb, var(--color-accent) 25%, transparent);
+	.shape.clickable:not(.selected):hover {
+		fill: color-mix(in srgb, var(--color-scene-selected) 14%, transparent);
+		stroke: color-mix(in srgb, var(--color-scene-selected) 60%, transparent);
 	}
 	.shape.selected {
 		fill: color-mix(in srgb, var(--color-scene-selected) 30%, transparent);

@@ -177,43 +177,37 @@
 </div>
 
 <style>
-	/* A row is a filled button off the panel behind it; hover is a step lighter. The
-	   selected or open row is tinted with the selection cyan, with a 3 px cyan bar down its
-	   left side and its name in bold (no outline round the card) */
+	/* A row is a filled button off the panel behind it; hover tints it with a little of the
+	   selection cyan. The open row is a raised card: a lighter surface with a soft shadow, no
+	   bar or outline, its name bold in the selection cyan. A row selected without being open
+	   (several at once) is tinted cyan, its name the same */
 	.editor-row {
 		display: flex;
 		flex-direction: column;
 		background: var(--color-btn-fill);
-		border: 1px solid transparent;
 		border-radius: var(--radius-sm);
-		transition: background 0.12s;
+		transition: background 0.12s, box-shadow 0.12s;
 	}
 	.editor-row:not(.open):not(.selected):hover {
-		background: var(--color-btn-fill-hover);
+		background: color-mix(in srgb, var(--color-scene-selected) 12%, var(--color-btn-fill-hover));
 	}
-	.editor-row.open,
-	.editor-row.selected {
-		background: color-mix(in srgb, var(--color-scene-selected) 14%, var(--color-bg-tertiary));
-		box-shadow: inset 3px 0 0 var(--color-scene-selected);
+	.editor-row.selected:not(.open) {
+		background: color-mix(in srgb, var(--color-scene-selected) 26%, var(--color-btn-fill));
 	}
-	.editor-row.open > .row-head,
-	.editor-row.selected > .row-head {
-		background: color-mix(in srgb, var(--color-scene-selected) 42%, var(--color-bg-tertiary));
-		box-shadow: inset 3px 0 0 var(--color-scene-selected);
-		border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+	.editor-row.open {
+		background: var(--color-card-raised);
+		box-shadow: var(--shadow-card-raised);
 	}
 	.editor-row.open .name,
 	.editor-row.selected .name {
 		font-weight: 600;
-	}
-	.editor-row.selected:not(.open) > .row-head {
-		border-radius: var(--radius-sm);
+		color: var(--color-scene-selected);
 	}
 	.row-head {
 		display: flex;
 		align-items: center;
 		gap: 4px;
-		padding: 3px 4px 3px 8px;
+		padding: 3px 10px 3px 14px;
 	}
 	.row-main {
 		flex: 1;
@@ -334,12 +328,15 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-xs) 8px 8px;
-		border-top: 1px solid var(--color-border);
+		padding: var(--spacing-xs) 14px 14px;
 	}
-	@container (max-width: 359px) {
+	/* Only a very narrow panel gives up the card's 14 px sides */
+	@container (max-width: 279px) {
+		.row-head {
+			padding: 3px 4px 3px 8px;
+		}
 		.row-body {
-			padding: var(--spacing-xs) 4px 8px;
+			padding: var(--spacing-xs) 6px 10px;
 		}
 	}
 </style>

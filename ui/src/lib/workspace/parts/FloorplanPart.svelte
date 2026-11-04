@@ -292,8 +292,9 @@
 	}
 	.image-card button.secondary.active,
 	.image-card button.secondary.active:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--color-scene-selected) 22%, var(--color-btn-fill));
-		border-color: var(--color-scene-selected);
+		background: var(--color-highlight);
+		border-color: var(--color-highlight);
+		color: var(--color-on-highlight);
 	}
 	.vertex-table {
 		display: flex;
@@ -334,7 +335,7 @@
 		color: var(--color-text-muted);
 	}
 	.vertex-row.selected .row-index {
-		color: var(--color-accent);
+		color: var(--color-scene-selected);
 		font-weight: 600;
 	}
 	.remove-btn {

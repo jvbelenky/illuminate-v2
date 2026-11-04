@@ -624,7 +624,7 @@
 		bottom: 0;
 		width: 24px;
 		z-index: 5;
-		background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+		background: color-mix(in srgb, var(--color-highlight) 12%, transparent);
 	}
 	.dock-edge.left {
 		left: 0;
@@ -646,8 +646,8 @@
 		z-index: 5;
 	}
 	.dock-drop.on {
-		background: var(--color-primary);
-		box-shadow: 0 0 10px var(--color-primary);
+		background: var(--color-highlight);
+		box-shadow: 0 0 10px var(--color-highlight);
 	}
 	/* A floating panel: a window above the main view (a floating mini view's slot sits just above it) */
 	.dock-float {
@@ -688,7 +688,7 @@
 		box-sizing: border-box;
 		pointer-events: none;
 		z-index: 1000;
-		border: 1px solid var(--color-primary);
+		border: 1px solid var(--color-highlight);
 		border-radius: var(--radius-md);
 		background: color-mix(in srgb, var(--color-bg-tertiary) 80%, transparent);
 		color: var(--color-text);
