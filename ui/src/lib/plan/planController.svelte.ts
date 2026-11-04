@@ -26,7 +26,7 @@ import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } 
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
 import { clipboard, setClipboard, takePaste, type ClipboardContent } from './clipboard';
-import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, zoneWallIndex, toWall, fromWall, type Surface, type WallSegment } from '$lib/utils/surfaces';
+import { stepSurface as stepSurfaceFrom, viewSurfaces, planSurface, wallIndex, wallSegment, zoneSurface, zoneWallIndex, toWall, fromWall, type Surface, type WallSegment } from '$lib/utils/surfaces';
 import { pickMode, type PickRequest } from '$lib/stores/pickMode';
 import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels, wallToCanvas, canvasToWall, unprojectLampMove, unprojectStructureMove } from './wallProjection';
 import { wallPlaneOutline } from '$lib/utils/planeWorld';
@@ -199,15 +199,19 @@ export class PlanController {
   /** A local edit of the current polygon that is invalid, so not applied. */
   dirty = $state(false);
 
-  // --- Surface (which room surface the 2D view shows: floor, ceiling or a wall)
+  // --- Surface (what the 2D view shows: the plan view, 'floor', or a wall). The
+  // plan view is top-down and shows the floor's and the ceiling's items together;
+  // only the ceiling designer's own plan (the 'ceiling' context) is on 'ceiling'.
   private _surface = $state<Surface>('floor');
-  /** A wall whose index the outline no longer has reads as the floor. */
+  /** A wall whose index the outline no longer has reads as the plan view, as does the ceiling outside the ceiling designer. */
   get surface(): Surface {
+    if (this._surface === 'ceiling') return this.context === 'ceiling' ? 'ceiling' : 'floor';
     const w = wallIndex(this._surface);
     return w !== null && w >= this.scene().vertices.length ? 'floor' : this._surface;
   }
-  set surface(s: Surface) { this._surface = s; }
-  get surfaces(): Surface[] { return allSurfaces(this.scene().vertices); }
+  set surface(s: Surface) { this._surface = planSurface(s); }
+  /** The 2D view's choices: the plan view, then the walls. */
+  get surfaces(): Surface[] { return viewSurfaces(this.scene().vertices); }
   get wallSeg(): ReturnType<typeof wallSegment> {
     const w = wallIndex(this.surface);
     return w === null ? null : wallSegment(this.scene().vertices, w);
@@ -262,10 +266,11 @@ export class PlanController {
       return [r6(along), r6(up)] as Vertex;
     })).map(([a, u]) => [a, u] as [number, number]);
   }
-  /** The surface a zone lies on matches the one showing (volumes and points lie on the floor). */
+  /** The zone shows on the view showing: the plan view has volumes, points and the floor's and the ceiling's planes; a wall its own planes. */
   private zoneOnSurface(z: CalcZone): boolean {
     if (z.type !== 'plane') return this.surface === 'floor';
-    return zoneSurface(z, this.scene().roomZ) === this.surface;
+    const on = zoneSurface(z, this.scene().roomZ);
+    return this.surface === 'ceiling' ? on === 'ceiling' : planSurface(on) === this.surface;
   }
   /** The polygon the canvas edits for a zone: a wall plane's outline on its wall, else its footprint. */
   private zoneOutline(z: CalcZone): Vertex[] {
@@ -279,7 +284,8 @@ export class PlanController {
     return clone(context === 'outline' && !this.onWall ? this.scene().vertices : []);
   }
   /** Show another surface, dropping the draft and selection (a zone pick keeps them: it sets `surface` itself). */
-  setSurface = (next: Surface) => {
+  setSurface = (to: Surface) => {
+    const next = this.context === 'ceiling' ? to : planSurface(to);
     if (next === this.surface) return;
     const refit = wallIndex(next) !== null || this.onWall;
     if (this.drawing) this.canvas?.cancelDraw();
@@ -928,7 +934,6 @@ export class PlanController {
     if (seg && kind === 'plane') return { surface: this.surface, wall_vertices: this.toWallOutline(draft, seg), normal_offset: 0, flip: false };
     const footprint = zoneFootprintGeometry(kind, draft);
     if (kind === 'volume') return footprint;
-    if (this.surface === 'ceiling') return { ...footprint, surface: 'ceiling', height: this.scene().roomZ, direction: -1 };
     // At eye height, as Add puts a floor plane
     const units = this.scene().units;
     return { ...footprint, surface: 'floor', height: roundToUnit(fromMeters(1.8, units), units) };
@@ -1282,7 +1287,7 @@ export class PlanController {
     const z = id ? this.userZones.find((x) => x.id === id) : null;
     // A plane opens on its surface and a volume on the floor; a point stays on the surface showing
     if (z) {
-      const next = z.type === 'plane' ? zoneSurface(z, this.scene().roomZ) : z.type === 'point' ? this.surface : 'floor';
+      const next = z.type === 'plane' ? planSurface(zoneSurface(z, this.scene().roomZ)) : z.type === 'point' ? this.surface : 'floor';
       if (next !== this.surface) {
         const refit = wallIndex(next) !== null || this.onWall;
         this._surface = next;

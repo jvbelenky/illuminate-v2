@@ -390,11 +390,11 @@ test.describe('Objects (obstacles)', () => {
     await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(1);
   });
 
-  test('at 1440 x 900 the strip of a selected structure shows its labels, clear of the view tools', async ({ page }) => {
+  test('at 1440 x 900 the strip of a selected structure shows its labels, clear of Calculate', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await addObject(page);
     const strip = page.locator('.main-view-controls .plan-toolbar');
-    const tools = page.locator('.view-slot[data-view="2d"]:not(.mini) .view-controls');
+    const tools = page.locator('.main-view-controls .corner.tr');
     await expect(strip).not.toHaveClass(/compact/);
     for (const label of ['Edit corners', 'Rotate 90°', 'Copy', 'Delete']) {
       await expect(planTool(page, label).locator('.tool-label')).toBeVisible();

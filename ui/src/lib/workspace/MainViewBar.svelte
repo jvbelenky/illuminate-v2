@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The 2D | 3D switch, top-left of the main view: which view fills it.
+	// The 2D | 3D switch, bottom-middle of the main view (top-left on a phone): which view fills it.
 	import type { MainView } from './dockLayout';
 
 	interface Props {

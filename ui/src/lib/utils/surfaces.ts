@@ -27,10 +27,28 @@ export function allSurfaces(vertices: Vertex[]): Surface[] {
   return ['floor', 'ceiling', ...vertices.map((_, i) => `wall:${i}` as Surface)];
 }
 
-/** The next (+1) or previous (-1) surface, wrapping around. */
+/**
+ * What the main 2D view shows: the plan view ('floor': top-down, with the
+ * floor's and the ceiling's items together), then each wall.
+ */
+export function viewSurfaces(vertices: Vertex[]): Surface[] {
+  return ['floor', ...vertices.map((_, i) => `wall:${i}` as Surface)];
+}
+
+/** The main 2D view that shows a surface: the ceiling's items are on the plan view. */
+export function planSurface(s: Surface): Surface {
+  return s === 'ceiling' ? 'floor' : s;
+}
+
+/** The main 2D view's name for a surface: Plan view, or the wall's. */
+export function viewName(s: Surface): string {
+  return s === 'floor' || s === 'ceiling' ? 'Plan view' : surfaceName(s);
+}
+
+/** The next (+1) or previous (-1) view of the main 2D view, wrapping around. */
 export function stepSurface(current: Surface, vertices: Vertex[], delta: 1 | -1): Surface {
-  const all = allSurfaces(vertices);
-  const i = all.indexOf(current);
+  const all = viewSurfaces(vertices);
+  const i = all.indexOf(planSurface(current));
   const from = i < 0 ? 0 : i;
   return all[(from + delta + all.length) % all.length];
 }

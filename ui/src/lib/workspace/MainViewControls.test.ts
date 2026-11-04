@@ -17,49 +17,79 @@ function mount(props: Record<string, unknown> = {}) {
   return { ...result, ctl };
 }
 
-const corner = (c: HTMLElement, name: 'tl' | 'tr' | 'bl') => c.querySelector(`.main-view-controls .corner.${name}`) as HTMLElement;
+const corner = (c: HTMLElement, name: 'tl' | 'tr' | 'bl' | 'bc') => c.querySelector(`.main-view-controls .corner.${name}`) as HTMLElement;
+const labelsOf = (el: Element) => [...el.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'));
 
 describe('MainViewControls', () => {
   beforeEach(() => userSettings.update((s) => ({ ...s, planNavMode: 'hand', autoRecalculate: false })));
 
-  it('puts 2D | 3D top-left, the surface switch top-right, the edit strip bottom-left; no Calculate', () => {
+  it('the edit strip, a divider and Undo | Redo top-left; Calculate top-right; the view picker bottom-left; 2D | 3D bottom-middle', async () => {
     const onSelectMain = vi.fn();
-    const { container } = mount({ controls: '2d', context: 'obstacles', onSelectMain });
+    const { container, ctl } = mount({ controls: '2d', context: 'obstacles', onSelectMain });
     const tl = corner(container, 'tl');
-    const mainGroup = within(tl).getByRole('group', { name: 'Main view' });
-    const two = within(mainGroup).getByRole('button', { name: '2D' });
-    const three = within(mainGroup).getByRole('button', { name: '3D' });
-    expect(two.getAttribute('aria-pressed')).toBe('true');
-    expect(two.querySelector('svg')).toBeNull();
-    const tr = corner(container, 'tr');
-    expect(within(tl).queryByRole('group', { name: 'Surface' })).toBeNull();
-    const surface = within(tr).getByRole('group', { name: 'Surface' });
-    expect(within(surface).getByRole('button', { name: 'Floor' }).textContent?.trim()).toBe('Floor');
-    expect(within(surface).getByRole('button', { name: 'Ceiling' }).textContent?.trim()).toBe('Ceiling');
-    expect(within(surface).getByRole('combobox', { name: 'Walls' })).toBeTruthy();
-    expect(surface.textContent).toContain('Walls ▾');
-    expect(container.querySelector('button.calculate-btn')).toBeNull();
-
-    const strip = corner(container, 'bl').querySelector('.plan-toolbar') as HTMLElement;
+    const strip = tl.querySelector('.plan-toolbar') as HTMLElement;
     const tools = [...strip.querySelectorAll('button')];
     expect(tools.map((b) => b.getAttribute('aria-label'))).toEqual(['Rectangle', 'Polygon']);
     expect(tools.map((b) => b.title)).toEqual(['Rectangle', 'Polygon']);
     for (const b of tools) expect(b.textContent?.trim()).toBe(b.getAttribute('aria-label'));
-    // The pane itself has no toolbar or surface row of its own
+    expect(strip.nextElementSibling!.classList.contains('tl-divider')).toBe(true);
+    expect(strip.nextElementSibling!.nextElementSibling!.getAttribute('aria-label')).toBe('History');
+    expect(labelsOf(tl).slice(-2)).toEqual(['Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)']);
+
+    // Calculate, with Autorecalculate under it
+    const tr = corner(container, 'tr');
+    const calc = tr.querySelector('button.calculate-btn') as HTMLElement;
+    expect(calc.textContent?.trim()).toBe('Calculate');
+    const auto = within(tr).getByRole('checkbox');
+    expect(auto.closest('label')!.textContent?.trim()).toBe('Autorecalculate');
+    expect(calc.closest('.calculate-row')!.nextElementSibling).toBe(auto.closest('label'));
+
+    // Plan view, then each wall; no Floor | Ceiling | Walls
+    const bl = corner(container, 'bl');
+    const pick = within(bl).getByRole('combobox', { name: '2D view' }) as HTMLSelectElement;
+    expect([...pick.options].map((o) => o.textContent)).toEqual(['Plan view', 'Wall 1', 'Wall 2', 'Wall 3', 'Wall 4']);
+    expect(pick.value).toBe('floor');
+    expect(container.querySelector('.surface-switcher')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ceiling' })).toBeNull();
+    await fireEvent.change(pick, { target: { value: 'wall:2' } });
+    expect(ctl.surface).toBe('wall:2');
+
+    const mainGroup = within(corner(container, 'bc')).getByRole('group', { name: 'Main view' });
+    const two = within(mainGroup).getByRole('button', { name: '2D' });
+    expect(two.getAttribute('aria-pressed')).toBe('true');
+    // The pane itself has no toolbar or picker row of its own
     expect(container.querySelector('.plan-pane .plan-toolbar')).toBeNull();
     expect(container.querySelector('.plan-pane .surface-row')).toBeNull();
-
-    fireEvent.click(three);
+    await fireEvent.click(within(mainGroup).getByRole('button', { name: '3D' }));
     expect(onSelectMain).toHaveBeenCalledWith('3d');
   });
 
-  it('with 3D main: no surface switch, the edit strip stays and Draw brings the 2D view up', async () => {
+  it('the spinner sits beside Calculate, out of the layout', async () => {
+    const { calculationStatus } = await import('$lib/stores/calculationStatus');
+    const { container } = mount({ controls: '2d', context: 'outline' });
+    const row = corner(container, 'tr').querySelector('.calculate-row') as HTMLElement;
+    expect(row.querySelector('.calc-status')).toBeNull();
+    calculationStatus.begin();
+    await tick();
+    const status = row.querySelector('.calc-status') as HTMLElement;
+    expect(status.querySelector('.spinner')).not.toBeNull();
+    // In the button's row (positioned out of the flow): Autorecalculate stays the row's next sibling
+    expect(row.nextElementSibling!.classList.contains('autorecalc-label')).toBe(true);
+    calculationStatus.finish('Server unreachable');
+    await tick();
+    // An error mark takes the same place
+    expect(row.querySelector('.calc-status .error-indicator')).not.toBeNull();
+    calculationStatus.reset();
+  });
+
+  it('with 3D main: no view picker, the edit strip stays top-left and Draw brings the 2D view up', async () => {
     const onNeedCanvas = vi.fn();
     const calls: unknown[][] = [];
     const other = { ...lamp, id: 'lamp-8', name: 'Other', x: 4 };
     const { container, ctl } = mount({ controls: '3d', mini: true, context: 'lamps', lamps: [lamp, other], onNeedCanvas, calls });
-    expect(within(corner(container, 'tr')).queryByRole('group', { name: 'Surface' })).toBeNull();
-    const strip = corner(container, 'bl').querySelector('.plan-toolbar') as HTMLElement;
+    expect(corner(container, 'bl')).toBeNull();
+    expect(within(corner(container, 'bc')).getByRole('button', { name: '3D' }).getAttribute('aria-pressed')).toBe('true');
+    const strip = corner(container, 'tl').querySelector('.plan-toolbar') as HTMLElement;
     expect([...strip.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Move', 'Aim', 'Copy', 'Delete']);
     // Delete acts on the selection here, without switching views
     ctl.selectedLampIds = ['lamp-7'];
@@ -75,33 +105,42 @@ describe('MainViewControls', () => {
   it('Rectangle in 3D (structures) asks for the 2D view', async () => {
     const onNeedCanvas = vi.fn();
     const { container } = mount({ controls: '3d', mini: true, context: 'obstacles', onNeedCanvas });
-    await fireEvent.click(within(corner(container, 'bl')).getByRole('button', { name: 'Rectangle' }));
+    await fireEvent.click(within(corner(container, 'tl')).getByRole('button', { name: 'Rectangle' }));
     expect(onNeedCanvas).toHaveBeenCalledTimes(1);
   });
 
-  it('the summary keeps the surface switch in 2D but shows no edit strip', () => {
+  it('the summary shows Undo | Redo alone top-left, and keeps the view picker and Calculate', () => {
     const { container } = mount({ controls: '2d', readonly: true, context: 'obstacles' });
-    expect(within(corner(container, 'tr')).getByRole('group', { name: 'Surface' })).toBeTruthy();
-    expect(corner(container, 'bl')).toBeNull();
-    expect(within(corner(container, 'tl')).getByRole('group', { name: 'Main view' })).toBeTruthy();
+    const tl = corner(container, 'tl');
+    expect(tl.querySelector('.plan-toolbar')).toBeNull();
+    expect(tl.querySelector('.tl-divider')).toBeNull();
+    expect(labelsOf(tl)).toEqual(['Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)']);
+    expect(within(corner(container, 'bl')).getByRole('combobox', { name: '2D view' })).toBeTruthy();
+    expect(corner(container, 'tr').querySelector('button.calculate-btn')).not.toBeNull();
+  });
+
+  it('no surface name shows over the view', async () => {
+    const { container, ctl } = mount({ controls: '2d', context: 'outline' });
+    ctl.setSurface('wall:1');
+    await tick();
+    for (const name of ['tl', 'tr', 'bc'] as const) expect(corner(container, name).textContent).not.toContain('Wall');
   });
 });
 
 describe('the 2D view tools corner', () => {
   beforeEach(() => userSettings.update((s) => ({ ...s, planNavMode: 'hand' })));
 
-  it('Undo | Redo, then units, before Pan | Zoom | Fit; changing units changes the project units', async () => {
+  it('units, then Open in new tab and Save as image; no Undo, Pan, Zoom, − + or Fit; changing units changes the project units', async () => {
     const calls: unknown[][] = [];
     const { container } = mount({ controls: '2d', context: 'outline', calls });
     const tools = container.querySelector('.plan-pane .view-controls') as HTMLElement;
-    const history = tools.firstElementChild as HTMLElement;
-    expect(history.getAttribute('aria-label')).toBe('History');
-    const units = history.nextElementSibling as HTMLSelectElement;
+    const units = tools.firstElementChild as HTMLSelectElement;
     expect(units.tagName).toBe('SELECT');
     expect(units.title).toBe('Units');
     expect(units.value).toBe('meters');
     expect([...units.options].map((o) => o.textContent)).toEqual(['meters', 'centimeters', 'millimeters', 'feet', 'inches']);
-    expect([...tools.querySelectorAll('button')].map((b) => b.title)).toEqual(['Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)', 'Pan (H)', 'Zoom (Z)', 'Zoom out (−)', 'Zoom in (+)', 'Fit (F)']);
+    expect([...tools.querySelectorAll('button')].map((b) => b.title)).toEqual(['Open in new tab', 'Save as image']);
+    expect(container.querySelector('.nav-fit, .nav-in, .nav-out, .nav-mode')).toBeNull();
     await fireEvent.change(units, { target: { value: 'feet' } });
     expect(calls.filter((c) => c[0] === 'changeUnits')).toEqual([['changeUnits', 'feet']]);
   });
@@ -129,7 +168,7 @@ describe('on a phone (touch)', () => {
 
   const br = (c: HTMLElement) => c.querySelector('.main-view-controls .corner.br') as HTMLElement;
 
-  it('Fit and one surface dropdown top-right, ⤢ bottom-right, the strip bottom-left; no Pan, Zoom, − + or units', async () => {
+  it('Fit and the view picker top-right, ⤢ bottom-right, the strip bottom-left; no Pan, Zoom, − + or units', async () => {
     const onFit = vi.fn();
     const onToggleFullScreen = vi.fn();
     const { container, ctl } = mount({ controls: '2d', touch: true, context: 'obstacles', onFit, onToggleFullScreen });
@@ -137,12 +176,11 @@ describe('on a phone (touch)', () => {
     expect([...tr.querySelectorAll('button')].slice(0, 3).map((b) => b.getAttribute('aria-label'))).toEqual(['Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)', 'Fit']);
     await fireEvent.click(within(tr).getByRole('button', { name: 'Fit' }));
     expect(onFit).toHaveBeenCalledTimes(1);
-    expect(within(tr).queryByRole('group', { name: 'Surface' })).toBeNull();
-    const surface = within(tr).getByRole('combobox', { name: 'Surface' }) as HTMLSelectElement;
-    expect([...surface.options].map((o) => o.textContent)).toEqual(['Floor', 'Ceiling', 'Wall 1', 'Wall 2', 'Wall 3', 'Wall 4']);
-    expect(tr.textContent).toContain('Floor ▾');
-    await fireEvent.change(surface, { target: { value: 'ceiling' } });
-    expect(ctl.surface).toBe('ceiling');
+    const surface = within(tr).getByRole('combobox', { name: '2D view' }) as HTMLSelectElement;
+    expect([...surface.options].map((o) => o.textContent)).toEqual(['Plan view', 'Wall 1', 'Wall 2', 'Wall 3', 'Wall 4']);
+    await fireEvent.change(surface, { target: { value: 'wall:0' } });
+    expect(ctl.surface).toBe('wall:0');
+    expect(tr.querySelector('button.calculate-btn')).toBeNull();
 
     expect(container.querySelector('.view-controls')).toBeNull();
     expect(container.querySelector('select[title="Units"]')).toBeNull();
@@ -168,7 +206,7 @@ describe('on a phone (touch)', () => {
 
   it('the summary keeps Fit and the dropdown but no edit strip', () => {
     const { container } = mount({ controls: '2d', touch: true, readonly: true, context: 'obstacles' });
-    expect(within(corner(container, 'tr')).getByRole('combobox', { name: 'Surface' })).toBeTruthy();
+    expect(within(corner(container, 'tr')).getByRole('combobox', { name: '2D view' })).toBeTruthy();
     expect(corner(container, 'bl')).toBeNull();
   });
 });

@@ -33,8 +33,6 @@
 		titles: Record<DockPanelId, string>;
 		panel: Snippet<[DockPanelId]>;
 		main: Snippet;
-		/** The Calculate control: bare, directly above the Results panel wherever it is. */
-		calculate?: Snippet;
 		/** Icon buttons in the Results title bar. */
 		resultsTools?: Snippet;
 		/** Controls in the Editor title bar (its Done). */
@@ -45,7 +43,7 @@
 		onMiniFloat?: (m: { box: FloatBox; z: number } | null) => void;
 	}
 
-	let { layout, onChange, titles, panel, main, onSwap, calculate, resultsTools, editorTools, onMiniFloat }: Props = $props();
+	let { layout, onChange, titles, panel, main, onSwap, resultsTools, editorTools, onMiniFloat }: Props = $props();
 
 	const toolsFor = (id: DockPanelId) => (id === 'results' ? resultsTools : id === 'editor' ? editorTools : undefined);
 
@@ -381,10 +379,7 @@
 		// The grab point within the panel, kept inside a window of the floating size
 		const w = layout.floats?.[id]?.w ?? FLOAT_DEFAULTS[id].w;
 		const ox = pr ? Math.max(0, Math.min(w - 24, e.clientX - pr.left)) : 0;
-		// A Results window starts with the Calculate control above its bar
-		const calcH = id === 'results' ? (areaEl?.querySelector('.dock-calc')?.getBoundingClientRect().height ?? 0) : 0;
-		const above = calcH > 0 ? calcH + 6 : 0;
-		const oy = (pr ? Math.max(0, Math.min(26, e.clientY - pr.top)) : 0) + above;
+		const oy = pr ? Math.max(0, Math.min(26, e.clientY - pr.top)) : 0;
 		drag = { id, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, started: false, floating, ox, oy };
 		window.addEventListener('pointermove', onMove);
 		window.addEventListener('pointerup', onUp);
@@ -436,9 +431,6 @@
 					{:else}
 						<div class="dock-gap"></div>
 					{/if}
-				{/if}
-				{#if id === 'results' && calculate}
-					<div class="dock-calc">{@render calculate()}</div>
 				{/if}
 				<DockPanel
 					{id}
@@ -492,9 +484,6 @@
 				style:z-index={zOf(id)}
 				onpointerdowncapture={() => touch(id)}
 			>
-				{#if id === 'results' && calculate}
-					<div class="dock-calc">{@render calculate()}</div>
-				{/if}
 				<DockPanel
 					{id}
 					floating
@@ -667,22 +656,6 @@
 	}
 	.dock-float > :global(.dock-panel) {
 		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
-	}
-	/* Calculate across the full width directly above the Results panel, Auto compact at its left */
-	.dock-calc {
-		flex: none;
-		display: flex;
-		margin-bottom: 6px;
-	}
-	.dock-calc > :global(.calculate-corner) {
-		flex: 1;
-		min-width: 0;
-		gap: 6px;
-	}
-	.dock-calc :global(.calculate-corner .autorecalc-label) {
-		flex: none;
-		padding: 0 6px;
-		gap: 4px;
 	}
 	.dock-float-resize {
 		position: absolute;

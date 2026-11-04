@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { render, fireEvent } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import RoomViewer from './RoomViewer.svelte';
 import { ROOM_DEFAULTS } from '$lib/types/project';
@@ -16,13 +16,20 @@ const room = { ...ROOM_DEFAULTS } as any;
 const sceneProps = () => (globalThis as any).__sceneProps as Record<string, unknown>;
 
 describe('RoomViewer', () => {
-  it('shows view snap, projection toggle, units and actions by default', async () => {
-    const { container } = render(RoomViewer, { props: { room, lamps: [], onLampClick: vi.fn() } });
+  it('shows view snap and projection bottom-left; units, Open in new tab and Save as image bottom-right; no Undo', async () => {
+    const onUnitsChange = vi.fn();
+    const { container } = render(RoomViewer, { props: { room, lamps: [], onLampClick: vi.fn(), units: 'meters', onUnitsChange } });
     await tick();
     expect(container.querySelector('.view-overlay')).not.toBeNull();
     expect(container.querySelector('.proj-toggle')).not.toBeNull();
-    expect(container.querySelector('.units-label')).not.toBeNull();
-    expect(container.querySelector('.viewer-actions')).not.toBeNull();
+    expect(container.querySelector('.units-label')).toBeNull();
+    const actions = container.querySelector('.viewer-actions') as HTMLElement;
+    const units = actions.querySelector('select[title="Units"]') as HTMLSelectElement;
+    expect(units.value).toBe('meters');
+    expect([...actions.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Open in new tab', 'Save as image']);
+    expect(container.querySelector('.undo-redo')).toBeNull();
+    await fireEvent.change(units, { target: { value: 'feet' } });
+    expect(onUnitsChange).toHaveBeenCalledTimes(1);
     expect(container.querySelector('.viewer-container')!.classList.contains('mini')).toBe(false);
     expect(sceneProps().interactive).not.toBe(false);
     expect(typeof sceneProps().onLampClick).toBe('function');

@@ -76,8 +76,6 @@
 		designer?: boolean;
 		onDesignerController?: (ctl: PlanController) => void;
 		onCloseDesigner?: () => void;
-		/** The main pane's link from a ceiling item to the designer. */
-		onCeilingItemClick?: (id: string) => void;
 	}
 
 	let {
@@ -115,7 +113,6 @@
 		designer = false,
 		onDesignerController = () => {},
 		onCloseDesigner = () => {},
-		onCeilingItemClick,
 	}: Props = $props();
 
 	// svelte-ignore state_referenced_locally
@@ -310,7 +307,7 @@
 			<MainViewControls main={controls} onSelectMain={onSelectMain} controller={ctl} editing={!readonly} {touch} {onFit} {fullScreen} {onToggleFullScreen} />
 		</div>
 	{/if}
-	<PlanPane controller={ctl} {readonly} {mini} toolbar={!controls} viewTools={!touch} {onCeilingItemClick} />
+	<PlanPane controller={ctl} {readonly} {mini} toolbar={!controls} viewTools={!touch} imageTools={!!controls} />
 	{#if editor}
 		<EditorPanel controller={ctl} {onDone} {onShowReflectanceSettings} {onAddCustomLamp}>
 			{#snippet lampPanel(lamp, close)}

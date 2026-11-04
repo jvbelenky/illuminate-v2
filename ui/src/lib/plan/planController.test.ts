@@ -314,14 +314,22 @@ describe('flows that need the 2D canvas', () => {
   });
 
   describe('surfaces', () => {
-    test('] steps floor -> ceiling -> wall:0 and wraps', () => {
+    test('] steps plan view -> wall:0 and wraps; there is no ceiling view', () => {
       const { ctl } = make();
       expect(ctl.surface).toBe('floor');
-      press(ctl, ']');
-      expect(ctl.surface).toBe('ceiling');
+      expect(ctl.surfaces).toEqual(['floor', 'wall:0', 'wall:1', 'wall:2', 'wall:3']);
       press(ctl, ']');
       expect(ctl.surface).toBe('wall:0');
       for (let i = 0; i < 4; i++) press(ctl, ']');
+      expect(ctl.surface).toBe('floor');
+    });
+
+    test('the ceiling shows on the plan view outside the ceiling designer', () => {
+      const { ctl } = make();
+      ctl.setSurface('wall:1');
+      ctl.setSurface('ceiling');
+      expect(ctl.surface).toBe('floor');
+      ctl.surface = 'ceiling';
       expect(ctl.surface).toBe('floor');
     });
 
@@ -351,7 +359,7 @@ describe('flows that need the 2D canvas', () => {
     test('changing surface clears the selection', () => {
       const { ctl } = make();
       ctl.selectedZoneId = 'z1';
-      ctl.setSurface('ceiling');
+      ctl.setSurface('wall:0');
       expect(ctl.selectedZoneId).toBeNull();
     });
 
@@ -459,17 +467,23 @@ describe('planes on surfaces', () => {
     expect(asSet(geometry.wall_vertices!)).toEqual(asSet([[3, 0.5], [1, 0.5], [1, 2]]));
   });
 
-  test('drawing on the ceiling adds a downward plane at the ceiling from the polygon', async () => {
-    const { ctl, actions } = make();
+  test('a ceiling plane selected opens on the plan view, and a redraw keeps it on the ceiling', async () => {
+    const ceilPlane = { id: 'zc', type: 'plane', name: 'C', surface: 'ceiling', height: 2.7, direction: -1, fit_room: false, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
+    const { ctl, actions } = make({ zones: [ceilPlane] });
     ctl.setContext('zones');
-    ctl.setSurface('ceiling');
+    ctl.setSurface('wall:0');
+    ctl.selectZone('zc');
+    expect(ctl.surface).toBe('floor');
+    expect(ctl.selectedFootprint?.id).toBe('zc');
     ctl.canvas = fakeCanvas();
     ctl.startZoneDraw('plane');
     ctl.draft = [[1, 1], [3, 1], [2, 3]];
     await ctl.onDrawEnd(true);
-    const [, geometry] = vi.mocked(actions.addZone).mock.calls[0];
-    expect(geometry).toMatchObject({ surface: 'ceiling', height: 2.7, direction: -1, fit_room: false });
-    expect(geometry.vertices).toHaveLength(3);
+    expect(actions.addZone).not.toHaveBeenCalled();
+    const [id, partial] = vi.mocked(actions.updateZone).mock.calls[0];
+    expect(id).toBe('zc');
+    expect(partial).not.toHaveProperty('surface');
+    expect(partial).not.toHaveProperty('height');
   });
 
   test("dragging a wall plane's corner on its wall updates wall_vertices", () => {
@@ -504,14 +518,12 @@ describe('planes on surfaces', () => {
     expect([l.x1, l.y1, l.x2, l.y2].map((v) => Math.round(v * 1e6) / 1e6)).toEqual([6, 0.5, 6, 2]);
   });
 
-  test('each surface shows only its own planes', () => {
+  test('the plan view shows the floor and ceiling planes; a wall only its own', () => {
     const floorPlane = { id: 'zf', type: 'plane', name: 'F', surface: 'floor', height: 1, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
     const ceilPlane = { id: 'zc', type: 'plane', name: 'C', surface: 'ceiling', height: 2.7, direction: -1, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
     const { ctl } = make({ zones: [floorPlane, ceilPlane, drawn] });
     ctl.setContext('zones');
-    expect(ctl.surfaceZones.map((z) => z.id)).toEqual(['zf']);
-    ctl.setSurface('ceiling');
-    expect(ctl.surfaceZones.map((z) => z.id)).toEqual(['zc']);
+    expect(ctl.surfaceZones.map((z) => z.id)).toEqual(['zf', 'zc']);
     ctl.setSurface('wall:1');
     expect(ctl.wallView!.planes.map((p) => p.id)).toEqual(['zw']);
   });
