@@ -9,7 +9,7 @@ import type { PlanContext } from '$lib/workspace/editorNav';
 import type { PlanActions, PlanScene } from './planActions';
 import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry, type ObstacleDraft } from '$lib/utils/obstacleDrafts';
 import { footprintUpdate } from '$lib/utils/objectGeometry';
-import { normalizeYaw, rotateShapeBy } from './shapeTransform';
+import { clipToRect, normalizeYaw, rotateShapeBy } from './shapeTransform';
 import { zoneHasFootprint, zoneFootprint, footprintGeometry as zoneFootprintGeometry } from '$lib/utils/zoneFootprint';
 import { displayDimension } from '$lib/utils/formatting';
 import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
@@ -342,8 +342,8 @@ export class PlanController {
     return this.onZones && !!(this.selectedFootprint || this.selectedWallPlane);
   }
   drawKind = $state<'plane' | 'volume' | null>(null);
-  /** A Draw that replaces the selected zone's outline, rather than adding a zone. */
-  redrawZoneId: string | null = null;
+  /** A Draw that replaces the selected zone's outline, rather than adding a zone (its old outline is hidden meanwhile). */
+  redrawZoneId = $state<string | null>(null);
   readonly footprintZones = $derived(this.userZones.filter((z) => z.type !== 'point' && zoneHasFootprint(z)));
   /** Footprints on the floor or ceiling showing: floor planes and volumes on the floor, ceiling planes on the ceiling. */
   readonly surfaceZones = $derived(this.footprintZones.filter((z) => this.zoneOnSurface(z)));
@@ -619,6 +619,12 @@ export class PlanController {
   /** Apply the draft as the outline or the selected obstacle's footprint, if valid and changed. */
   commitDraft = () => {
     if (this.drawing) return;
+    // A turned zone keeps to the room (its wall): what a turn carries outside is cut off.
+    // (A whole-room plane turned 90° in a room longer than wide no longer fits in it.)
+    if (this.zoneCornersEditable && this.shapeMode === 'select' && normalizeYaw(this.draftYaw) !== 0) {
+      const clipped = this.clipToSurface(this.draft);
+      if (clipped) this.draft = clipped;
+    }
     if (this.onWall) {
       // On a wall only the selected wall plane's outline is editable
       const z = this.onZones ? this.selectedWallPlane : null;
@@ -676,6 +682,19 @@ export class PlanController {
   private rejectDraft() {
     if (this.shapeSelected && this.shapeMode === 'select') this.revertDraft();
     else this.dirty = true;
+  }
+
+  /** The draft cut to the surface showing: the room's bounding box, or the wall's face. Null when it is already inside. */
+  private clipToSurface(draft: Vertex[]): Vertex[] | null {
+    const seg = this.wallSeg;
+    let box: [number, number, number, number];
+    if (seg) box = [0, seg.length, 0, this.scene().roomZ];
+    else {
+      const bb = polygonBoundingBox(this.scene().vertices);
+      box = [bb.xMin, bb.xMax, bb.yMin, bb.yMax];
+    }
+    const out = draft.some(([x, y]) => x < box[0] - 1e-9 || x > box[1] + 1e-9 || y < box[2] - 1e-9 || y > box[3] + 1e-9);
+    return out ? clipToRect(draft, box) : null;
   }
 
   /** Drop a local invalid edit and show the stored polygon again. */

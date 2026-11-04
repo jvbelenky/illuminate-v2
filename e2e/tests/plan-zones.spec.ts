@@ -188,4 +188,41 @@ test.describe('Calc zones in the workspace', () => {
     expect(zones.map((z) => [z.type, z.name])).toEqual([['plane', 'CalcPlane 1'], ['volume', 'CalcVol 1'], ['point', 'CalcPoint 1'], ['plane', 'CalcPlane 2']]);
     guard.assertClean();
   });
+
+  test('a floor plane turns: Rotate 90° in the strip, then the rotate handle', async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    await waitForSession(page);
+    await showMain(page, '2d');
+    await addZone(page, 'plane');
+    const plane = async () => page.evaluate(() => JSON.parse(JSON.stringify((window as any).__illuminate_store__.zones)).find((z: any) => !z.isStandard));
+
+    // A whole-room plane in the 6 x 4 room: turned a quarter it is 4 wide, cut to the room's 4 deep
+    await planTool(page, 'Rotate 90°').click();
+    await expect.poll(async () => {
+      const z = await plane();
+      return [z.fit_room, z.x1, z.x2, z.y1, z.y2];
+    }).toEqual([false, 1, 5, 0, 4]);
+
+    // The rotate handle turns it off the axes: a drawn outline
+    const handle = planSvg(page).getByRole('button', { name: 'Rotate' });
+    const b = (await handle.boundingBox())!;
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width / 2 + 80, b.y + b.height / 2 + 30, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(async () => (await plane()).vertices?.length ?? 0).toBeGreaterThanOrEqual(4);
+    const z = await plane();
+    const xs = z.vertices.map((v: number[]) => v[0]);
+    const ys = z.vertices.map((v: number[]) => v[1]);
+    // Turned: not an axis rectangle, and kept in the room
+    expect(new Set(xs.map((x: number) => x.toFixed(3))).size).toBeGreaterThan(2);
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(0);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(6);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(4);
+    await waitForApiIdle(page);
+    const back = (await backendZones(page)).find((bz) => !bz.is_standard && bz.type === 'plane');
+    expect(back?.vertices?.length).toBe(z.vertices.length);
+    guard.assertClean();
+  });
 });
