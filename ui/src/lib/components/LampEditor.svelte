@@ -650,7 +650,19 @@
 	}
 	.fixture-row .select-with-button button.secondary {
 		flex: none;
-		padding-inline: 10px;
+		padding-inline: 8px;
+		font-size: var(--font-size-sm);
+	}
+	/* "Choose a fixture…" never clips: the select keeps room for it, and in a panel too
+	   narrow for both, Details... drops to the next line */
+	.fixture-row .select-with-button {
+		flex-wrap: wrap;
+	}
+	.fixture-row .select-with-button :global(select) {
+		flex: 1 1 0;
+		min-width: 9.5rem;
+		padding-inline: 6px;
+		font-size: var(--font-size-sm);
 	}
 
 	.select-with-button {

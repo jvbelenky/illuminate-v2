@@ -178,9 +178,10 @@
 
 <style>
 	/* A row is a filled button off the panel behind it; hover tints it with a little of the
-	   selection cyan. The open row is a raised card: a lighter surface with a soft shadow, no
-	   bar or outline, its name bold in the selection cyan. A row selected without being open
-	   (several at once) is tinted cyan, its name the same */
+	   selection cyan. The open row is a card on the Add cards' surface (bg-secondary, edged
+	   as they are), its name bold in the text colour; its borders and dividers are drawn a
+	   step stronger so the fields and folds inside stand off it. A row selected without
+	   being open (several at once) is tinted cyan, its name bold cyan */
 	.editor-row {
 		display: flex;
 		flex-direction: column;
@@ -195,11 +196,15 @@
 		background: color-mix(in srgb, var(--color-scene-selected) 26%, var(--color-btn-fill));
 	}
 	.editor-row.open {
-		background: var(--color-card-raised);
-		box-shadow: var(--shadow-card-raised);
+		--color-border: color-mix(in srgb, var(--color-text) 30%, var(--color-bg-secondary));
+		background: var(--color-bg-secondary);
+		box-shadow: inset 0 0 0 1px var(--color-border);
 	}
-	.editor-row.open .name,
-	.editor-row.selected .name {
+	.editor-row.open .name {
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.editor-row.selected:not(.open) .name {
 		font-weight: 600;
 		color: var(--color-scene-selected);
 	}

@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { waitForApiIdle } from '../helpers/network';
-import { waitForSession } from '../helpers/session';
+import { reloadSession, waitForSession } from '../helpers/session';
 import { attachErrorGuard } from '../helpers/errors';
 import { setRoomDimensions } from '../helpers/room';
 import { addLamp, fixtureSelect, lampEditor } from '../helpers/lamps';
 import { drawObject, expandObjectsPanel, objectEditor, setObjectField, getObjectsFromBackend } from '../helpers/objects';
-import { clickPlan, finishEditing, openStep, planTool } from '../helpers/workspace';
+import { clickPlan, finishEditing, openStep, planTool, showMain } from '../helpers/workspace';
 
 test.describe('Guided workspace', () => {
   test('start chooser: See an example places a lamp, calculates and lands on the summary', async ({ page }) => {
@@ -87,6 +87,38 @@ test.describe('Guided workspace', () => {
     await expect(page.locator('button.editor-done')).toHaveCount(0);
     await expect(page.locator('.editor-part')).toHaveCount(0);
     await expect(page.locator('button.landing-card')).toHaveCount(0);
+  });
+
+  test('Results: "Add a lamp to begin" is a button that opens the Lamps step', async ({ page }) => {
+    await waitForSession(page);
+    await expect(page.locator('.summary-panel')).toBeVisible();
+    const lampCountBefore = await page.locator('.lamps-part .editor-row').count();
+    await page.getByRole('button', { name: 'Add a lamp to begin' }).click();
+    await expect(page.locator('button.editor-stage[data-stage="lamps"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.lamps-part').getByRole('button', { name: '+ Add lamp' })).toBeVisible();
+    // It opens the step; it does not add a lamp
+    await expect(page.locator('.lamps-part .editor-row')).toHaveCount(lampCountBefore);
+  });
+
+  test('the main view opens on 2D (3D in the mini view) unless the user chose 3D', async ({ page }) => {
+    // A stored layout whose 3D main view came from a flow, not a choice
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('dock-seeded')) return;
+      sessionStorage.setItem('dock-seeded', '1');
+      const key = 'illuminate-settings';
+      const s = JSON.parse(localStorage.getItem(key) || '{}');
+      s.workspaceDock = { left: ['editor', 'mini'], right: ['results'], minimized: [], main: '3d' };
+      localStorage.setItem(key, JSON.stringify(s));
+    });
+    await waitForSession(page);
+    const bar = page.locator('[aria-label="Main view"]');
+    await expect(bar.getByRole('button', { name: '2D', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.dock-panel[data-panel="mini"]')).toContainText('3D');
+
+    // Choosing 3D is kept for the next session
+    await showMain(page, '3d');
+    await reloadSession(page);
+    await expect(bar.getByRole('button', { name: '3D', exact: true })).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('status-bar hint walks from no lamps to a calculation', async ({ page }) => {

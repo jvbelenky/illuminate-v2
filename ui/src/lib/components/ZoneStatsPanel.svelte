@@ -40,10 +40,12 @@
 		onLampHover?: (lampId: string | null) => void;
 		onOpenAdvancedSettings?: (lampId: string) => void;
 		onSelectSpecies?: () => void;
+		/** Opens the editor on the Lamps step (the empty state's "Add a lamp to begin"). */
+		onOpenLamps?: () => void;
 		isoGeometryMap?: Record<string, { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }>;
 	}
 
-	let { onShowAudit, showHeader = true, onOpenReport, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoGeometryMap = {} }: Props = $props();
+	let { onShowAudit, showHeader = true, onOpenReport, onLampHover, onOpenAdvancedSettings, onSelectSpecies, onOpenLamps, isoGeometryMap = {} }: Props = $props();
 
 	// Inline dose-time editing on the zone result cards (null = nothing being edited)
 	let editingDoseTimeZoneId = $state<string | null>(null);
@@ -601,9 +603,13 @@ values: result.values as number[][][],
 	{#if !$results}
 		<div class="empty-state">
 			<p>No results yet</p>
-			<div class="next-hint tone-{$nextStep.tone}" data-next-step={$nextStep.id}>
-				<p class="next-hint-title">{$nextStep.title}</p>
-			</div>
+			{#if $nextStep.id === 'no-lamps' && onOpenLamps}
+				<button type="button" class="secondary next-step-btn" data-next-step={$nextStep.id} onclick={onOpenLamps}>{$nextStep.title}</button>
+			{:else}
+				<div class="next-hint tone-{$nextStep.tone}" data-next-step={$nextStep.id}>
+					<p class="next-hint-title">{$nextStep.title}</p>
+				</div>
+			{/if}
 		</div>
 	{:else}
 		<!-- Custom Calculation Zones Section (fluence-dependent) -->
@@ -1288,6 +1294,18 @@ values: result.values as number[][][],
 		border-left: 3px solid var(--tone);
 		border-radius: 0 var(--radius-md) var(--radius-md) 0;
 		background: color-mix(in srgb, var(--tone) 9%, var(--color-bg-secondary));
+	}
+	/* The empty state's next step as a filled secondary button */
+	.next-step-btn {
+		margin-top: var(--spacing-md);
+		padding: var(--spacing-sm) var(--spacing-md);
+		font-weight: 600;
+	}
+	:global([data-theme='light']) .next-step-btn {
+		background: var(--color-btn-fill-raised);
+	}
+	:global([data-theme='light']) .next-step-btn:hover {
+		background: var(--color-btn-fill-raised-hover);
 	}
 	.next-hint.tone-warning { --tone: var(--color-warning); }
 	.next-hint.tone-danger { --tone: var(--color-danger); }

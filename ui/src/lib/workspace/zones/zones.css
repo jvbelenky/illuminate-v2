@@ -365,7 +365,7 @@
 	transform: translateX(14px);
 }
 .zone-panel .zp-switch input[role='switch']:focus-visible {
-	box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 40%, transparent);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 40%, transparent);
 }
 
 /* Geometry: a range as two fields either side of a dash, as the old zone editor */

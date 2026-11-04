@@ -9,7 +9,7 @@ import type { LampType, PlaneCalcMode, ZoneDisplayMode } from '$lib/types/projec
 import { ROOM_DEFAULTS } from '$lib/types/project';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { GuvStandard } from '$lib/api/contract';
-import { DEFAULT_DOCK, sanitizeDock, type DockLayout } from '$lib/workspace/dockLayout';
+import { DEFAULT_DOCK, openingDock, type DockLayout } from '$lib/workspace/dockLayout';
 import { DEFAULT_UNITS, toLengthUnit, type LengthUnit } from '$lib/utils/unitConversion';
 
 /** What scrolling and a drag on empty space do in the 2D plan. */
@@ -176,9 +176,10 @@ function loadSettings(): UserSettings {
       // An unknown navigation mode falls back to Hand
       if (parsed.planNavMode !== undefined && parsed.planNavMode !== 'hand' && parsed.planNavMode !== 'zoom') parsed.planNavMode = 'hand';
 
-      // The old layout keys are dropped; the dock is validated whole
+      // The old layout keys are dropped; the dock is validated whole, and opens on 2D
+      // unless the user chose the main view
       for (const k of ['workspaceLayout', 'workspaceSwap', 'workspaceSplit', 'workspaceInset', 'workspaceInsetHidden']) delete parsed[k];
-      parsed.workspaceDock = sanitizeDock(parsed.workspaceDock);
+      parsed.workspaceDock = openingDock(parsed.workspaceDock);
 
       // Merge with defaults for forward compatibility (new settings get defaults)
       const result = { ...SETTINGS_DEFAULTS, ...parsed };

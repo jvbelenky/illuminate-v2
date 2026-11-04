@@ -35,7 +35,7 @@
 	import EditorDone from '$lib/workspace/EditorDone.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
 	import { scrollRowIntoView, promptForFixture } from '$lib/workspace/parts/scrollRowIntoView';
-	import { DEFAULT_DOCK, sanitizeDock, swapMain, toggleMinimized, type DockLayout, type DockPanelId, type FloatBox, type MainView } from '$lib/workspace/dockLayout';
+	import { DEFAULT_DOCK, chooseMain, sanitizeDock, swapMain, toggleMinimized, withMain, type DockLayout, type DockPanelId, type FloatBox, type MainView } from '$lib/workspace/dockLayout';
 	import { planContext, type EditorStage, type RoomPart } from '$lib/workspace/editorNav';
 	import { workspaceUi, workspaceUiWasRestored } from '$lib/stores/workspaceUi';
 	import AuditModal from '$lib/components/AuditModal.svelte';
@@ -328,8 +328,9 @@
 	function swapViews() {
 		setDock(swapMain(dock));
 	}
+	/** The user picks the main view (2D | 3D): kept across sessions. */
 	function showMain(view: MainView) {
-		if (dock.main !== view) setDock({ ...dock, main: view });
+		if (dock.main !== view) setDock(chooseMain(dock, view));
 	}
 	function resetPanels() {
 		setDock(sanitizeDock(DEFAULT_DOCK));
@@ -352,7 +353,7 @@
 	// plan drawing and placing need the 2D canvas, a 3D pick needs the 3D view
 	plan.onNeedCanvas = () => {
 		if (isMobile) mobileMain = '2d';
-		else showMain('2d');
+		else if (dock.main !== '2d') setDock(withMain(dock, '2d'));
 	};
 	onMount(() => followPickMode(pickMode, () => (isMobile ? { ...dock, main: mobileMain } : dock), (l) => {
 		if (isMobile) mobileMain = l.main;
@@ -1312,7 +1313,7 @@
 	{/snippet}
 
 	{#snippet resultsContent(header: boolean)}
-		<ZoneStatsPanel showHeader={header} onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onOpenReport={() => openOrRestore('Generate report', () => showReportModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoGeometryMap} />
+		<ZoneStatsPanel showHeader={header} onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onOpenReport={() => openOrRestore('Generate report', () => showReportModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} onOpenLamps={() => openStep('lamps', undefined)} {isoGeometryMap} />
 	{/snippet}
 
 	<!-- Main Layout -->

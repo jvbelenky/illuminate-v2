@@ -501,9 +501,6 @@
   --color-scene-selected: #38bdf8;
   /* An idle object: unselected lamps, zones and ceiling items */
   --color-scene-item: #cbd5e1;
-  /* The open item card: a raised surface a step lighter than the closed rows */
-  --color-card-raised: color-mix(in srgb, var(--color-text) 24%, var(--color-bg-tertiary));
-  --shadow-card-raised: 0 2px 10px rgba(0, 0, 0, 0.45);
   --color-plot-bg: #1a1a2e;
   --color-plot-text: #e0e0e0;
   --color-plot-grid: #444444;
@@ -547,8 +544,6 @@
   --color-scene-wire: #475569;
   --color-scene-selected: #0284c7;
   --color-scene-item: #334155;
-  --color-card-raised: #fbfcfd;
-  --shadow-card-raised: 0 2px 8px rgba(15, 23, 42, 0.22);
   --color-plot-bg: #e4e7eb;
   --color-plot-text: #1f2328;
   --color-plot-grid: #d0d7de;
@@ -616,7 +611,7 @@ input:not([type="checkbox"]), select {
 
 input:not([type="checkbox"]):focus, select:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--color-focus);
 }
 
 /* Focus-visible styles for keyboard navigation */
@@ -626,19 +621,19 @@ a:focus-visible,
 select:focus-visible,
 details summary:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 40%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 40%, transparent);
   border-radius: var(--radius-sm);
 }
 
 [role="menuitem"]:focus-visible {
   outline: none;
-  box-shadow: inset 3px 0 0 0 var(--color-accent);
+  box-shadow: inset 3px 0 0 0 var(--color-focus);
   background: var(--color-bg-tertiary);
 }
 
 input:focus-visible {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent);
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 25%, transparent);
 }
 
 input[type="checkbox"] {
@@ -647,7 +642,7 @@ input[type="checkbox"] {
 
 input[type="checkbox"]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 40%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 40%, transparent);
   border-radius: 2px;
 }
 
@@ -691,6 +686,8 @@ button:disabled {
   /* For buttons on tinted panels (the lamp editor): a stronger fill than the shared one */
   --color-btn-fill-raised: color-mix(in srgb, var(--color-text) 30%, var(--color-bg-tertiary));
   --color-btn-fill-raised-hover: color-mix(in srgb, var(--color-text) 38%, var(--color-bg-tertiary));
+  /* Keyboard focus and a focused field's border: the category blue (red is kept for primary actions) */
+  --color-focus: var(--color-highlight);
 }
 
 button.secondary {
@@ -789,7 +786,7 @@ select.mv-select:hover {
 select.mv-select:focus-visible {
   position: relative;
   z-index: 2;
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-focus);
   outline-offset: -2px;
   box-shadow: none;
 }

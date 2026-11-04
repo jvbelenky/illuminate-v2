@@ -53,6 +53,15 @@ describe('ZoneStatsPanel', () => {
     expect(screen.getByText('Add a lamp to begin')).toBeTruthy();
   });
 
+  it('"Add a lamp to begin" is a button that opens the lamps editor', async () => {
+    const onOpenLamps = vi.fn();
+    render(ZoneStatsPanel, { onOpenLamps });
+    const btn = screen.getByRole('button', { name: 'Add a lamp to begin' });
+    expect(btn.classList.contains('secondary')).toBe(true);
+    await fireEvent.click(btn);
+    expect(onOpenLamps).toHaveBeenCalledTimes(1);
+  });
+
   it('renders panel header', () => {
     const { container } = render(ZoneStatsPanel);
     expect(container.querySelector('.panel-header')).toBeTruthy();

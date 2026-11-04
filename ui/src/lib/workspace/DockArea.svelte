@@ -567,7 +567,7 @@
 		background: var(--color-text-muted);
 	}
 	.dock-split:focus-visible {
-		outline: 2px solid var(--color-accent);
+		outline: 2px solid var(--color-focus);
 		outline-offset: -2px;
 	}
 	/* The 6 px between a column and the main view: drag to resize, double-click to reset */
@@ -600,7 +600,7 @@
 		background: var(--color-text-muted);
 	}
 	.dock-gutter:focus-visible {
-		outline: 2px solid var(--color-accent);
+		outline: 2px solid var(--color-focus);
 		outline-offset: -2px;
 	}
 	.dock-area.is-resizing :global(.view-slot) {

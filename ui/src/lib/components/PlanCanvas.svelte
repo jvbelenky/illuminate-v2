@@ -1902,7 +1902,7 @@
 		cursor: default;
 	}
 	.plan:focus-visible {
-		border-color: var(--color-primary);
+		border-color: var(--color-focus);
 	}
 	.grid-line {
 		stroke: var(--color-text-muted);
