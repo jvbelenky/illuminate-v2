@@ -3,20 +3,42 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { defaultZone, defaultRoom, defaultObject, nextStructureName } from './project';
+import { defaultZone, defaultRoom, defaultObject, nextStructureName, nextZoneName } from './project';
 
 describe('defaultZone', () => {
   it('honors minutes and seconds overrides for dose time', () => {
-    const zone = defaultZone(defaultRoom(), 0, { dose: true, hours: 2, minutes: 30, seconds: 15 });
+    const zone = defaultZone(defaultRoom(), [], { dose: true, hours: 2, minutes: 30, seconds: 15 });
     expect(zone.hours).toBe(2);
     expect(zone.minutes).toBe(30);
     expect(zone.seconds).toBe(15);
   });
 
   it('defaults minutes and seconds to 0 when not overridden', () => {
-    const zone = defaultZone(defaultRoom(), 0, { dose: true });
+    const zone = defaultZone(defaultRoom(), [], { dose: true });
     expect(zone.minutes).toBe(0);
     expect(zone.seconds).toBe(0);
+  });
+});
+
+describe('nextZoneName', () => {
+  it('numbers each type on its own: CalcPlane, CalcVol, CalcPoint', () => {
+    const zones = [
+      { type: 'plane', name: 'CalcPlane 1' },
+      { type: 'point', name: 'CalcPoint 1' },
+      { type: 'plane', name: 'Desk height' },
+    ];
+    expect(nextZoneName('plane', zones)).toBe('CalcPlane 3');
+    expect(nextZoneName('volume', zones)).toBe('CalcVol 1');
+    expect(nextZoneName('point', zones)).toBe('CalcPoint 2');
+  });
+  it('steps past a name already taken; standard zones neither count nor collide', () => {
+    expect(nextZoneName('plane', [{ type: 'plane', name: 'CalcPlane 2' }])).toBe('CalcPlane 3');
+    expect(nextZoneName('volume', [{ type: 'volume', name: 'WholeRoomFluence', isStandard: true }])).toBe('CalcVol 1');
+  });
+  it('names a default zone for its type', () => {
+    expect(defaultZone(defaultRoom(), [], { type: 'volume' }).name).toBe('CalcVol 1');
+    expect(defaultZone(defaultRoom(), [{ type: 'point', name: 'CalcPoint 1' }], { type: 'point' }).name).toBe('CalcPoint 2');
+    expect(defaultZone(defaultRoom()).name).toBe('CalcPlane 1');
   });
 });
 

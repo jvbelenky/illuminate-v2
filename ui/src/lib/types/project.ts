@@ -778,7 +778,31 @@ export interface ZoneOverrides {
   seconds?: number;
 }
 
-export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: ZoneOverrides): Omit<CalcZone, 'id'> {
+/** A zone's default name stem by type: CalcPlane 1, CalcVol 1, CalcPoint 1. */
+export const ZONE_NAME_STEM: Record<CalcZone['type'], string> = { plane: 'CalcPlane', volume: 'CalcVol', point: 'CalcPoint' };
+
+/**
+ * The next default zone name for `type`, as structures are named: "<stem> N" with
+ * N one past the count of the user's zones of that type, stepped on past any
+ * name already taken. Standard zones neither count nor collide.
+ */
+export function nextZoneName(
+  type: CalcZone['type'],
+  existing: ReadonlyArray<{ type?: string; name?: string | null; isStandard?: boolean }>,
+): string {
+  const stem = ZONE_NAME_STEM[type];
+  const taken = new Set(existing.map((z) => z.name ?? ''));
+  let n = existing.filter((z) => !z.isStandard && z.type === type).length + 1;
+  while (taken.has(`${stem} ${n}`)) n++;
+  return `${stem} ${n}`;
+}
+
+/** A new zone on the defaults, named for its type among `existing` (nextZoneName). */
+export function defaultZone(
+  room: RoomConfig,
+  existing: ReadonlyArray<{ type?: string; name?: string | null; isStandard?: boolean }> = [],
+  overrides?: ZoneOverrides,
+): Omit<CalcZone, 'id'> {
   const zoneType = overrides?.type ?? 'plane';
   const MIN_POINTS = 10;
   const defaultSpacing = 0.5;
@@ -786,7 +810,7 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
   const num_y = Math.max(MIN_POINTS, Math.round(room.y / defaultSpacing));  // cell model (matches guv_calcs)
 
   const base = {
-    name: `CalcZone${zoneCount + 1}`,
+    name: nextZoneName(zoneType, existing),
     type: zoneType,
     enabled: true,
     dose: overrides?.dose ?? false,

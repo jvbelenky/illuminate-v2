@@ -1143,8 +1143,7 @@
 	/** A new zone of a type with the user's default display, grid offset, calc mode and dose settings. */
 	function newZoneFromSettings(zoneType: 'plane' | 'volume' | 'point'): Omit<CalcZone, 'id'> {
 		const s = $userSettings;
-		const typeCount = $zones.filter(z => !z.isStandard).length;
-		return defaultZone($room, typeCount, {
+		return defaultZone($room, $zones, {
 			type: zoneType,
 			display_mode: zoneType === 'volume' ? s.volumeDisplayMode : s.planeDisplayMode,
 			offset: s.zoneOffset,
