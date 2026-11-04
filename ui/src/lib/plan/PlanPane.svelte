@@ -476,9 +476,11 @@
 						<polygon class="plan-zone" class:volume={z.type === 'volume'} class:off={z.enabled === false} class:highlighted={hovered('zones') === z.id} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => zoneDown(e, z.id)} />
 						{@const lx = Math.min(...fp.map((p) => p[0])) + c.px * 4}
 						{@const ly = Math.max(...fp.map((p) => p[1])) - c.px * 13}
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<text class="plan-lamp-label renamable" class:editing={paneInline?.kind === 'rename' && paneInline.id === z.id} x={lx} y={-ly} font-size={c.px * 11}
-							onpointerdown={onNameLabelDown} ondblclick={(e) => onNameLabelDblClick(e, 'zone', z.id, z.name || z.id, [lx + c.px * 40, ly + c.px * 4])}>{z.name || z.id}</text>
+						{#if z.show_label_2d !== false}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<text class="plan-lamp-label renamable" class:editing={paneInline?.kind === 'rename' && paneInline.id === z.id} x={lx} y={-ly} font-size={c.px * 11}
+								onpointerdown={onNameLabelDown} ondblclick={(e) => onNameLabelDblClick(e, 'zone', z.id, z.name || z.id, [lx + c.px * 40, ly + c.px * 4])}>{z.name || z.id}</text>
+						{/if}
 					{/each}
 				{/if}
 				{#if ctl.onLamps || ctl.onZones}

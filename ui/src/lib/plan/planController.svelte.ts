@@ -502,7 +502,7 @@ export class PlanController {
     return this.onLamps
       ? this.scene().lamps.map((l) => ({ id: l.id, name: l.name || l.id, x: l.x, y: l.y, ax: l.aimx, ay: l.aimy, enabled: l.enabled !== false, label: l.show_label_2d !== false }))
       : this.onZones
-        ? this.userZones.filter((z) => z.type === 'point').map((z) => ({ id: z.id, name: z.name || z.id, x: z.x ?? 0, y: z.y ?? 0, ax: z.aim_x ?? z.x ?? 0, ay: z.aim_y ?? z.y ?? 0, enabled: z.enabled !== false }))
+        ? this.userZones.filter((z) => z.type === 'point').map((z) => ({ id: z.id, name: z.name || z.id, x: z.x ?? 0, y: z.y ?? 0, ax: z.aim_x ?? z.x ?? 0, ay: z.aim_y ?? z.y ?? 0, enabled: z.enabled !== false, label: z.show_label_2d !== false }))
         : [];
   }
   readonly selectedMarkerId = $derived(this.onZones ? this.selectedZoneId : null);

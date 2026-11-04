@@ -229,8 +229,33 @@ describe('ZonePanel', () => {
     expect(spy).toHaveBeenLastCalledWith('zone-4', { x_min: 0, x_max: 6, y_min: 1, y_max: 4, vertices: undefined, fit_room: false });
     expect(fold('Grid points').textContent).toMatch('10 × 12 × 8');
     await fireEvent.click(fold('Display'));
-    const seg = screen.getByRole('group', { name: 'Display mode' });
-    expect(within(seg).getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Iso', 'Numeric', 'Markers', 'None']);
+    const names = (view: string) => within(screen.getByRole('group', { name: `${view} display mode` })).getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    expect(names('3D')).toEqual(['Iso', 'Numeric', 'Markers', 'None']);
+    expect(names('2D')).toEqual(['Heatmap', 'Numeric', 'Markers', 'None']);
+  });
+
+  it('Display splits 2D and 3D, each with its mode glyphs and Show label; 2D starts from the one setting', async () => {
+    const { spy } = renderPanel({ ...floorPlane, display_mode: 'contours', show_label: true });
+    await fireEvent.click(fold('Display'));
+    const two = screen.getByRole('group', { name: '2D display mode' });
+    const three = screen.getByRole('group', { name: '3D display mode' });
+    // Glyph buttons with titles, five for a plane
+    const buttons = within(three).getAllByRole('button');
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Heatmap', 'Numeric', 'Contours', 'Markers', 'None']);
+    expect(buttons.every((b) => b.querySelector('svg') && b.getAttribute('title'))).toBe(true);
+    // Both views start from today's single setting
+    expect(within(two).getByRole('button', { name: 'Contours' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(three).getByRole('button', { name: 'Contours' }).getAttribute('aria-pressed')).toBe('true');
+    // The 2D label shows unless turned off; the 3D one as stored
+    expect((screen.getByLabelText('Show label in 2D') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('Show label in 3D') as HTMLInputElement).checked).toBe(true);
+    // Each view sets its own field
+    await fireEvent.click(within(two).getByRole('button', { name: 'Markers' }));
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { display_mode_2d: 'markers' });
+    await fireEvent.click(within(three).getByRole('button', { name: 'Heatmap' }));
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { display_mode: 'heatmap' });
+    await fireEvent.click(screen.getByLabelText('Show label in 2D'));
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { show_label_2d: false });
   });
 
   it('point shows Position and Aim at rows with X Y Z and Place / Aim buttons', async () => {
@@ -360,7 +385,7 @@ describe('ZonePanel', () => {
     const { spy } = renderPanel(big);
     expect(spy).toHaveBeenCalledWith('zone-4', { display_mode: 'heatmap' });
     await fireEvent.click(fold('Display'));
-    const numeric = within(screen.getByRole('group', { name: 'Display mode' })).getByRole('button', { name: 'Numeric' }) as HTMLButtonElement;
+    const numeric = within(screen.getByRole('group', { name: '3D display mode' })).getByRole('button', { name: 'Numeric' }) as HTMLButtonElement;
     expect(numeric.disabled).toBe(true);
   });
 });

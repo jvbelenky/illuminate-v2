@@ -3,6 +3,7 @@
 	// other mode gives, and Inset | On edge. Each change is sent as it is made;
 	// the backend returns the other mode's values.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
+	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import { userSettings } from '$lib/stores/settings';
 	import { unitAbbrev, fromMeters } from '$lib/utils/unitConversion';
 	import type { CalcZone, RoomConfig } from '$lib/types/project';
@@ -68,8 +69,14 @@
 		{/each}
 	</div>
 	<span class="zp-value">{spacingText(zone, unit, room.precision)}</span>
-	<div class="seg" role="group" aria-label="Grid offset">
-		<button type="button" aria-pressed={zone.offset ?? true} onclick={() => setOffset(true)}>Inset</button>
-		<button type="button" aria-pressed={!(zone.offset ?? true)} onclick={() => setOffset(false)}>On edge</button>
+	<div class="glyph-seg row" role="group" aria-label="Grid offset">
+		<button type="button" aria-label="Inset" title="Offset from Boundary" aria-pressed={zone.offset ?? true} onclick={() => setOffset(true)}>
+			<CalcTypeIllustration type="offset_on" size={22} />
+			<span>Inset</span>
+		</button>
+		<button type="button" aria-label="On edge" title="On the Boundary" aria-pressed={!(zone.offset ?? true)} onclick={() => setOffset(false)}>
+			<CalcTypeIllustration type="offset_off" size={22} />
+			<span>On edge</span>
+		</button>
 	</div>
 </ZoneFold>

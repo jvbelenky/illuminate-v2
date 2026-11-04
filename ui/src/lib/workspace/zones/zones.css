@@ -266,21 +266,6 @@
 .zone-panel .seg button:hover:not(:disabled) {
 	background: var(--color-border);
 }
-/* Five segments don't fit the column on one line: three over two */
-.zone-panel .seg.seg-five {
-	grid-auto-flow: row;
-	grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-.zone-panel .seg.seg-five button {
-	grid-column: span 2;
-}
-.zone-panel .seg.seg-five button:nth-child(n + 4) {
-	grid-column: span 3;
-	border-top: 1px solid var(--color-border);
-}
-.zone-panel .seg.seg-five button:nth-child(4) {
-	border-left: 0;
-}
 .zone-panel .seg button[aria-pressed='true'] {
 	background: var(--color-highlight);
 	color: var(--color-on-highlight);
@@ -434,4 +419,82 @@
 .zone-panel .zp-corner-row > span {
 	text-align: center;
 	font-family: var(--font-mono, monospace);
+}
+
+/* Display: a 2D and a 3D section, as the lamp editor's */
+.zone-panel .display-section {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	container-type: inline-size;
+}
+/* Too narrow for five names: the glyphs alone (each keeps its title) */
+@container (max-width: 359px) {
+	.zone-panel .display-section .glyph-seg button span {
+		display: none;
+	}
+	.zone-panel .display-section .glyph-seg button {
+		padding: 6px 2px;
+	}
+}
+.zone-panel .display-section + .display-section {
+	margin-top: 4px;
+}
+.zone-panel .display-head {
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	color: var(--color-text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+/* Glyph segments (display modes, grid offset): the glyph over (or beside) its name */
+.zone-panel .glyph-seg {
+	display: grid;
+	grid-auto-columns: minmax(0, 1fr);
+	grid-auto-flow: column;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+	min-width: 0;
+}
+.zone-panel .glyph-seg button {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
+	padding: 5px 2px 4px;
+	border: 0;
+	border-radius: 0;
+	background: var(--color-bg-input, var(--color-bg-tertiary));
+	color: var(--color-text-muted);
+}
+.zone-panel .glyph-seg.row button {
+	flex-direction: row;
+	justify-content: center;
+	gap: 6px;
+}
+.zone-panel .glyph-seg button span {
+	max-width: 100%;
+	font-size: var(--font-size-sm);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.zone-panel .glyph-seg button + button {
+	border-left: 1px solid var(--color-border);
+}
+.zone-panel .glyph-seg button:hover:not(:disabled) {
+	background: var(--color-border);
+	color: var(--color-text);
+}
+.zone-panel .glyph-seg button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+.zone-panel .glyph-seg button[aria-pressed='true'] {
+	background: var(--color-highlight);
+	color: var(--color-on-highlight);
+	font-weight: 600;
 }

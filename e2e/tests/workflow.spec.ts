@@ -384,7 +384,7 @@ test.describe.serial('Comprehensive workflow', () => {
 
     // Show label
     await openZoneFold(page, 'Display');
-    const showLabel = zoneEditor(page).getByLabel('Show label');
+    const showLabel = zoneEditor(page).getByLabel('Show label in 3D');
     await showLabel.check();
     await expect(showLabel).toBeChecked();
 

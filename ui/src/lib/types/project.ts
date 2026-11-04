@@ -270,6 +270,19 @@ export interface CalcZone {
   show_values?: boolean;  // deprecated, use display_mode
   display_mode?: ZoneDisplayMode;
   show_label?: boolean;   // Whether to show this zone's name label in 3D scene
+  // The 2D plan's own display (frontend-only; never sent to the backend)
+  display_mode_2d?: ZoneDisplayMode;  // undefined = display_mode (the 3D one)
+  show_label_2d?: boolean;            // undefined = true
+  /** The geometry before Fit to room was switched on, brought back when it is switched off (frontend-only). */
+  fit_memory?: ZoneFitMemory;
+}
+
+/** A zone's geometry from before Fit to room: its surface and footprint (or wall outline), and a volume's bottom and top. */
+export interface ZoneFitMemory {
+  surface?: string;
+  footprint?: [number, number][];
+  wall?: [number, number][];
+  z?: [number, number];
 }
 
 // Compliance check types (from check_lamps)

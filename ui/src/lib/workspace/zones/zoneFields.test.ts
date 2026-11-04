@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { CalcZone } from '$lib/types/project';
-import { distanceOf, distancePartial, flipPartial, gridSummary, distanceLabel, isLegacyPlane, spacingText, surfacePartial, surfaceChoice, fitPartial, editRange, rangePartial } from './zoneFields';
+import { distanceOf, distancePartial, flipPartial, gridSummary, distanceLabel, isLegacyPlane, spacingText, surfacePartial, surfaceChoice, fitPartial, editRange, rangePartial, zoneDisplayMode, zoneLabelShown } from './zoneFields';
 import { defaultRoom } from '$lib/types/project';
 import { zoneSurface } from '$lib/utils/surfaces';
 
@@ -161,5 +161,25 @@ describe('range edits', () => {
     expect(rangePartial('plane', [1, 2, 3, 4])).toEqual({ x1: 1, x2: 2, y1: 3, y2: 4, vertices: undefined, fit_room: false });
     expect(rangePartial('volume', [1, 2, 3, 4])).toEqual({ x_min: 1, x_max: 2, y_min: 3, y_max: 4, vertices: undefined, fit_room: false });
     expect(rangePartial('wall', [1, 2, 0, 1])).toEqual({ wall_vertices: [[1, 0], [2, 0], [2, 1], [1, 1]], fit_room: false });
+  });
+});
+
+describe('display per view (2D / 3D)', () => {
+  it('both views start from the one stored mode (legacy show_values too); 2D then keeps its own', () => {
+    expect(zoneDisplayMode(plane({ display_mode: 'contours' }), '2d')).toBe('contours');
+    expect(zoneDisplayMode(plane({ display_mode: 'contours' }), '3d')).toBe('contours');
+    expect(zoneDisplayMode(plane({ show_values: false }), '2d')).toBe('markers');
+    expect(zoneDisplayMode(plane({}), '3d')).toBe('heatmap');
+    const split = plane({ display_mode: 'heatmap', display_mode_2d: 'none' });
+    expect(zoneDisplayMode(split, '2d')).toBe('none');
+    expect(zoneDisplayMode(split, '3d')).toBe('heatmap');
+    // A volume has no contours in either view
+    expect(zoneDisplayMode({ id: 'v', type: 'volume', display_mode_2d: 'contours' }, '2d')).toBe('heatmap');
+  });
+  it('the 2D label shows unless turned off (as the plan always drew it); the 3D one only when on', () => {
+    expect(zoneLabelShown(plane({}), '2d')).toBe(true);
+    expect(zoneLabelShown(plane({ show_label_2d: false }), '2d')).toBe(false);
+    expect(zoneLabelShown(plane({}), '3d')).toBe(false);
+    expect(zoneLabelShown(plane({ show_label: true }), '3d')).toBe(true);
   });
 });

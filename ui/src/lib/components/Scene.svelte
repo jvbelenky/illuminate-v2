@@ -25,6 +25,7 @@
 	import { pickMode, pickResult } from '$lib/stores/pickMode';
 	import { guardedClick } from '$lib/utils/sceneClick';
 	import { zoneValueFactor } from '$lib/utils/calculations';
+	import { zoneLabelAnchor } from '$lib/utils/planeWorld';
 	import type { ViewPreset } from './ViewSnapOverlay.svelte';
 	import type { Surface } from '$lib/utils/surfaces';
 	import { orderSurfaceHits, type ClickItem, type SceneHover, type SurfaceHit } from './surfacePicking';
@@ -745,13 +746,14 @@
 	<CalcPoint3D {zone} {room} {scale} value={getPointValue(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} />
 {/each}
 
-<!-- CalcPoint name labels (billboarded, per-item show_label) -->
-{#if filteredZones.some(z => z.type === 'point' && z.show_label)}
+<!-- Zone name labels (billboarded, per-item show_label: the 3D one) -->
+{#if filteredZones.some(z => z.show_label && !z.wall_orphan)}
 	<BillboardGroup>
-		{#each filteredZones.filter(z => z.type === 'point' && z.show_label) as zone (zone.id)}
-			{@const px = (zone.x ?? room.x / 2) * scale}
-			{@const py = (zone.z ?? 1.0) * scale}
-			{@const pz = -(zone.y ?? room.y / 2) * scale}
+		{#each filteredZones.filter(z => z.show_label && !z.wall_orphan) as zone (zone.id)}
+			{@const at = zoneLabelAnchor(zone, room) ?? [room.x / 2, room.y / 2, 1]}
+			{@const px = at[0] * scale}
+			{@const py = at[2] * scale}
+			{@const pz = -at[1] * scale}
 			<Text
 				text={zone.name || zone.id.slice(0, 8)}
 				fontSize={maxDim * 0.04}
