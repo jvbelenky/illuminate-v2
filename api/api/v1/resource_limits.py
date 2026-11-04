@@ -6,6 +6,7 @@ owns the coefficients since it knows its own data structures and caching
 behavior. This module adds API-layer policy: limits, overhead padding,
 error formatting, and suggestions.
 """
+import ctypes
 import logging
 from math import prod
 from typing import TYPE_CHECKING, List, Dict
@@ -22,19 +23,38 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 MAX_CONCURRENT_SESSIONS = 500
-MAX_CONCURRENT_CALCULATIONS = 4  # Match server cores
+# Two at once: the production host has about 4 GB free for this container and
+# each calculation may peak at MAX_PEAK_MEMORY_MB (measured peaks run ~20%
+# above the estimate). Four at 1.5 GB pushed the host into swap, which slows
+# every request for every user.
+MAX_CONCURRENT_CALCULATIONS = 2
 QUEUE_TIMEOUT_SECONDS = 30  # Wait for calculation slot
 CALCULATION_TIMEOUT_SECONDS = 600  # 10 minutes per calculation
 MAX_CALC_TIME_SECONDS = CALCULATION_TIMEOUT_SECONDS * 0.7  # 420s, 30% headroom before timeout
 
-# Peak memory limit per session (MB).
-# On 8GB server with 6GB available and 4 concurrent calculations,
-# each session can safely use up to 1.5 GB.
-MAX_PEAK_MEMORY_MB = 1500
+# Peak memory limit per calculation (MB). The container is capped at 3 GB
+# (scripts/deploy.sh); MAX_CONCURRENT_CALCULATIONS calculations at this peak
+# plus the ~400 MB baseline and the results held by idle sessions must fit.
+MAX_PEAK_MEMORY_MB = 600
 
 # A reflectance grid is built as soon as its resolution is set (before any
 # /calculate budget check), so per-axis counts are capped at set time.
 MAX_SURFACE_POINTS_PER_AXIS = 1000
+
+
+def trim_heap() -> None:
+    """Hand freed heap memory back to the OS.
+
+    A reflectance calculation allocates hundreds of MB of temporaries. glibc
+    keeps the freed pages in its arenas, so the process's resident size stays
+    at its historical peak (measured: 120 MB still resident after a session
+    was deleted, 3 MB after malloc_trim). Call this after a calculation and
+    after sessions are deleted. A no-op where glibc's malloc_trim is missing.
+    """
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
 
 
 def check_surface_axis_counts(counts, label: str) -> None:

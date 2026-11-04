@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- The server no longer slows down for everyone when a few people run reflectance calculations at once. Two calculations run at a time (was four) and each may use up to 600 MB (was 1.5 GB), sized to the host rather than to a larger one; memory a calculation or an expired session frees is handed back to the operating system instead of staying resident; and the container is capped at 3 GB so it can never push the host into swap
+
 ### Added
 - Contour plots for calculation planes, in the plot window and in the room view (Display → Contours)
 - Contours and isosurfaces are drawn at a list of levels, each with its own color and an optional name that the plot shows in place of the value, shared by the plot window and the room view. Levels can be picked from the data (Auto, keeping however many levels there are), set to the ICNIRP, ACGIH eye and ACGIH skin limits for the lamps' spectra (Limits, on every plane and volume, as a dose or as the irradiance that reaches it over the zone's exposure time), stepped up to one of those limits (% ICNIRP, % ACGIH Eye, % ACGIH Skin: 25, 50, 75 and 100% of it for four levels), or typed in. The levels' menu picks among these. In a room whose lamps have different limits (222 and 254 nm together), the limits are weighed for the mix of light at each point, and a limit's line is drawn where each point reaches that share of its own limit A zone's view, levels, colors, names and decimals are saved with the project
