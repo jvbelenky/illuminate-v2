@@ -2,7 +2,6 @@ import type { Vertex as OutlineVertex } from '$lib/utils/roomGeometry';
 import type { CalcZone, FloorPlanPlacement, LampInstance, RoomConfig, SceneObject } from '$lib/types/project';
 import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 import type { LengthUnit } from '$lib/utils/unitConversion';
-import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { FixtureOption } from '$lib/utils/lampFixture';
 import type { CeilingItem, CeilingKind, CeilingLayout } from '$lib/ceiling/ceilingLayout';
 
@@ -20,8 +19,8 @@ export interface PlanActions {
   removeObstacle: (id: string) => void;
   /** Kept for Phase 3 (surfaces), used by point-place. Place a lamp at (x, y): with `likeId`, a copy of that lamp (fixture and aim); otherwise a new default lamp aimed straight down. */
   addLamp: (x: number, y: number, likeId?: string) => Promise<string>;
-  /** Add a lamp with a fixture (`preset:…` or `custom:…`), placed automatically by a placement mode. */
-  addPlacedLamp: (fixture: string, mode: PlacementMode) => Promise<string>;
+  /** Add a new lamp ("Lamp N", no fixture yet unless the user's defaults name one) at a default placement; one undo step. */
+  addNewLamp: () => Promise<string>;
   /** Copy several lamps (fixture, aim and all), shifted by (dx, dy), as one undo step. */
   copyLamps: (ids: string[], dx: number, dy: number) => Promise<string[]>;
   updateLamp: (id: string, partial: Partial<LampInstance>) => void;
@@ -68,7 +67,7 @@ export interface PlanScene {
   image: FloorPlanImage | null;
   /** Room height (display units). */
   roomZ: number;
-  /** Fixtures the Add lamp selector offers. */
+  /** Fixtures the lamp editor's fixture dropdown offers. */
   fixtures: FixtureOption[];
   room: RoomConfig;
   hidden: { lamps: Set<string>; zones: Set<string>; objects: Set<string> };

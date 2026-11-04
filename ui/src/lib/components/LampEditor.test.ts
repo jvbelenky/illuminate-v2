@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import LampEditor from './LampEditor.svelte';
 import type { LampInstance } from '$lib/types/project';
+import type { FixtureOption } from '$lib/utils/lampFixture';
 import { defaultRoom } from '$lib/types/project';
 
 // Mock the API client - use importOriginal to include all exports
@@ -45,7 +46,6 @@ vi.mock('$lib/stores/lampLibrary', async () => {
 import { getLampOptions, placeSessionLamp } from '$lib/api/client';
 import { customLamps } from '$lib/stores/lampLibrary';
 import { project } from '$lib/stores/project';
-import { photometricWebSource } from './photometricWeb';
 import { get, type Writable } from 'svelte/store';
 import { pickMode } from '$lib/stores/pickMode';
 
@@ -69,9 +69,15 @@ async function openFold(name: 'Geometry' | 'Display') {
   if (btn.getAttribute('aria-expanded') !== 'true') await fireEvent.click(btn);
 }
 
+const fixtures: FixtureOption[] = [
+  { key: 'preset:beacon', label: 'Beacon', group: 'Presets (222 nm)' },
+  { key: 'preset:ushio_b1', label: 'USHIO B1', group: 'Presets (222 nm)' },
+  { key: 'custom:c2', label: 'My 254 Lamp', group: 'Custom lamps' },
+];
+
 function renderEditor(lamp: LampInstance = mockLamp) {
   return render(LampEditor, {
-    props: { lamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+    props: { lamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn(), fixtures },
   });
 }
 
@@ -91,206 +97,100 @@ describe('LampEditor', () => {
   });
 
   it('renders lamp editor container', () => {
-    const { container } = render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-    });
+    const { container } = renderEditor();
     expect(container.querySelector('.lamp-editor')).toBeTruthy();
   });
 
   it('has no Delete / Copy / Close footer (the plan ribbon, the keys and the row header do this)', async () => {
-    render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-    });
-    await waitFor(() => expect(screen.getByText('Lamp Type')).toBeTruthy());
+    renderEditor();
+    expect(screen.getByLabelText('Fixture')).toBeTruthy();
     for (const name of ['Delete', 'Copy', 'Close']) expect(screen.queryByRole('button', { name, exact: true } as any)).toBeNull();
   });
 
-  it('shows loading state initially', () => {
-    render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-    });
-    expect(screen.getByText(/Loading lamp options/)).toBeTruthy();
+  it('one fixture dropdown, grouped, replaces Lamp Type and Select Lamp; Details sits beside it', () => {
+    const { container } = renderEditor();
+    expect(screen.queryByText('Lamp Type')).toBeNull();
+    expect(screen.queryByText('Select Lamp')).toBeNull();
+    expect(container.querySelector('#lamp-type')).toBeNull();
+    const select = screen.getByLabelText('Fixture') as HTMLSelectElement;
+    expect(select.value).toBe('preset:beacon');
+    expect(Array.from(select.querySelectorAll('optgroup')).map((g) => g.label)).toEqual(['Presets (222 nm)', 'Custom lamps']);
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Choose a fixture…', 'Beacon', 'USHIO B1', 'My 254 Lamp', 'Add custom lamp…']);
+    expect(select.parentElement?.querySelector('button')?.textContent?.trim()).toBe('Details...');
   });
 
-  it('renders lamp type selector after loading', async () => {
-    render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Lamp Type')).toBeTruthy();
-    });
+  it('a lamp with no fixture prompts "Choose a fixture…"; its placements show, disabled, and the rest waits', () => {
+    const { container } = renderEditor({ ...mockLamp, preset_id: undefined, has_ies_file: false });
+    const select = screen.getByLabelText('Fixture') as HTMLSelectElement;
+    expect(select.value).toBe('');
+    expect(select.selectedOptions[0].textContent).toBe('Choose a fixture…');
+    const placements = Array.from(container.querySelectorAll('button.placement')) as HTMLButtonElement[];
+    expect(placements).toHaveLength(4);
+    for (const b of placements) expect(b.disabled).toBe(true);
+    expect(screen.queryByLabelText('Dimmer')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Geometry' })).toBeNull();
   });
 
-  it('renders preset selector for 222nm lamps', async () => {
-    render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Select Lamp')).toBeTruthy();
-    });
+  it('choosing a preset sets it on the lamp and keeps its position and aim', async () => {
+    const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+    try {
+      renderEditor({ ...mockLamp, preset_id: undefined, has_ies_file: false });
+      await fireEvent.change(screen.getByLabelText('Fixture'), { target: { value: 'preset:ushio_b1' } });
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      const [id, partial] = updateSpy.mock.calls[0];
+      expect(id).toBe('lamp-1');
+      expect(partial).toEqual({ lamp_type: 'krcl_222', preset_id: 'ushio_b1', custom_lamp_id: undefined });
+    } finally {
+      updateSpy.mockRestore();
+    }
   });
 
-  it('Add custom lamp... opens the manager without mutating the lamp and restores the dropdown', async () => {
+  it('choosing a custom lamp applies its definition as one undo step', async () => {
+    const applySpy = vi.spyOn(project, 'applyCustomLamp').mockResolvedValue(undefined);
+    const batchSpy = vi.spyOn(project.history, 'batch');
+    try {
+      renderEditor();
+      await fireEvent.change(screen.getByLabelText('Fixture'), { target: { value: 'custom:c2' } });
+      await waitFor(() => expect(applySpy).toHaveBeenCalledWith('lamp-1', 'c2'));
+      expect(batchSpy).toHaveBeenCalledWith('Choose fixture', expect.any(Function));
+    } finally {
+      applySpy.mockRestore();
+      batchSpy.mockRestore();
+    }
+  });
+
+  it('Add custom lamp… opens the manager without touching the lamp and leaves the dropdown on its fixture', async () => {
     const onOpenLampManager = vi.fn();
-    // The whole point of the new contract: selecting "Add custom lamp..." (and
-    // cancelling the manager, i.e. never saving) must touch NOTHING on the lamp.
     const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
     const applySpy = vi.spyOn(project, 'applyCustomLamp').mockResolvedValue(undefined);
     try {
-      const { container } = render(LampEditor, {
-        props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager },
-      });
-
-      await waitFor(() => {
-        expect(container.querySelector('#preset')).toBeTruthy();
-      });
-
-      const select = container.querySelector('#preset') as HTMLSelectElement;
-      // Dropdown starts on the lamp's current preset.
-      expect(select.value).toBe('beacon');
-
+      render(LampEditor, { props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager, fixtures } });
+      const select = screen.getByLabelText('Fixture') as HTMLSelectElement;
       await fireEvent.change(select, { target: { value: '__add_custom__' } });
-      // The restore is deferred behind an `await tick()` in handleLampSelect (so
-      // it lands in a *later* flush and is a real '__add_custom__' -> previous
-      // state change that Svelte writes back to the DOM). Wait for that flush.
       await tick();
-
-      // Opens the manager for this lamp's type, passing the launching lamp id.
       expect(onOpenLampManager).toHaveBeenCalledWith('krcl_222', 'lamp-1');
-      // No photometry mutation whatsoever — no updateLamp, no applyCustomLamp.
       expect(updateSpy).not.toHaveBeenCalled();
       expect(applySpy).not.toHaveBeenCalled();
-      // Dropdown visually restores to the previously-selected option.
-      //
-      // CAVEAT — this assertion cannot catch the real bug. jsdom + fireEvent do
-      // NOT reproduce the Svelte 5 single-flush trap that broke this in the live
-      // app: there, bind:value moved the <select> to '__add_custom__' and a
-      // *synchronous* restore left the reactive value net-unchanged, so Svelte
-      // never rewrote the DOM and the select stayed on "Add custom lamp...".
-      // jsdom's event/flush model doesn't exhibit that, so this test passed even
-      // against the buggy (synchronous-restore) code. The authoritative gate is
-      // the real-browser check (see .superpowers/sdd/ux-round2-report.md): a
-      // headless-Chromium synchronous post-flush read of the <select> shows the
-      // stuck '__add_custom__' on the buggy build and the restored value on the
-      // fixed build.
-      expect(select.value).toBe('beacon');
+      expect(select.value).toBe('preset:beacon');
     } finally {
       updateSpy.mockRestore();
       applySpy.mockRestore();
     }
   });
 
-  it('re-derives the dropdown when the lamp gains a custom_lamp_id externally', async () => {
-    // The new def's option must exist for the <select> to hold its value.
-    customLampsW.set([{ id: 'c1', name: 'My 222 Lamp', lampType: 'krcl_222' }]);
-    const { container, rerender } = render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-    });
-
-    await waitFor(() => {
-      expect(container.querySelector('#preset')).toBeTruthy();
-    });
-    const select = container.querySelector('#preset') as HTMLSelectElement;
-    expect(select.value).toBe('beacon');
-
-    // Simulate an EXTERNAL store update (applyCustomLamp's echo after the
-    // "Add custom lamp..." auto-apply) that sets custom_lamp_id on the instance.
-    await rerender({
-      lamp: { ...mockLamp, custom_lamp_id: 'c1', preset_id: 'custom' },
-      room: defaultRoom(),
-      onClose: vi.fn(),
-      onOpenLampManager: vi.fn(),
-    });
+  it('follows the lamp: a custom lamp applied elsewhere shows as chosen', async () => {
+    const { rerender } = renderEditor();
+    const select = screen.getByLabelText('Fixture') as HTMLSelectElement;
+    expect(select.value).toBe('preset:beacon');
+    await rerender({ lamp: { ...mockLamp, custom_lamp_id: 'c2', preset_id: 'custom' }, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn(), fixtures });
     await tick();
-
-    await waitFor(() => expect(select.value).toBe('custom_lamp:c1'));
+    expect(select.value).toBe('custom:c2');
   });
 
-  it('custom lamp options render for matching type only', async () => {
-    customLampsW.set([
-      { id: 'c1', name: 'My 222 Lamp', lampType: 'krcl_222' },
-      { id: 'c2', name: 'My 254 Lamp', lampType: 'lp_254' },
-    ]);
-
-    const { container } = render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-    });
-
-    await waitFor(() => {
-      expect(container.querySelector('#preset')).toBeTruthy();
-    });
-
-    const options = Array.from(container.querySelectorAll('#preset option')).map((o) => o.textContent);
-    expect(options).toContain('My 222 Lamp');
-    expect(options).not.toContain('My 254 Lamp');
-  });
-
-  it('selecting a custom lamp calls project.applyCustomLamp', async () => {
-    customLampsW.set([{ id: 'c1', name: 'My 222 Lamp', lampType: 'krcl_222' }]);
-    const applySpy = vi.spyOn(project, 'applyCustomLamp').mockResolvedValue(undefined);
-    try {
-      const { container } = render(LampEditor, {
-        props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-      });
-
-      await waitFor(() => {
-        expect(container.querySelector('#preset')).toBeTruthy();
-      });
-
-      const select = container.querySelector('#preset') as HTMLSelectElement;
-      await fireEvent.change(select, { target: { value: 'custom_lamp:c1' } });
-
-      expect(applySpy).toHaveBeenCalledWith('lamp-1', 'c1');
-    } finally {
-      applySpy.mockRestore();
-    }
-  });
-
-  it('changing lamp type clears a stale custom_lamp_id reference', async () => {
-    const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
-    try {
-      const lampWithCustom: LampInstance = { ...mockLamp, custom_lamp_id: 'c1' };
-      const { container } = render(LampEditor, {
-        props: { lamp: lampWithCustom, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-      });
-
-      await waitFor(() => {
-        expect(container.querySelector('#lamp-type')).toBeTruthy();
-      });
-
-      const select = container.querySelector('#lamp-type') as HTMLSelectElement;
-      await fireEvent.change(select, { target: { value: 'lp_254' } });
-
-      await waitFor(() => {
-        expect(updateSpy).toHaveBeenCalledWith(
-          'lamp-1',
-          expect.objectContaining({ custom_lamp_id: undefined })
-        );
-      });
-    } finally {
-      updateSpy.mockRestore();
-    }
-  });
-
-  it('switching a preset lamp to another type drops its photometry, so no web or info is requested', async () => {
-    const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
-    try {
-      const { container } = render(LampEditor, {
-        props: { lamp: { ...mockLamp, ies_filename: 'beacon.ies' }, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-      });
-      await waitFor(() => expect(container.querySelector('#lamp-type')).toBeTruthy());
-      await fireEvent.change(container.querySelector('#lamp-type') as HTMLSelectElement, { target: { value: 'lp_254' } });
-
-      await waitFor(() => expect(updateSpy).toHaveBeenCalled());
-      const [, partial] = updateSpy.mock.calls[0];
-      expect(partial).toMatchObject({ lamp_type: 'lp_254', preset_id: 'custom', has_ies_file: false });
-      // The lamp the store then holds has no web source: Lamp3D and the info panel skip it
-      expect(photometricWebSource({ ...mockLamp, ...partial } as LampInstance)).toBe('none');
-    } finally {
-      updateSpy.mockRestore();
-    }
+  it('a lamp from an uploaded file (no library definition) shows as that', () => {
+    renderEditor({ ...mockLamp, preset_id: 'custom', has_ies_file: true });
+    const select = screen.getByLabelText('Fixture') as HTMLSelectElement;
+    expect(select.selectedOptions[0].textContent).toBe('Custom lamp (uploaded file)');
   });
 
   describe('Other lamp wavelength row', () => {
@@ -355,7 +255,7 @@ describe('LampEditor', () => {
       const { container } = render(LampEditor, {
         props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
       });
-      await waitFor(() => expect(container.querySelector('#preset')).toBeTruthy());
+      expect(container.querySelector('.fixture-select')).toBeTruthy();
       expect(container.querySelector('#lamp-wavelength')).toBeNull();
     });
   });
@@ -381,18 +281,6 @@ describe('LampEditor', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Details...')).toBeTruthy();
-    });
-  });
-
-  it('shows error when API fails', async () => {
-    vi.mocked(getLampOptions).mockRejectedValue(new Error('Failed to load'));
-
-    render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText(/Failed to load/)).toBeTruthy();
     });
   });
 

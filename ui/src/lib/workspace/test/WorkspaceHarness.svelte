@@ -36,7 +36,6 @@
 		room?: Partial<RoomConfig>;
 		fixtures?: FixtureOption[];
 		hidden?: { lamps?: string[]; zones?: string[]; objects?: string[] };
-		onAddCustomLamp?: () => void;
 		readonly?: boolean;
 		/** Host the pane as the docked mini view. */
 		mini?: boolean;
@@ -84,7 +83,6 @@
 		room = {},
 		fixtures = [],
 		hidden = {},
-		onAddCustomLamp = () => {},
 		readonly = false,
 		mini = false,
 		vertices = [[0, 0], [6, 0], [6, 4], [0, 4]],
@@ -148,11 +146,11 @@
 			calls.push(['removeObstacle', id]);
 			scene.objects = scene.objects.filter((o) => o.id !== id);
 		},
-		addPlacedLamp: async (fixture, mode) => {
+		addNewLamp: async () => {
 			const id = `lamp-${nextId++}`;
-			calls.push(['addPlacedLamp', fixture, mode]);
+			calls.push(['addNewLamp']);
 			const x = 1 + scene.lamps.length, y = 1;
-			scene.lamps = [...scene.lamps, { lamp_type: 'krcl_222', preset_id: fixture.replace(/^preset:/, ''), has_ies_file: true, scaling_factor: 1, enabled: true, x, y, z: 2.5, aimx: x, aimy: y, aimz: 0, id, name: `Lamp ${scene.lamps.length + 1}` } as LampInstance];
+			scene.lamps = [...scene.lamps, { lamp_type: 'krcl_222', has_ies_file: false, scaling_factor: 1, enabled: true, x, y, z: 2.5, aimx: x, aimy: y, aimz: 0, id, name: `Lamp ${scene.lamps.length + 1}` } as LampInstance];
 			return id;
 		},
 		copyLamps: async (ids, dx, dy) => {
@@ -309,9 +307,9 @@
 	{/if}
 	<PlanPane controller={ctl} {readonly} {mini} toolbar={!controls} viewTools={!touch} imageTools={!!controls} />
 	{#if editor}
-		<EditorPanel controller={ctl} {onDone} {onShowReflectanceSettings} {onAddCustomLamp}>
+		<EditorPanel controller={ctl} {onDone} {onShowReflectanceSettings}>
 			{#snippet lampPanel(lamp, close)}
-				<div class="stub-lamp-panel">{lamp.name}<button type="button" onclick={close}>Close lamp</button></div>
+				<div class="stub-lamp-panel">{lamp.name}<select aria-label="Fixture"><option value="">Choose a fixture…</option></select><button type="button" onclick={close}>Close lamp</button></div>
 			{/snippet}
 		</EditorPanel>
 	{:else if part === 'floorplan'}
@@ -325,9 +323,9 @@
 	{:else if part === 'ceiling'}
 		<CeilingPart controller={ctl} />
 	{:else if part === 'lamps'}
-		<LampsPart controller={ctl} {onAddCustomLamp}>
+		<LampsPart controller={ctl}>
 			{#snippet lampPanel(lamp, close)}
-				<div class="stub-lamp-panel">{lamp.name}<button type="button" onclick={close}>Close lamp</button></div>
+				<div class="stub-lamp-panel">{lamp.name}<select aria-label="Fixture"><option value="">Choose a fixture…</option></select><button type="button" onclick={close}>Close lamp</button></div>
 			{/snippet}
 		</LampsPart>
 	{:else if part === 'zones'}

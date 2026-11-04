@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
-import { addLampWithType, createCustomLamp, openAdvancedSettings } from '../helpers/lamps';
+import { addLamp, createCustomLamp, openAdvancedSettings } from '../helpers/lamps';
 import { getLampsFromStore, getLampInfoFromBackend } from '../helpers/api';
 import path from 'path';
 
@@ -11,8 +11,8 @@ test.describe('Custom lamp instance source editing', () => {
   test('wavelength and spectrum are editable per instance in Advanced Lamp Settings', async ({ page }) => {
     await waitForSession(page);
 
-    await addLampWithType(page, 'other');
-    await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 280 });
+    await addLamp(page);
+    await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 280, lampType: 'other' });
     await openAdvancedSettings(page);
 
     const dialog = page.locator('[role="dialog"]');

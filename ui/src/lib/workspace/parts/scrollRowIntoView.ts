@@ -6,3 +6,10 @@ export async function scrollRowIntoView(id: string): Promise<void> {
   const el = document.querySelector(`.editor-row[data-id="${CSS.escape(id)}"]`);
   if (typeof el?.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+/** A new lamp's row: bring it into view and focus its "Choose a fixture…" dropdown. */
+export async function promptForFixture(id: string): Promise<void> {
+  await scrollRowIntoView(id);
+  const select = document.querySelector<HTMLSelectElement>(`.editor-row[data-id="${CSS.escape(id)}"] select[aria-label="Fixture"]`);
+  select?.focus({ preventScroll: true });
+}

@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
-import { addLampWithType, createCustomLamp, openAdvancedSettings, openFixtureAdvanced, selectAdvancedTab } from '../helpers/lamps';
+import { addLamp, createCustomLamp, openAdvancedSettings, openFixtureAdvanced, selectAdvancedTab } from '../helpers/lamps';
 import { getLampsFromStore } from '../helpers/api';
 import path from 'path';
 
@@ -8,9 +8,9 @@ const IES_FIXTURE = path.resolve(__dirname, '../fixtures/test-lamp.ies');
 
 test('fixture layout set on upload reaches the advanced tab and the backend', async ({ page }) => {
   await waitForSession(page);
-  await addLampWithType(page, 'other');
+  await addLamp(page);
   // mounted by its front (+x) face, photometric center 2 cm from the mounting point
-  await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 280, face: 'front', mountDistance: 0.02 });
+  await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 280, face: 'front', mountDistance: 0.02, lampType: 'other' });
 
   await expect.poll(async () => (await getLampsFromStore(page))[0].mount_face).toBe('front');
   const lamp = (await getLampsFromStore(page))[0];

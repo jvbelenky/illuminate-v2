@@ -3,7 +3,7 @@ import { waitForSession } from '../helpers/session';
 import { setRoomDimensions, getRoomDimension } from '../helpers/room';
 import {
   addLampFromPreset, lampCount,
-  addLampWithType, createCustomLamp,
+  addLamp, createCustomLamp,
 } from '../helpers/lamps';
 import { showSummary } from '../helpers/workspace';
 import { addZone, zoneCount, zoneEditor, closeZone } from '../helpers/zones';
@@ -41,18 +41,18 @@ test.describe('Save and load project', () => {
     await page.locator('.editor-row.open .close-x').click();
 
     // --- Lamp 3: 254nm ---
-    await addLampWithType(page, 'lp_254');
-    await createCustomLamp(page, { ies: IES_FIXTURE });
+    await addLamp(page);
+    await createCustomLamp(page, { ies: IES_FIXTURE, lampType: 'lp_254' });
     await page.locator('.editor-row.open .close-x').click();
 
     // --- Lamp 4: Other with wavelength ---
-    await addLampWithType(page, 'other');
-    await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 265 });
+    await addLamp(page);
+    await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 265, lampType: 'other' });
     await page.locator('.editor-row.open .close-x').click();
 
     // --- Lamp 5: Other with spectrum ---
-    await addLampWithType(page, 'other');
-    await createCustomLamp(page, { ies: IES_FIXTURE, spectrum: SPECTRUM_FIXTURE });
+    await addLamp(page);
+    await createCustomLamp(page, { ies: IES_FIXTURE, spectrum: SPECTRUM_FIXTURE, lampType: 'other' });
     await page.locator('.editor-row.open .close-x').click();
 
     await expect.poll(() => lampCount(page)).toBe(5);

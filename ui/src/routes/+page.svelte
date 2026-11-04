@@ -34,7 +34,7 @@
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
 	import EditorDone from '$lib/workspace/EditorDone.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
-	import { scrollRowIntoView } from '$lib/workspace/parts/scrollRowIntoView';
+	import { scrollRowIntoView, promptForFixture } from '$lib/workspace/parts/scrollRowIntoView';
 	import { DEFAULT_DOCK, sanitizeDock, swapMain, toggleMinimized, type DockLayout, type DockPanelId, type FloatBox, type MainView } from '$lib/workspace/dockLayout';
 	import { planContext, type EditorStage, type RoomPart } from '$lib/workspace/editorNav';
 	import { workspaceUi, workspaceUiWasRestored } from '$lib/stores/workspaceUi';
@@ -67,7 +67,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import LampManagerModal from '$lib/components/LampManagerModal.svelte';
 	import { lampLibrary, customLamps } from '$lib/stores/lampLibrary';
-	import { getNextCornerIndex, getNextEdgeIndex, type PlacementMode } from '$lib/utils/lampPlacement';
+	import type { PlacementMode } from '$lib/utils/lampPlacement';
 	import type { FixtureOption } from '$lib/utils/lampFixture';
 	import type { CustomLampType } from '$lib/types/lampLibrary';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
@@ -89,7 +89,7 @@
 	let showSettingsModal = $state(false);
 	let showLampManager = $state(false);
 	let showStartChooser = $state(false);
-	// Fixtures the Plan's Add lamp offers: built-in presets and the custom lamp library
+	// Fixtures the lamp editor's dropdown offers: built-in presets and the custom lamp library
 	let lampPresets = $state<{ id: string; name: string }[]>([]);
 	onMount(() => {
 		getLampOptionsCached().then((o) => (lampPresets = o.presets_222nm.filter((p) => p.id !== 'custom'))).catch(() => {});
@@ -98,43 +98,15 @@
 		...lampPresets.map((p) => ({ key: `preset:${p.id}`, label: p.name, group: 'Presets (222 nm)' })),
 		...$customLamps.map((d) => ({ key: `custom:${d.id}`, label: d.name, group: 'Custom lamps' })),
 	]);
-	/** A new lamp with a fixture, placed by a placement mode (the backend's placement, else the local one). */
 	/** The local placement a lamp was created at, stuck to that placement's surfaces (as the lamp editor's fallback does). */
 	function stickWherePlaced(id: string, mode: PlacementMode) {
 		const l = get(lamps).find((x) => x.id === id);
 		if (l) project.applyPlacement(id, mode, { x: l.x, y: l.y, z: l.z, aimx: l.aimx, aimy: l.aimy, aimz: l.aimz });
 	}
 
-	async function addPlacedLamp(fixture: string, mode: PlacementMode): Promise<string> {
-		const units = $userSettings.units;
-		const lamp = defaultLamp($room, $lamps, mode, units);
-		lamp.name = `Lamp ${$lamps.length + 1}`;
-		if (fixture.startsWith('preset:')) {
-			lamp.lamp_type = 'krcl_222';
-			lamp.preset_id = fixture.slice('preset:'.length);
-		}
-		const id = await project.addLamp(lamp);
-		if (fixture.startsWith('custom:')) await project.applyCustomLamp(id, fixture.slice('custom:'.length));
-		// Corners and walls cycle: take the next free one
-		const others = get(lamps).filter((l) => l.id !== id);
-		const positionIndex = mode === 'corner' ? getNextCornerIndex($room, others, -1, units)
-			: mode === 'edge' || mode === 'horizontal' ? getNextEdgeIndex($room, others, -1, units)
-			: undefined;
-		try {
-			const p = await placeSessionLamp(id, mode, positionIndex);
-			// Rounded to the room's precision, as the lamp editor's placement buttons do
-			const r = (v: number) => parseFloat(v.toFixed($room.precision));
-			project.applyPlacement(id, mode, { x: r(p.x), y: r(p.y), z: r(p.z), angle: p.angle ?? 0, aimx: r(p.aimx), aimy: r(p.aimy), aimz: r(p.aimz) });
-		} catch (e) {
-			console.warn('Lamp placement failed, using the local placement:', e);
-			stickWherePlaced(id, mode);
-		}
-		return id;
-	}
-
 	// The Plan applies each finished edit straight to the project.
 	const planActions: PlanActions = {
-		addPlacedLamp: (fixture, mode) => project.history.batch('Add lamp', () => addPlacedLamp(fixture, mode)),
+		addNewLamp: () => project.addLamp(newLampFromSettings()),
 		copyLamps: (ids, dx, dy) => project.history.batch('Copy lamps', async () => {
 			const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 			const out: string[] = [];
@@ -1127,16 +1099,11 @@
 		return newLamp;
 	}
 
-	/** Edit › Add Lamp: a lamp on the user's defaults, opened in the Lamps step. */
+	/** Edit › Add Lamp: as the Lamps step's "+ Add lamp", a lamp on the user's defaults, its editor asking for a fixture. */
 	function addNewLamp() {
 		openStep('lamps', undefined, async () => {
-			try {
-				const id = await project.addLamp(newLampFromSettings());
-				plan.selectLamp(id);
-				await scrollRowIntoView(id);
-			} catch (e) {
-				console.error('Failed to add lamp:', e);
-			}
+			const id = await plan.addNewLamp();
+			if (id) await promptForFixture(id);
 		});
 	}
 
@@ -1297,7 +1264,6 @@
 					controller={plan}
 					onDone={isMobile ? finishEditing : undefined}
 					onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
-					onAddCustomLamp={() => openLampManagerFor('krcl_222', '')}
 					lampPanel={planLampPanel}
 					zonePanel={planZonePanel}
 					objectPanel={planObjectPanel}
@@ -1432,7 +1398,7 @@
 {/snippet}
 
 {#snippet planLampPanel(lamp: LampInstance, close: () => void)}
-	<LampEditor {lamp} room={$room} onClose={close} onOpenLampManager={openLampManagerFor} />
+	<LampEditor {lamp} room={$room} fixtures={planFixtures} onClose={close} onOpenLampManager={openLampManagerFor} />
 {/snippet}
 
 {#if showReflectanceSettings}

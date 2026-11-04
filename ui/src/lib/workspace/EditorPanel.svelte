@@ -16,13 +16,12 @@
 		/** Given on a phone, where there is no panel bar: Done then sits at the end of the stage tabs. */
 		onDone?: () => void;
 		onShowReflectanceSettings: () => void;
-		onAddCustomLamp?: () => void;
 		lampPanel?: Snippet<[LampInstance, () => void]>;
 		zonePanel?: Snippet<[CalcZone, () => void]>;
 		objectPanel?: Snippet<[SceneObject]>;
 	}
 
-	let { controller, onDone, onShowReflectanceSettings, onAddCustomLamp, lampPanel, zonePanel, objectPanel }: Props = $props();
+	let { controller, onDone, onShowReflectanceSettings, lampPanel, zonePanel, objectPanel }: Props = $props();
 	const ctl = $derived(controller);
 
 	const stage = $derived($workspaceUi.stage);
@@ -123,7 +122,7 @@
 					<ReflectanceStep {onShowReflectanceSettings} onHover={(s) => (ctl.hoveredSurface = s)} />
 				{/if}
 			{:else if stage === 'lamps'}
-				<LampsPart controller={ctl} {lampPanel} {onAddCustomLamp} />
+				<LampsPart controller={ctl} {lampPanel} />
 			{:else}
 				<ZonesPart controller={ctl} {zonePanel} />
 			{/if}
