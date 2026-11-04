@@ -97,11 +97,14 @@ _calc_semaphore: asyncio.Semaphore | None = None
 
 
 def _calculate_and_trim(room) -> None:
-    """room.calculate(), then return the calculation's freed temporaries to
-    the OS. Runs in the calculation executor, so the trim is off the event
-    loop as well."""
+    """room.calculate(), drop the cached form factors (most of a calculated
+    room's memory with reflectance on: ~380 of ~430 MB at 25 points per axis;
+    the next calculation rebuilds them at about a fifth of its cost), then
+    return the freed memory to the OS. Runs in the calculation executor, so
+    none of it is on the event loop."""
     try:
         room.calculate()
+        room.release_form_factors()
     finally:
         trim_heap()
 
