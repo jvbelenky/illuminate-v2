@@ -3,13 +3,13 @@
  * (Height on the floor, Below ceiling on the ceiling, From wall on a wall),
  * its Flip, the calculation modes, and the grid-points summary and spacing text.
  */
-import type { CalcZone, PlaneCalcMode, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
+import type { CalcZone, PlaneCalcMode, RoomConfig, ZoneDisplayMode, ZoneFitMemory } from '$lib/types/project';
 import { wallIndex, zoneSurface, type Surface } from '$lib/utils/surfaces';
 import { formatFloat } from '$lib/utils/formatting';
 import { fromMeters, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
 import { footprintGeometry, isAxisRectangle, rectangleCorners, roomFillGeometry, roomFootprint, zoneFootprint } from '$lib/utils/zoneFootprint';
 import { planeWall, wallPlaneOutline } from '$lib/utils/planeWorld';
-import type { Vertex } from '$lib/utils/roomGeometry';
+import { polygonBoundingBox, roomVertices, validatePolygon, type Vertex } from '$lib/utils/roomGeometry';
 
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
@@ -176,20 +176,83 @@ export function shownFootprint(zone: CalcZone, room: RoomConfig): Vertex[] {
 
 /**
  * Fit to room switched on (refit to the surface: the room outline, the whole wall, or for
- * a volume floor to ceiling) or off (what it shows becomes explicit, so nothing moves).
+ * a volume floor to ceiling) or off. On remembers the geometry it had (`fit_memory`); off
+ * brings that back, clamped into the room (or wall) if the room has changed since, when it
+ * was remembered on the surface the plane is on now. Without a memory, off makes what it
+ * shows explicit, so nothing moves. Each is one update, so one undo step.
  */
 export function fitPartial(zone: CalcZone, room: RoomConfig, on: boolean): Partial<CalcZone> {
+  if (on) return { ...fitOnPartial(zone, room), fit_memory: fitMemoryOf(zone, room) };
+  return restoreFitPartial(zone, room) ?? fitOffPartial(zone, room);
+}
+
+function fitOnPartial(zone: CalcZone, room: RoomConfig): Partial<CalcZone> {
+  if (zone.type === 'volume') return { fit_room: true, ...roomFillGeometry('volume', room), z_min: 0, z_max: room.z };
+  if (planeWall(zone, room)) return { fit_room: true, wall_vertices: undefined };
+  return { fit_room: true, ...roomFillGeometry('plane', room) };
+}
+
+function fitOffPartial(zone: CalcZone, room: RoomConfig): Partial<CalcZone> {
+  if (zone.type === 'volume') return { fit_room: false, ...footprintGeometry('volume', shownFootprint(zone, room)) };
+  const wall = planeWall(zone, room);
+  if (wall) return { fit_room: false, wall_vertices: wallPlaneOutline(zone, wall, room.z).map(([a, u]) => [a, u] as [number, number]) };
+  return { fit_room: false, ...footprintGeometry('plane', shownFootprint(zone, room)) };
+}
+
+const pairs = (vs: Vertex[]): [number, number][] => vs.map(([a, b]) => [a, b] as [number, number]);
+
+/** The geometry the zone shows now, to bring back when Fit is switched off again. */
+export function fitMemoryOf(zone: CalcZone, room: RoomConfig): ZoneFitMemory {
   if (zone.type === 'volume') {
-    if (on) return { fit_room: true, ...roomFillGeometry('volume', room), z_min: 0, z_max: room.z };
-    return { fit_room: false, ...footprintGeometry('volume', shownFootprint(zone, room)) };
+    const z1 = zone.z_min ?? 0, z2 = zone.z_max ?? room.z;
+    return { footprint: pairs(shownFootprint(zone, room)), z: [Math.min(z1, z2), Math.max(z1, z2)] };
   }
+  const surface = zoneSurface(zone, room.z);
+  const wall = planeWall(zone, room);
+  if (wall) return { surface, wall: pairs(wallPlaneOutline(zone, wall, room.z)) };
+  return { surface, footprint: pairs(shownFootprint(zone, room)) };
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** An outline with every corner moved into the box; null when what is left is no polygon. */
+export function clampOutline(vs: Vertex[], [x1, x2, y1, y2]: Ranges): Vertex[] | null {
+  const out: Vertex[] = [];
+  for (const [x, y] of vs) {
+    const p: Vertex = [r6(clamp(x, x1, x2)), r6(clamp(y, y1, y2))];
+    const last = out[out.length - 1];
+    if (!last || Math.abs(last[0] - p[0]) > 1e-9 || Math.abs(last[1] - p[1]) > 1e-9) out.push(p);
+  }
+  while (out.length > 1 && Math.abs(out[0][0] - out[out.length - 1][0]) < 1e-9 && Math.abs(out[0][1] - out[out.length - 1][1]) < 1e-9) out.pop();
+  return validatePolygon(out) === null ? out : null;
+}
+
+/** The remembered geometry, clamped into the room; null when there is none to bring back here. */
+function restoreFitPartial(zone: CalcZone, room: RoomConfig): Partial<CalcZone> | null {
+  const m = zone.fit_memory;
+  if (!m) return null;
+  if (zone.type === 'volume') {
+    if (!m.footprint) return null;
+    const bb = polygonBoundingBox(roomVertices(room));
+    const fp = clampOutline(m.footprint, [bb.xMin, bb.xMax, bb.yMin, bb.yMax]);
+    if (!fp) return null;
+    let [z1, z2] = m.z ?? [0, room.z];
+    z1 = clamp(z1, 0, room.z);
+    z2 = clamp(z2, 0, room.z);
+    if (z2 - z1 < 1e-9) [z1, z2] = [0, room.z];
+    return { fit_room: false, ...footprintGeometry('volume', fp), z_min: z1, z_max: z2 };
+  }
+  if (m.surface !== zoneSurface(zone, room.z)) return null;
   const wall = planeWall(zone, room);
   if (wall) {
-    if (on) return { fit_room: true, wall_vertices: undefined };
-    return { fit_room: false, wall_vertices: wallPlaneOutline(zone, wall, room.z).map(([a, u]) => [a, u] as [number, number]) };
+    if (!m.wall) return null;
+    const outline = clampOutline(m.wall, [0, wall.length, 0, room.z]);
+    return outline ? { fit_room: false, wall_vertices: pairs(outline) } : null;
   }
-  if (on) return { fit_room: true, ...roomFillGeometry('plane', room) };
-  return { fit_room: false, ...footprintGeometry('plane', shownFootprint(zone, room)) };
+  if (!m.footprint) return null;
+  const bb = polygonBoundingBox(roomVertices(room));
+  const fp = clampOutline(m.footprint, [bb.xMin, bb.xMax, bb.yMin, bb.yMax]);
+  return fp ? { fit_room: false, ...footprintGeometry('plane', fp) } : null;
 }
 
 /** A rectangle's ranges: [first1, first2, second1, second2]. */

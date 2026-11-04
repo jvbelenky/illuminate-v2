@@ -3764,6 +3764,42 @@ describe('zone footprints (whole room, drawn outlines)', () => {
     expect(v.z_min).toBe(0);
     expect(v.z_max).toBe(room.z + 1);
   });
+
+  it('Fit to room on then off brings the drawn plane back; each toggle is one undo step', async () => {
+    const { project, zones } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    const { fitPartial } = await import('$lib/workspace/zones/zoneFields');
+    const { get: getStore } = await import('svelte/store');
+    await project.initSession();
+    const room = getStore(project).room;
+    const id = await project.addZone({ ...defaultZone(room, []), fit_room: false, x1: 1, x2: 2, y1: 1, y2: 3, vertices: undefined });
+    await vi.runAllTimersAsync();
+    const zone = () => get(zones).find((z) => z.id === id)!;
+    const geometry = () => [zone().fit_room, zone().x1, zone().x2, zone().y1, zone().y2];
+    project.updateZone(id, fitPartial(zone(), getStore(project).room, true));
+    await vi.runAllTimersAsync();
+    expect(geometry()).toEqual([true, 0, room.x, 0, room.y]);
+    project.updateZone(id, fitPartial(zone(), getStore(project).room, false));
+    await vi.runAllTimersAsync();
+    expect(geometry()).toEqual([false, 1, 2, 1, 3]);
+
+    const undo = project.history.undo();
+    await vi.runAllTimersAsync();
+    await undo;
+    expect(geometry()).toEqual([true, 0, room.x, 0, room.y]);
+    const undo2 = project.history.undo();
+    await vi.runAllTimersAsync();
+    await undo2;
+    expect(geometry()).toEqual([false, 1, 2, 1, 3]);
+    const redo = project.history.redo();
+    await vi.runAllTimersAsync();
+    await redo;
+    expect(geometry()).toEqual([true, 0, room.x, 0, room.y]);
+    // Off again, after the redo, still brings the plane back
+    project.updateZone(id, fitPartial(zone(), getStore(project).room, false));
+    await vi.runAllTimersAsync();
+    expect(geometry()).toEqual([false, 1, 2, 1, 3]);
+  });
 });
 
 describe('ceiling layout', () => {
