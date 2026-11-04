@@ -290,7 +290,9 @@
 	}
 
 	.seg button[aria-pressed="true"] {
-		background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+		background: var(--color-highlight);
+		border-color: var(--color-highlight);
+		color: var(--color-on-highlight);
 		font-weight: 600;
 	}
 

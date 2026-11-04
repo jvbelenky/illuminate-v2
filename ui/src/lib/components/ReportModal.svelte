@@ -345,8 +345,8 @@
 		border-color: var(--color-text-muted);
 	}
 	.thumb.active {
-		border-color: var(--color-accent);
-		box-shadow: 0 0 0 1px var(--color-accent);
+		border-color: var(--color-highlight);
+		box-shadow: 0 0 0 1px var(--color-highlight);
 	}
 	.thumb input {
 		position: absolute;

@@ -60,7 +60,7 @@
 	transition: border-color 0.15s;
 }
 .zone-panel .calc-summary:hover {
-	border-color: var(--color-highlight);
+	border-color: var(--color-text-muted);
 }
 .zone-panel .calc-summary > svg:first-child,
 .zone-panel .calc-option > svg {
@@ -165,10 +165,13 @@
 	font-size: var(--font-size-sm);
 	white-space: nowrap;
 }
-.zone-panel .pick-btn.active {
-	border-color: var(--color-accent);
+.zone-panel .pick-btn.active,
+.zone-panel .pick-btn.active:hover:not(:disabled) {
+	background: var(--color-highlight);
+	border-color: var(--color-highlight);
+	color: var(--color-on-highlight);
 }
-/* Redraw outline and Edit corners, side by side; pressed in the scene's selection colour */
+/* Redraw outline and Edit corners, side by side; pressed in the category blue */
 .zone-panel .plan-actions .shape-pair {
 	display: flex;
 	gap: var(--spacing-sm);
@@ -180,8 +183,9 @@
 }
 .zone-panel .plan-actions button.plan-btn.active,
 .zone-panel .plan-actions button.plan-btn.active:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--color-scene-selected) 22%, var(--color-btn-fill));
-	border-color: var(--color-scene-selected);
+	background: var(--color-highlight);
+	border-color: var(--color-highlight);
+	color: var(--color-on-highlight);
 }
 
 /* Filled buttons under a divider, as in Floorplan */
@@ -278,7 +282,8 @@
 	border-left: 0;
 }
 .zone-panel .seg button[aria-pressed='true'] {
-	background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+	background: var(--color-highlight);
+	color: var(--color-on-highlight);
 	font-weight: 600;
 }
 
@@ -369,7 +374,7 @@
 	transition: transform 0.15s;
 }
 .zone-panel .zp-switch input[role='switch']:checked {
-	background: var(--color-accent);
+	background: var(--color-highlight);
 }
 .zone-panel .zp-switch input[role='switch']:checked::after {
 	transform: translateX(14px);

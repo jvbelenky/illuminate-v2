@@ -319,7 +319,7 @@
 	}
 
 	.column-option.selected {
-		background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+		background: color-mix(in srgb, var(--color-highlight) 15%, transparent);
 	}
 
 	.column-option input[type="radio"] {

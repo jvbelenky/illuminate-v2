@@ -137,19 +137,13 @@
 	.tool {
 		white-space: nowrap;
 	}
-	/* An armed tool: the scene's selection colour */
-	.tool[aria-pressed='true'],
-	.tool[aria-pressed='true']:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--color-scene-selected) 22%, transparent);
-		border-color: var(--color-scene-selected);
-		color: var(--color-text);
-	}
-	/* Done: filled in the selection colour, the way back to select mode */
+	/* An armed tool wears the shared pressed fill (.mv-btn[aria-pressed]), the category blue.
+	   Done, the way back to select mode, is a primary action: red */
 	.tool.primary,
 	.tool.primary:hover:not(:disabled) {
-		background: var(--color-scene-selected);
-		border-color: var(--color-scene-selected);
-		color: #06202c;
+		background: var(--color-primary);
+		border-color: var(--color-primary);
+		color: #fff;
 		font-weight: 600;
 	}
 	.plan-toolbar.compact {

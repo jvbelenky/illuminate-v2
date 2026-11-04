@@ -66,7 +66,7 @@
 	}
 
 	.thumb:hover {
-		border-color: var(--color-accent);
+		border-color: var(--color-text-muted);
 	}
 
 	svg {

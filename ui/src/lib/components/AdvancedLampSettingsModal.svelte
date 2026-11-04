@@ -704,8 +704,8 @@
 	}
 
 	.lamp-tab.active {
-		color: var(--color-accent);
-		border-left-color: var(--color-accent);
+		color: var(--color-text);
+		border-left-color: var(--color-highlight);
 		background: var(--color-bg-secondary);
 	}
 
@@ -728,7 +728,7 @@
 
 	.tab-btn {
 		padding: var(--spacing-xs) var(--spacing-md);
-		font-size: 0.8rem;
+		font-size: var(--font-size-sm);
 		font-weight: 500;
 		color: var(--color-text-muted);
 		background: transparent;
@@ -744,8 +744,8 @@
 	}
 
 	.tab-btn.active {
-		color: var(--color-accent);
-		border-bottom-color: var(--color-accent);
+		color: var(--color-text);
+		border-bottom-color: var(--color-highlight);
 	}
 
 	/* Tab panel content */

@@ -94,7 +94,9 @@
 	}
 
 	.mount-btn[aria-pressed="true"] {
-		background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+		background: var(--color-highlight);
+		border-color: var(--color-highlight);
+		color: var(--color-on-highlight);
 		font-weight: 600;
 	}
 
@@ -106,7 +108,7 @@
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: var(--color-accent);
+		background: currentColor;
 	}
 
 	.sr-only {

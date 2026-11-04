@@ -166,8 +166,8 @@
 .ep-grid.ep-addbtns.add-placements > button.secondary[aria-busy='true'],
 .ep-grid.ep-addbtns.placements > button.secondary[aria-busy='true'] {
 	opacity: 1;
-	background: color-mix(in srgb, var(--color-scene-selected) 30%, var(--color-btn-fill-raised));
-	border-color: var(--color-scene-selected);
+	background: color-mix(in srgb, var(--color-highlight) 30%, var(--color-btn-fill-raised));
+	border-color: var(--color-highlight);
 }
 .ep-grid.ep-addbtns.add-placements,
 .ep-grid.ep-addbtns.placements {
@@ -348,9 +348,10 @@
 	background: var(--color-btn-fill-hover);
 	border-color: transparent;
 }
-/* Pressed (drawing, or editing corners): the scene's selection colour */
+/* Pressed (drawing, or editing corners): the category blue */
 .ep-part .shape-tools button.plan-btn.active,
 .ep-part .shape-tools button.plan-btn.active:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--color-scene-selected) 22%, var(--color-btn-fill));
-	border-color: var(--color-scene-selected);
+	background: var(--color-highlight);
+	border-color: var(--color-highlight);
+	color: var(--color-on-highlight);
 }

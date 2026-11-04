@@ -14,6 +14,8 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { fromMeters } from '$lib/utils/unitConversion';
 	import { lampColor, lightenColor } from '$lib/utils/wavelengthColor';
+	import { selectedColor, hoverColor, sceneItemBaseColor } from '$lib/utils/sceneColors';
+	import { theme } from '$lib/stores/theme';
 	import { onMount } from 'svelte';
 
 	interface Props {
@@ -242,6 +244,10 @@
 		return base;
 	}
 
+	// The selection cyan (fainter on hover), as every other selected object: the fixture box,
+	// the aim line and a dot at the source wear it; the web keeps its wavelength colour
+	const stateColor = $derived(selected ? selectedColor($theme) : highlighted ? hoverColor($theme) : null);
+
 	// Higher opacity when highlighted or selected for visibility
 	const meshOpacity = $derived(highlighted ? 0.7 : selected ? 0.6 : 0.4);
 
@@ -355,7 +361,7 @@
 			<T.Group position={pos} quaternion={rot}>
 				<T.LineSegments geometry={fixtureGeometry}>
 					<T.LineBasicMaterial
-						color={color}
+						color={stateColor ?? color}
 						transparent
 						opacity={selected || highlighted ? 1 : 0.7}
 						linewidth={2}
@@ -368,13 +374,13 @@
 	<!-- Unconfigured lamp: tiny dot -->
 	<T.Mesh position={pos} onclick={onclick} userData={{ clickType: 'lamp', clickId: lamp.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 		<T.SphereGeometry args={[0.03, 8, 8]} />
-		<T.MeshBasicMaterial color={color} />
+		<T.MeshBasicMaterial color={stateColor ?? color} />
 	</T.Mesh>
 
 	{#if loading}
 		<T.Mesh position={pos}>
 			<T.SphereGeometry args={[0.06, 8, 8]} />
-			<T.MeshBasicMaterial color="#fbbf24" wireframe />
+			<T.MeshBasicMaterial color={sceneItemBaseColor($theme)} wireframe />
 		</T.Mesh>
 	{/if}
 {/if}
@@ -385,8 +391,15 @@
 		oncreate={(ref) => { ref.computeLineDistances(); }}
 		geometry={aimLineGeometry}
 	>
-		<T.LineDashedMaterial color={color} dashSize={0.1} gapSize={0.06} transparent opacity={aimOpacity} />
+		<T.LineDashedMaterial color={stateColor ?? color} dashSize={0.1} gapSize={0.06} transparent opacity={stateColor ? 1 : aimOpacity} />
 	</T.LineSegments>
 </T.Group>
+
+{#if stateColor && meshGeometry}
+	<T.Mesh position={pos} renderOrder={3}>
+		<T.SphereGeometry args={[Math.max(0.04, roomHeight * 0.02), 16, 16]} />
+		<T.MeshBasicMaterial color={stateColor} depthTest={false} transparent />
+	</T.Mesh>
+{/if}
 
 <T.PointLight position={pos} color={color} intensity={0.5} distance={beamLength * 2} />

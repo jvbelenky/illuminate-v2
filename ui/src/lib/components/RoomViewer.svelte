@@ -381,10 +381,10 @@
 		transform: translateX(-50%);
 		z-index: 20;
 		padding: var(--spacing-xs) var(--spacing-md);
-		background: color-mix(in srgb, var(--color-accent) 90%, transparent);
-		color: #fff;
+		background: color-mix(in srgb, var(--color-highlight) 90%, transparent);
+		color: var(--color-on-highlight);
 		border-radius: var(--radius-md);
-		font-size: 0.8rem;
+		font-size: var(--font-size-sm);
 		font-weight: 500;
 		pointer-events: none;
 		animation: pick-pulse 1.5s ease-in-out infinite;

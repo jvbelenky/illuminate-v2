@@ -216,7 +216,7 @@
 	}
 
 	.computed-value strong {
-		color: var(--color-accent);
+		color: var(--color-text);
 	}
 
 	.scale-info {

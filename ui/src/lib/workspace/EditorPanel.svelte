@@ -222,9 +222,11 @@
 		border-color: color-mix(in srgb, var(--color-success) 50%, transparent);
 		color: var(--color-success);
 	}
+	/* The open stage: a top bar in the category blue */
 	.editor-stage.on {
 		border-bottom: 0;
 		background: var(--color-bg-tertiary);
+		box-shadow: inset 0 2px 0 var(--color-highlight);
 		color: var(--color-text);
 		font-weight: 600;
 	}
@@ -283,7 +285,7 @@
 	}
 	/* Not bold: bold would add 4 px to a row that already needs sideways scroll */
 	.editor-part.on {
-		border-bottom-color: var(--color-scene-selected);
+		border-bottom-color: var(--color-highlight);
 		color: var(--color-text);
 	}
 	/* The circle before the label, as the stage tabs': empty until the part is opened, then the green tick */

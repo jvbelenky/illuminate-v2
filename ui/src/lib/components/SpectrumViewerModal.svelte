@@ -322,8 +322,8 @@
 	}
 
 	.scale-toggle button.active {
-		background: var(--color-primary);
-		color: white;
+		background: var(--color-highlight);
+		color: var(--color-on-highlight);
 	}
 
 	.normalize-toggle {
