@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Vertex } from '$lib/utils/roomGeometry';
 import {
   shapeBox, boxCorners, handlePoint, rotateHandlePoint, resizeByHandle, rotateByDrag, rotateShapeBy, snapRotation,
-  normalizeYaw, dragAngle, localAxisToWorld, snapLineToOutline, shapeKind, handleAngle, HANDLES, toWorld,
-} from './shapeTransform';
+  normalizeYaw, dragAngle, localAxisToWorld, snapLineToOutline, shapeKind, handleAngle, HANDLES, toWorld, clipToRect } from './shapeTransform';
 
 const close = (a: Vertex[], b: Vertex[]) => {
   expect(a).toHaveLength(b.length);
@@ -180,5 +179,23 @@ describe('shapeKind', () => {
     expect(shapeKind(rect([0, 0], 2, 1, 37), 37)).toBe('Rectangle');
     expect(shapeKind([[0, 0], [2, 0], [3, 1], [0, 1]], 0)).toBe('Polygon, 4 vertices');
     expect(shapeKind([[0, 0], [2, 0], [0, 1]], 0)).toBe('Polygon, 3 vertices');
+  });
+});
+
+describe('clipToRect', () => {
+  it('cuts a polygon to the box, leaving one inside as it is', () => {
+    const sorted = (vs: Vertex[] | null) => [...(vs ?? [])].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    expect(sorted(clipToRect([[1, -1], [5, -1], [5, 5], [1, 5]], [0, 6, 0, 4]))).toEqual([[1, 0], [1, 4], [5, 0], [5, 4]]);
+    const inside: [number, number][] = [[1, 1], [2, 1], [2, 2]];
+    expect(clipToRect(inside, [0, 6, 0, 4])).toEqual(inside);
+  });
+  it('a turned square keeps the corners inside and gains the cut points', () => {
+    const diamond: [number, number][] = [[3, -1], [7, 2], [3, 5], [-1, 2]];
+    const out = clipToRect(diamond, [0, 6, 0, 4])!;
+    expect(out.every(([x, y]) => x >= 0 && x <= 6 && y >= 0 && y <= 4)).toBe(true);
+    expect(out.length).toBe(8);
+  });
+  it('nothing left is null', () => {
+    expect(clipToRect([[7, 7], [8, 7], [8, 8]], [0, 6, 0, 4])).toBeNull();
   });
 });

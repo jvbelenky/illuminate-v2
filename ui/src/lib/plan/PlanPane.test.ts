@@ -890,6 +890,39 @@ describe('PlanPane', () => {
       }
     });
 
+    it('Rotate 90° turns a plane; one the turn carries out of the room is cut to it', async () => {
+      const small = { ...wholePlane, id: 'zone-3', x1: 1, x2: 3, y1: 1, y2: 2, fit_room: false };
+      for (const [zone, want] of [[small, [1.5, 2.5, 0.5, 2.5]], [wholePlane, [1, 5, 0, 4]]] as const) {
+        const calls: unknown[][] = [];
+        const { ctl, unmount } = mount({ calls, zones: [zone] as any, context: 'zones' });
+        ctl.selectZone(zone.id);
+        await tick();
+        ctl.rotateSelected90();
+        const [, id, partial] = callsOf(calls, 'updateZone').at(-1) as [string, string, Record<string, unknown>];
+        expect(id).toBe(zone.id);
+        expect([partial.x1, partial.x2, partial.y1, partial.y2]).toEqual(want);
+        expect(partial.fit_room).toBe(false);
+        unmount();
+      }
+    });
+
+    it("Redraw outline hides the plane's outline while drawing; Escape brings it back", async () => {
+      const calls: unknown[][] = [];
+      const { container, ctl } = mount({ calls, zones: [wholePlane] as any, context: 'zones' });
+      ctl.selectZone('zone-9');
+      await tick();
+      ctl.startZoneDraw('plane');
+      await tick();
+      expect(ctl.drawing).toBe(true);
+      expect(container.querySelector('polygon.plan-zone[aria-label="Zone Floor"]')).toBeNull();
+      ctl.canvas?.cancelDraw();
+      await tick();
+      expect(ctl.drawing).toBe(false);
+      expect(ctl.selectedZoneId).toBe('zone-9');
+      expect(ctl.draft).toEqual([[0, 0], [6, 0], [6, 4], [0, 4]]);
+      expect(callsOf(calls, 'updateZone')).toHaveLength(0);
+    });
+
     it('reshaping a whole-room plane makes it a drawn one', async () => {
       const calls: unknown[][] = [];
       const { container, ctl } = mount({ calls, zones: [wholePlane] as any, context: 'zones' });

@@ -48,6 +48,8 @@
 
 	// A local alias, so the canvas can bind to the controller's fields
 	const ctl = $derived(controller);
+	// Zones snap to the room outline within half the usual reach (structures keep 10 px: partitions sit flush)
+	const ZONE_OUTLINE_SNAP_PX = 5;
 
 	const units = $derived(ctl.scene().units);
 	const precision = $derived(ctl.scene().precision);
@@ -258,6 +260,7 @@
 				objects={[]}
 				shapes={wv.shapes}
 				outline={wv.outline}
+				outlineSnapPx={ctl.onZones ? ZONE_OUTLINE_SNAP_PX : undefined}
 				ariaLabel={wallLabel}
 			>
 				{#snippet overlay(c)}
@@ -290,6 +293,7 @@
 				objects={[]}
 				shapes={wv.shapes}
 				outline={wv.outline}
+				outlineSnapPx={ctl.onZones ? ZONE_OUTLINE_SNAP_PX : undefined}
 				draggableBody={ctl.onZones && !!ctl.selectedWallPlane}
 				transformable={ctl.transformable}
 				bind:yaw={ctl.draftYaw}
@@ -315,7 +319,7 @@
 						<circle class="plan-lamp ghost point" cx={ctl.placeCursor[0]} cy={-ctl.placeCursor[1]} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} />
 					{/if}
 					{#if ctl.onZones}
-						{#each wv.planes.filter((z) => z.id !== ctl.selectedZoneId || ctl.drawing) as z (z.id)}
+						{#each wv.planes.filter((z) => z.id !== ctl.selectedZoneId || (ctl.drawing && z.id !== ctl.redrawZoneId)) as z (z.id)}
 							<polygon class="plan-zone" class:off={!z.enabled} class:highlighted={hovered('zones') === z.id} points={points(z.vertices)} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name}" onpointerdown={(e) => zoneDown(e, z.id)} />
 						{/each}
 					{/if}
@@ -394,6 +398,7 @@
 			objects={[]}
 			shapes={ctl.onCeiling ? [] : ctl.shapes}
 			outline={ctl.onOutline ? undefined : vertices}
+			outlineSnapPx={ctl.onZones ? ZONE_OUTLINE_SNAP_PX : undefined}
 			allowNegative={ctl.onObstacles}
 			draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint) || (ctl.onCeiling && !!ctl.editableKeepOut)}
 			dblClickCorners={ctl.onCeiling}
@@ -471,7 +476,7 @@
 							<line class="plan-zone wall-plane" class:off={!l.enabled} class:highlighted={hovered('zones') === l.id} x1={l.x1} y1={-l.y1} x2={l.x2} y2={-l.y2} stroke-width={c.px * 6} role="button" tabindex="-1" aria-label="Zone {l.name}" onpointerdown={(e) => zoneDown(e, l.id)} />
 						{/each}
 					{/if}
-					{#each ctl.surfaceZones.filter((z) => z.id !== ctl.selectedZoneId || ctl.drawing) as z (z.id)}
+					{#each ctl.surfaceZones.filter((z) => z.id !== ctl.selectedZoneId || (ctl.drawing && z.id !== ctl.redrawZoneId)) as z (z.id)}
 						{@const fp = zoneFootprint(z)}
 						<polygon class="plan-zone" class:volume={z.type === 'volume'} class:off={z.enabled === false} class:highlighted={hovered('zones') === z.id} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => zoneDown(e, z.id)} />
 						{@const lx = Math.min(...fp.map((p) => p[0])) + c.px * 4}

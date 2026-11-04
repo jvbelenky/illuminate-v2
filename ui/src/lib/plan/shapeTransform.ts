@@ -246,3 +246,41 @@ export function shapeKind(vertices: Vertex[], yaw: number): string {
   }
   return `Polygon, ${vertices.length} vertices`;
 }
+
+/**
+ * The part of a polygon inside the box x1..x2 by y1..y2 (Sutherland-Hodgman),
+ * rounded to 1e-6 with repeated corners dropped; null when nothing of it is left.
+ */
+export function clipToRect(vertices: Vertex[], [x1, x2, y1, y2]: [number, number, number, number]): Vertex[] | null {
+  type Edge = { inside: (p: Vertex) => boolean; cut: (a: Vertex, b: Vertex) => Vertex };
+  const atX = (x: number) => (a: Vertex, b: Vertex): Vertex => [x, a[1] + ((b[1] - a[1]) * (x - a[0])) / (b[0] - a[0])];
+  const atY = (y: number) => (a: Vertex, b: Vertex): Vertex => [a[0] + ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]), y];
+  const edges: Edge[] = [
+    { inside: (p) => p[0] >= x1 - 1e-9, cut: atX(x1) },
+    { inside: (p) => p[0] <= x2 + 1e-9, cut: atX(x2) },
+    { inside: (p) => p[1] >= y1 - 1e-9, cut: atY(y1) },
+    { inside: (p) => p[1] <= y2 + 1e-9, cut: atY(y2) },
+  ];
+  let out = vertices;
+  for (const e of edges) {
+    const input = out;
+    out = [];
+    for (let i = 0; i < input.length; i++) {
+      const cur = input[i], prev = input[(i + input.length - 1) % input.length];
+      if (e.inside(cur)) {
+        if (!e.inside(prev)) out.push(e.cut(prev, cur));
+        out.push(cur);
+      } else if (e.inside(prev)) out.push(e.cut(prev, cur));
+    }
+    if (out.length === 0) return null;
+  }
+  const r = (v: number) => Math.round(v * 1e6) / 1e6 + 0;
+  const clean: Vertex[] = [];
+  for (const [x, y] of out) {
+    const p: Vertex = [r(x), r(y)];
+    const last = clean[clean.length - 1];
+    if (!last || last[0] !== p[0] || last[1] !== p[1]) clean.push(p);
+  }
+  while (clean.length > 1 && clean[0][0] === clean[clean.length - 1][0] && clean[0][1] === clean[clean.length - 1][1]) clean.pop();
+  return clean.length >= 3 ? clean : null;
+}

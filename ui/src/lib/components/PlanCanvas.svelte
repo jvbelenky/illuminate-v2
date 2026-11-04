@@ -87,6 +87,8 @@
 		allowNegative?: boolean;
 		/** A faint context polygon (the room outline, when editing something inside it). */
 		outline?: Vertex[];
+		/** How near (screen px) a corner, edge or moved shape snaps to the outline; 10 by default. */
+		outlineSnapPx?: number;
 		lamps?: LampInstance[];
 		/** Per-lamp opacity by id (the wall view fades lamps by their distance from the wall). */
 		lampOpacity?: Record<string, number>;
@@ -172,6 +174,7 @@
 		extraFitPoints = [],
 		allowNegative = false,
 		outline,
+		outlineSnapPx,
 		lamps = [],
 		lampOpacity = {},
 		selectedLampIds = [],
@@ -552,7 +555,7 @@
 	let outlineGuide = $state<{ edges: number[]; corner: number | null }>({ edges: [], corner: null });
 	const NO_OUTLINE_GUIDE = { edges: [], corner: null };
 	function outlineTolerance(altKey: boolean): number {
-		return altKey || !outline || outline.length < 3 ? 0 : px * OUTLINE_TOLERANCE_PX;
+		return altKey || !outline || outline.length < 3 ? 0 : px * (outlineSnapPx ?? OUTLINE_TOLERANCE_PX);
 	}
 
 	/**
