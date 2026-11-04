@@ -145,3 +145,26 @@ export function planeNormal(zone: CalcZone, room: RoomConfig): Vec3 {
   if (ref === 'yz') return [d, 0, 0];
   return [0, 0, d];
 }
+
+/**
+ * Where a zone's name label sits in 3D (world x, y, z): a point at itself, a
+ * plane above the middle of its outline, a volume above the middle of its top.
+ */
+export function zoneLabelAnchor(zone: CalcZone, room: RoomConfig): Vec3 | null {
+  if (zone.type === 'point') return [zone.x ?? room.x / 2, zone.y ?? room.y / 2, zone.z ?? 1];
+  const mid = (vs: number[][]): [number, number] => [
+    vs.reduce((a, p) => a + p[0], 0) / vs.length,
+    vs.reduce((a, p) => a + p[1], 0) / vs.length,
+  ];
+  if (zone.type === 'volume') {
+    const fp = zone.vertices && zone.vertices.length >= 3 ? zoneFootprint(zone)
+      : zone.x_min == null && zone.fit_room ? roomFootprint(room) : zoneFootprint(zone);
+    if (!fp.length) return null;
+    const [x, y] = mid(fp);
+    return [x, y, Math.max(zone.z_min ?? 0, zone.z_max ?? room.z)];
+  }
+  const corners = planeWorldCorners(zone, room);
+  if (!corners.length) return null;
+  const [x, y] = mid(corners);
+  return [x, y, Math.max(...corners.map((c) => c[2]))];
+}

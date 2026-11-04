@@ -3,7 +3,7 @@
  * (Height on the floor, Below ceiling on the ceiling, From wall on a wall),
  * its Flip, the calculation modes, and the grid-points summary and spacing text.
  */
-import type { CalcZone, PlaneCalcMode, RoomConfig } from '$lib/types/project';
+import type { CalcZone, PlaneCalcMode, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
 import { wallIndex, zoneSurface, type Surface } from '$lib/utils/surfaces';
 import { formatFloat } from '$lib/utils/formatting';
 import { fromMeters, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
@@ -218,4 +218,35 @@ export function rangePartial(kind: 'plane' | 'volume' | 'wall', [a1, a2, b1, b2]
 export function rangesOf(vs: Vertex[]): Ranges {
   const xs = vs.map((p) => p[0]), ys = vs.map((p) => p[1]);
   return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+}
+
+// --- Display, per view
+
+export type ZoneView = '2d' | '3d';
+
+/** How the zone is drawn in a view. The 3D mode is the stored one (legacy show_values migrated); 2D starts from it. */
+export function zoneDisplayMode(zone: CalcZone, view: ZoneView): ZoneDisplayMode {
+  const three: ZoneDisplayMode = zone.display_mode ?? (zone.show_values === false ? 'markers' : 'heatmap');
+  const mode = view === '2d' ? (zone.display_mode_2d ?? three) : three;
+  // Contours are a plane view
+  return zone.type === 'volume' && mode === 'contours' ? 'heatmap' : mode;
+}
+
+/** Whether the zone's name shows in a view: on the 2D plan unless turned off, in 3D only when turned on. */
+export function zoneLabelShown(zone: CalcZone, view: ZoneView): boolean {
+  return view === '2d' ? zone.show_label_2d !== false : zone.show_label === true;
+}
+
+/** The display modes a plane or volume offers in a view, with their glyphs and titles (as on the single-page editor). */
+export function displayModes(kind: 'plane' | 'volume', view: ZoneView = '3d'): { value: ZoneDisplayMode; label: string; title: string; glyph: 'display_heatmap' | 'display_numeric' | 'display_contours' | 'display_markers' | 'display_none' }[] {
+  const volume = kind === 'volume';
+  // A volume's heatmap is isosurfaces in 3D
+  const iso = volume && view === '3d';
+  return [
+    { value: 'heatmap', label: iso ? 'Iso' : 'Heatmap', title: iso ? 'Isoirradiance' : 'Heatmap', glyph: 'display_heatmap' },
+    { value: 'numeric', label: 'Numeric', title: 'Numeric', glyph: 'display_numeric' },
+    ...(volume ? [] : [{ value: 'contours' as const, label: 'Contours', title: 'Contours', glyph: 'display_contours' as const }]),
+    { value: 'markers', label: 'Markers', title: 'Markers Only', glyph: 'display_markers' },
+    { value: 'none', label: 'None', title: 'Outline Only', glyph: 'display_none' },
+  ];
 }

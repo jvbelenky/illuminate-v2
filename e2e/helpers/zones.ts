@@ -122,13 +122,13 @@ export async function toggleOffset(page: Page): Promise<void> {
   await pressOther(page, 'Grid offset');
 }
 
-/** Set the display mode for a zone (Heatmap, Numeric, Contours, Markers, None; Iso for volumes). */
+/** Set the zone's 3D display mode (Heatmap, Numeric, Contours, Markers, None; Iso for volumes). */
 export async function setDisplayMode(
   page: Page,
   mode: 'Heatmap' | 'Iso' | 'Numeric' | 'Contours' | 'Markers' | 'None'
 ): Promise<void> {
   await openZoneFold(page, 'Display');
-  const btn = zoneEditor(page).getByRole('group', { name: 'Display mode' }).getByRole('button', { name: mode, exact: true });
+  const btn = zoneEditor(page).getByRole('group', { name: '3D display mode' }).getByRole('button', { name: mode, exact: true });
   await btn.click();
   await expect(btn).toHaveAttribute('aria-pressed', 'true');
 }

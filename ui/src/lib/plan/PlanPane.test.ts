@@ -95,6 +95,21 @@ describe('PlanPane', () => {
     off.unmount();
   });
 
+  it("draws a zone's and a point's name on the plan unless its 2D label is off", async () => {
+    const plane = { id: 'zone-1', name: 'Desk', type: 'plane', surface: 'floor', ref_surface: 'xy', height: 0.8, x1: 1, x2: 3, y1: 1, y2: 2, enabled: true };
+    const point = { id: 'zone-2', name: 'Eye', type: 'point', x: 4, y: 3, z: 1.2, aim_x: 4, aim_y: 4, aim_z: 1.2, enabled: true };
+    const labels = (c: HTMLElement) => Array.from(c.querySelectorAll('text.plan-lamp-label')).map((t) => t.textContent);
+    const on = mount({ zones: [plane, point] as any, context: 'zones' });
+    await tick();
+    expect(labels(on.container).sort()).toEqual(['Desk', 'Eye']);
+    on.unmount();
+    const off = mount({ zones: [{ ...plane, show_label_2d: false }, { ...point, show_label_2d: false }] as any, context: 'zones' });
+    await tick();
+    expect(labels(off.container)).toEqual([]);
+    expect(off.container.querySelector('circle.plan-lamp.point')).not.toBeNull();
+    off.unmount();
+  });
+
   it('projects the web on a wall view for a lamp in front of it, and in the mini view', async () => {
     const { container, ctl, unmount } = mount({ lamps: [lamp], context: 'lamps' });
     ctl.setSurface('wall:0');

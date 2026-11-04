@@ -1,11 +1,13 @@
 <script lang="ts">
 	// ▸ Display: what the values are (irradiance / fluence rate, or dose with its
-	// exposure time), how the zone is drawn, and its label.
+	// exposure time), then per view (2D, 3D) how the zone is drawn and whether its
+	// label shows, as lamps split theirs.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
+	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
 	import type { CalcZone, ZoneDisplayMode } from '$lib/types/project';
 	import ZoneFold from './ZoneFold.svelte';
-	import { valueKind } from './zoneFields';
+	import { valueKind, displayModes, zoneDisplayMode, zoneLabelShown, type ZoneView } from './zoneFields';
 
 	interface Props {
 		zone: CalcZone;
@@ -23,27 +25,25 @@
 	// Not a valid exposure; the store holds it back from the backend until it is
 	const zeroTime = $derived(hours + minutes + seconds <= 0);
 
-	const MODES: { value: ZoneDisplayMode; label: string }[] = $derived(
-		kind === 'volume'
-			? [{ value: 'heatmap', label: 'Iso' }, { value: 'numeric', label: 'Numeric' }, { value: 'markers', label: 'Markers' }, { value: 'none', label: 'None' }]
-			: [{ value: 'heatmap', label: 'Heatmap' }, { value: 'numeric', label: 'Numeric' }, { value: 'contours', label: 'Contours' }, { value: 'markers', label: 'Markers' }, { value: 'none', label: 'None' }]
-	);
-
-	const stored = $derived<ZoneDisplayMode>(zone.display_mode ?? (zone.show_values === false ? 'markers' : 'heatmap'));
-	// Contours are a plane view; a volume shows them as isosurfaces
-	const mode = $derived(kind === 'volume' && stored === 'contours' ? 'heatmap' : stored);
+	const VIEWS: ZoneView[] = ['2d', '3d'];
+	const MODE_KEY = { '2d': 'display_mode_2d', '3d': 'display_mode' } as const;
+	const LABEL_KEY = { '2d': 'show_label_2d', '3d': 'show_label' } as const;
 
 	// Numeric display is unavailable for a volume with too many points
 	const volumePoints = $derived(kind === 'volume' ? (zone.num_x ?? 0) * (zone.num_y ?? 0) * (zone.num_z ?? 0) : 0);
 	const numericDisabled = $derived(kind === 'volume' && volumePoints > MAX_NUMERIC_VOLUME_POINTS);
 
-	// A finer grid that rules out Numeric falls back to isosurfaces
+	// A finer grid that rules out Numeric falls back to the heatmap (isosurfaces in 3D)
 	$effect(() => {
-		if (numericDisabled && stored === 'numeric') commit({ display_mode: 'heatmap' });
+		if (!numericDisabled) return;
+		const partial: Partial<CalcZone> = {};
+		if (zone.display_mode === 'numeric') partial.display_mode = 'heatmap';
+		if (zone.display_mode_2d === 'numeric') partial.display_mode_2d = 'heatmap';
+		if (Object.keys(partial).length) commit(partial);
 	});
 
-	function setMode(next: ZoneDisplayMode) {
-		if (next !== stored) commit({ display_mode: next });
+	function setMode(view: ZoneView, next: ZoneDisplayMode) {
+		if (next !== zoneDisplayMode(zone, view)) commit({ [MODE_KEY[view]]: next });
 	}
 </script>
 
@@ -76,25 +76,34 @@
 		</div>
 	{/if}
 
-	{#if kind !== 'point'}
-		<div class="seg" class:seg-five={MODES.length === 5} role="group" aria-label="Display mode">
-			{#each MODES as m (m.value)}
-				<button
-					type="button"
-					aria-pressed={mode === m.value}
-					disabled={m.value === 'numeric' && numericDisabled}
-					title={m.value === 'numeric' && numericDisabled ? `${volumePoints.toLocaleString()} points (max ${MAX_NUMERIC_VOLUME_POINTS.toLocaleString()})` : undefined}
-					onclick={() => setMode(m.value)}
-				>{m.label}</button>
-			{/each}
+	{#each VIEWS as view (view)}
+		{@const VIEW = view.toUpperCase()}
+		{@const mode = zoneDisplayMode(zone, view)}
+		{@const MODES = kind === 'point' ? [] : displayModes(kind, view)}
+		<div class="display-section">
+			<span class="display-head">{VIEW}</span>
+			{#if MODES.length}
+				<div class="glyph-seg" role="group" aria-label="{VIEW} display mode">
+					{#each MODES as m (m.value)}
+						{@const off = m.value === 'numeric' && numericDisabled}
+						<button
+							type="button"
+							aria-label={m.label}
+							aria-pressed={mode === m.value}
+							disabled={off}
+							title={off ? `${volumePoints.toLocaleString()} points (max ${MAX_NUMERIC_VOLUME_POINTS.toLocaleString()})` : m.title}
+							onclick={() => setMode(view, m.value)}
+						>
+							<CalcTypeIllustration type={m.glyph} size={26} />
+							<span>{m.label}</span>
+						</button>
+					{/each}
+				</div>
+			{/if}
+			<label class="ep-check">
+				<input type="checkbox" aria-label="Show label in {VIEW}" checked={zoneLabelShown(zone, view)} onchange={(e) => commit({ [LABEL_KEY[view]]: e.currentTarget.checked })} />
+				<span>Show label</span>
+			</label>
 		</div>
-	{/if}
-
-	<!-- The 3D view labels calc points only -->
-	{#if kind === 'point'}
-		<label class="ep-check">
-			<input type="checkbox" checked={zone.show_label ?? false} onchange={(e) => commit({ show_label: e.currentTarget.checked })} />
-			<span>Show label</span>
-		</label>
-	{/if}
+	{/each}
 </ZoneFold>
