@@ -10,6 +10,7 @@
 import type { Vertex } from '$lib/utils/roomGeometry';
 import { toWall, fromWall, surfaceName, type WallSegment } from '$lib/utils/surfaces';
 import { encodeT } from '$lib/utils/lampSticking';
+import { moveLampKeepingAim } from '$lib/utils/lampMove';
 import type { LampInstance, SceneObject } from '$lib/types/project';
 
 /** The faintest a projected item is drawn. */
@@ -103,7 +104,7 @@ const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
 /**
  * A lamp dragged to (along, up) on wall `wallIndex`'s view. It keeps its
- * distance from the wall; its aim travels with it. A lamp stuck to this wall
+ * distance from the wall; its aim point stays (moveLampKeepingAim). A lamp stuck to this wall
  * slides along it (its `wall_t`, signed as `encodeT` does) and stays stuck.
  */
 export function unprojectLampMove(
@@ -117,12 +118,8 @@ export function unprojectLampMove(
   const a = stuck ? Math.min(seg.length, Math.max(0, along)) : along;
   const { depth } = toWall(lamp.x, lamp.y, lamp.z, seg);
   const p = fromWall(a, up, depth, seg);
-  const x = r6(p.x), y = r6(p.y), z = r6(p.z);
   return {
-    x, y, z,
-    aimx: r6(lamp.aimx + x - lamp.x),
-    aimy: r6(lamp.aimy + y - lamp.y),
-    aimz: r6(lamp.aimz + z - lamp.z),
+    ...moveLampKeepingAim(lamp, p.x, p.y, p.z),
     ...(stuck ? { stick_wall: true, wall_t: encodeT(a, seg.length) } : {}),
   };
 }

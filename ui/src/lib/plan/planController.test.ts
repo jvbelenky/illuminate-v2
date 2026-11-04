@@ -661,7 +661,8 @@ describe('editing in a wall view', () => {
     expect(move.x).toBeCloseTo(1);
     expect(move.y).toBeCloseTo(2);
     expect(move.z).toBeCloseTo(2);
-    expect(move.aimx).toBeCloseTo(1);
+    // Only the lamp moves: its aim point stays
+    expect(move).not.toHaveProperty('aimx');
   });
 
   test('a lamp has no aim handle in a wall view', () => {
@@ -804,14 +805,14 @@ describe('Place and Aim on the plan', () => {
       return r;
     }
 
-    test('on the floor a click moves x and y, keeps z, and carries the aim along, in one update', () => {
+    test('on the floor a click moves x and y, keeps z, the aim point staying, in one update', () => {
       const { ctl, actions } = lampSetup({ aimx: 3, aimy: 2.5 });
       ctl.syncPointPick({ type: 'lamp_position', lampId: 'lamp-1' });
       expect(ctl.pointPick).toBe('lamp_position');
       expect(ctl.tool).toBe('custom');
       ctl.onCustomClick(click(4, 1));
       expect(actions.updateLamp).toHaveBeenCalledTimes(1);
-      expect(actions.updateLamp).toHaveBeenCalledWith('lamp-1', { x: 4, y: 1, aimx: 5, aimy: 1.5 });
+      expect(actions.updateLamp).toHaveBeenCalledWith('lamp-1', { x: 4, y: 1, z: lamp.z });
       expect(ctl.pointPick).toBeNull();
       expect(ctl.tool).toBe('edit');
     });
@@ -828,9 +829,9 @@ describe('Place and Aim on the plan', () => {
       ctl.setSurface('wall:0');
       ctl.canvas = canvas();
       ctl.syncPointPick({ type: 'lamp_position', lampId: 'lamp-1' });
-      // canvas (3, 2) is along 3, up 2; the lamp is 2 in from the wall; the aim moves by the same delta
+      // canvas (3, 2) is along 3, up 2; the lamp is 2 in from the wall; its aim point stays
       ctl.onCustomClick(click(3, 2));
-      expect(actions.updateLamp).toHaveBeenLastCalledWith('lamp-1', { x: 3, y: 2, z: 2, aimx: 3, aimy: 2, aimz: -0.5 });
+      expect(actions.updateLamp).toHaveBeenLastCalledWith('lamp-1', { x: 3, y: 2, z: 2 });
       ctl.syncPointPick({ type: 'lamp_aim', lampId: 'lamp-1' });
       // canvas (1, 0.5) is along 5, up 0.5; the aim point is 2 in from the wall
       ctl.onCustomClick(click(1, 0.5));

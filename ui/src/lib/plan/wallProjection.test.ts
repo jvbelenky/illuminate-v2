@@ -115,12 +115,13 @@ describe('moving lamps and structures on a wall', () => {
     expect(unprojectLampMove(lamp, seg0, 2.5, 2, 0).wall_t).toBeUndefined();
   });
 
-  it('aim moves with the lamp', () => {
+  it('the aim point stays where it is: only the lamp moves', () => {
     const lamp = { ...(base as object), x: 1, y: 1, z: 2, aimx: 1, aimy: 1.5, aimz: 0 } as never;
     const m = unprojectLampMove(lamp, seg0, 2, 2.5);
-    expect(m.aimx).toBeCloseTo(2);
-    expect(m.aimy).toBeCloseTo(1.5);
-    expect(m.aimz).toBeCloseTo(0.5);
+    expect(m.x).toBeCloseTo(2);
+    expect(m.z).toBeCloseTo(2.5);
+    expect(m).not.toHaveProperty('aimx');
+    expect(m).not.toHaveProperty('aimz');
   });
 
   it('structure slides along the wall and rises; bottom clamps at 0', () => {

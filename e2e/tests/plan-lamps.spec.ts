@@ -56,7 +56,7 @@ test.describe('Lamps on the plan', () => {
     guard.assertClean();
   });
 
-  test("opening a lamp's row selects that lamp on the plan, in the selection cyan, and Move moves it", async ({ page }) => {
+  test("opening a lamp's row selects that lamp on the plan, in the selection cyan, and Move moves it, not its aim point", async ({ page }) => {
     const guard = attachErrorGuard(page);
     await waitForSession(page);
     await openStep(page, 'lamps');
@@ -104,6 +104,9 @@ test.describe('Lamps on the plan', () => {
     const at = (ls: Record<string, any>[], name: string) => ls.find((l) => l.name === name)!;
     expect([at(after, 'Lamp 1').x, at(after, 'Lamp 1').y]).not.toEqual([at(before, 'Lamp 1').x, at(before, 'Lamp 1').y]);
     expect([at(after, 'Lamp 2').x, at(after, 'Lamp 2').y]).toEqual([at(before, 'Lamp 2').x, at(before, 'Lamp 2').y]);
+    // Only the lamp moved: its aim point stayed where it was
+    const aim = (l: Record<string, any>) => [l.aimx, l.aimy, l.aimz];
+    expect(aim(at(after, 'Lamp 1'))).toEqual(aim(at(before, 'Lamp 1')));
     guard.assertClean();
   });
 
@@ -189,7 +192,8 @@ test.describe('Lamps on the plan', () => {
     await expect.poll(async () => (await getLampsFromStore(page))[0].z).toBeCloseTo(2.1, 6);
     const [moved] = await getLampsFromStore(page);
     expect(moved.x).toBeCloseTo(before.x, 6);
-    expect(moved.aimz - moved.z).toBeCloseTo(before.aimz - before.z, 6);
+    // Only the lamp moved: its aim point stays
+    expect([moved.aimx, moved.aimy, moved.aimz]).toEqual([before.aimx, before.aimy, before.aimz]);
 
     // Rename from the plan label
     await plan.locator('text.plan-lamp-label').first().dblclick();
