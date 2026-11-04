@@ -56,6 +56,57 @@ test.describe('Lamps on the plan', () => {
     guard.assertClean();
   });
 
+  test("opening a lamp's row selects that lamp on the plan, in the selection cyan, and Move moves it", async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    await waitForSession(page);
+    await openStep(page, 'lamps');
+    const part = page.locator('.lamps-part');
+    const fixture = part.getByLabel('Fixture', { exact: true });
+    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
+    const placements = page.getByRole('group', { name: 'Placement' });
+    await fixture.selectOption({ label: 'Aerolamp DevKit' });
+    await placements.getByRole('button', { name: 'Downlight' }).click();
+    await waitForApiIdle(page);
+    await fixture.selectOption({ label: 'Beacon' });
+    await placements.getByRole('button', { name: 'Corner' }).click();
+    await waitForApiIdle(page);
+
+    // Open Lamp 1 (Lamp 2, added last, was open)
+    await part.locator('.editor-row .row-main').first().click();
+    await expect(part.locator('.editor-row.open .name')).toHaveText('Lamp 1');
+    const plan = planSvg(page);
+    const lamp1 = plan.locator('circle.plan-lamp[aria-label="Lamp Lamp 1"]');
+    const lamp2 = plan.locator('circle.plan-lamp[aria-label="Lamp Lamp 2"]');
+    await expect(lamp1).toHaveClass(/\bselected\b/);
+    await expect(lamp2).not.toHaveClass(/\bselected\b/);
+    const cyan = await page.evaluate(() => {
+      const probe = document.createElement('div');
+      probe.style.color = 'var(--color-scene-selected)';
+      document.body.append(probe);
+      const c = getComputedStyle(probe).color;
+      probe.remove();
+      return c;
+    });
+    expect(await lamp1.evaluate((e) => getComputedStyle(e).stroke)).toBe(cyan);
+    expect(await lamp2.evaluate((e) => getComputedStyle(e).stroke)).not.toBe(cyan);
+
+    // Move: one drag on the plan moves Lamp 1, not Lamp 2
+    const before = await getLampsFromStore(page);
+    await planTool(page, 'Move').click();
+    const b = (await lamp1.boundingBox())!;
+    const [x, y] = [b.x + b.width / 2 + 120, b.y + b.height / 2 + 60];
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 40, y + 20, { steps: 5 });
+    await page.mouse.up();
+    await waitForApiIdle(page);
+    const after = await getLampsFromStore(page);
+    const at = (ls: Record<string, any>[], name: string) => ls.find((l) => l.name === name)!;
+    expect([at(after, 'Lamp 1').x, at(after, 'Lamp 1').y]).not.toEqual([at(before, 'Lamp 1').x, at(before, 'Lamp 1').y]);
+    expect([at(after, 'Lamp 2').x, at(after, 'Lamp 2').y]).toEqual([at(before, 'Lamp 2').x, at(before, 'Lamp 2').y]);
+    guard.assertClean();
+  });
+
   test("the lamp editor's Copy opens the copy and Delete removes it; undo brings it back", async ({ page }) => {
     await waitForSession(page);
     await openStep(page, 'lamps');
