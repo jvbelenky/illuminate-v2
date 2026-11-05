@@ -779,6 +779,8 @@ export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []
     has_spectrum_file: false,
     show_label: room.showLampLabels,
     show_photometric_web: room.showPhotometricWebs,
+    // View › Show Photometric Webs is one setting for both views
+    show_photometric_web_2d: room.showPhotometricWebs,
   };
 }
 

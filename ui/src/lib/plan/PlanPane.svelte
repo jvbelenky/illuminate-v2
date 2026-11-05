@@ -26,6 +26,7 @@
 	import { surfaceName } from '$lib/utils/surfaces';
 	import { moveLampKeepingAim, movePointKeepingAim, pointPlacement } from '$lib/utils/lampMove';
 	import { planShouldHandleKey, type PlanController } from './planController.svelte';
+	import { planAxesMarker, planRulers, gridFadeDistance, type PlanProjection } from '$lib/utils/viewGrid';
 
 	interface Props {
 		controller: PlanController;
@@ -55,9 +56,33 @@
 	const ZONE_OUTLINE_SNAP_PX = 5;
 
 	const units = $derived(ctl.scene().units);
+	// The View menu's options, one setting for both views: grid, dimension rulers,
+	// XYZ marker and floor-plan image, drawn as 3D draws them (viewGrid)
+	const room = $derived(ctl.scene().room);
+	const projection = $derived<PlanProjection>(ctl.wallSeg && ctl.wallView ? { kind: 'wall', seg: ctl.wallSeg } : { kind: 'top' });
+	const maxDim = $derived(Math.max(room.x, room.y, room.z));
+	const showGrid = $derived(room.showGrid ?? true);
+	const gridFade = $derived(gridFadeDistance(maxDim));
+	const rulers = $derived((room.showDimensions ?? true) ? planRulers(projection, room) : null);
+	const axesMarker = $derived((room.showXYZMarker ?? true) ? planAxesMarker(projection, maxDim, units) : null);
+	// Fit leaves room below and left of the outline for the rulers and the marker: a tenth
+	// of the longest side, as 3D's marker offset (measured on the outline, which Fit follows)
+	const decorFit = $derived.by((): Vertex[] => {
+		const vs = ctl.scene().vertices;
+		if ((!rulers && !axesMarker) || vs.length === 0) return [];
+		const xs = vs.map((v) => v[0]);
+		const ys = vs.map((v) => v[1]);
+		const pad = Math.max(...xs, ...ys, room.z) * 0.1;
+		if (projection.kind === 'wall') return [[-pad, -pad]];
+		return [[Math.min(...xs) - pad, Math.min(...ys) - pad]];
+	});
+	// The Floorplan part edits the image, so it shows there whatever the option says
+	const planImageShown = $derived((room.showFloorPlanImage ?? true) || (!ro && ctl.onOutline));
+	// Items hidden with their eye are left out, as in 3D
+	const hiddenIds = $derived(ctl.scene().hidden);
 	const precision = $derived(ctl.scene().precision);
 	const vertices = $derived(ctl.scene().vertices);
-	const lamps = $derived(ctl.scene().lamps);
+	const lamps = $derived(ctl.scene().lamps.filter((l) => !ctl.scene().hidden?.lamps.has(l.id)));
 	// Ceiling: the room seen from above with the ceiling drawn over it; structures
 	// stand on the floor, so they are left out. The tiles and items show only in
 	// the ceiling designer's own plan (the ceiling context).
@@ -81,7 +106,7 @@
 	// Read-only (summary, mini view): the selection and the hovered row still show
 	const hovered = (kind: 'lamps' | 'zones' | 'objects') => (ctl.hoveredItem?.kind === kind ? ctl.hoveredItem.id : null);
 	const roShapes = $derived<PlanShape[]>(
-		ctl.obstacles.map((o) => {
+		ctl.obstacles.filter((o) => !ctl.isHidden('objects', o.id)).map((o) => {
 			const selected = o.id === ctl.selectedId;
 			const highlighted = !selected && hovered('objects') === o.id;
 			return { id: o.key, vertices: o.vertices, name: o.name, selected, highlighted, dimmed: !selected && !highlighted, disabled: !o.enabled };
@@ -235,8 +260,8 @@
 {#snippet neighbours(c: CanvasContext, labels: { left: string; right: string }, length: number)}
 	{@const l = c.toScreen(0, 0)}
 	{@const r = c.toScreen(length, 0)}
-	<span class="wall-neighbour left" style="left: {l[0]}px; top: {l[1] + 6}px">{labels.left}</span>
-	<span class="wall-neighbour right" style="left: {r[0]}px; top: {r[1] + 6}px">{labels.right}</span>
+	<span class="wall-neighbour left" style="left: {l[0]}px; top: {l[1] + (rulers ? 30 : 6)}px">{labels.left}</span>
+	<span class="wall-neighbour right" style="left: {r[0]}px; top: {r[1] + (rulers ? 30 : 6)}px">{labels.right}</span>
 {/snippet}
 
 <!-- The lamps' photometric webs, projected on the floor/ceiling or the wall shown (display-only, under the markers) -->
@@ -280,6 +305,7 @@
 				onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 				{precision}
 				fallbackFit={wv.outline}
+				extraFitPoints={decorFit}
 				lamps={wv.lamps}
 				lampOpacity={wv.lampOpacity}
 				selectedLampIds={ctl.selectedLampIds}
@@ -289,6 +315,10 @@
 				outline={wv.outline}
 				outlineSnapPx={ctl.onZones ? ZONE_OUTLINE_SNAP_PX : undefined}
 				ariaLabel={wallLabel}
+				{showGrid}
+				{gridFade}
+				{rulers}
+				{axesMarker}
 			>
 				{#snippet field(c)}{@render zoneFields(c)}{/snippet}
 				{#snippet overlay(c)}
@@ -315,6 +345,7 @@
 				onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 				{precision}
 				fallbackFit={wv.outline}
+				extraFitPoints={decorFit}
 				lamps={wv.lamps}
 				lampOpacity={wv.lampOpacity}
 				selectedLampIds={ctl.selectedLampIds}
@@ -340,6 +371,10 @@
 				onHostPointerUp={ctl.onHostPointerUp}
 				onHostCancel={ctl.cancelHostDrag}
 				ariaLabel={wallLabel}
+				{showGrid}
+				{gridFade}
+				{rulers}
+				{axesMarker}
 			>
 				{#snippet field(c)}{@render zoneFields(c)}{/snippet}
 				{#snippet overlay(c)}
@@ -348,7 +383,7 @@
 						<circle class="plan-lamp ghost point" cx={ctl.placeCursor[0]} cy={-ctl.placeCursor[1]} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} />
 					{/if}
 					{#if ctl.onZones}
-						{#each wv.planes.filter((z) => z.id !== ctl.selectedZoneId || (ctl.drawing && z.id !== ctl.redrawZoneId)) as z (z.id)}
+						{#each wv.planes.filter((z) => !hiddenIds?.zones.has(z.id) && (z.id !== ctl.selectedZoneId || (ctl.drawing && z.id !== ctl.redrawZoneId))) as z (z.id)}
 							<polygon class="plan-zone" class:off={!z.enabled} class:results={resultZoneIds.has(z.id)} class:highlighted={hovered('zones') === z.id} points={points(z.vertices)} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name}" onpointerdown={(e) => zoneDown(e, z.id)} />
 						{/each}
 					{/if}
@@ -386,7 +421,7 @@
 			onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 			{precision}
 			fallbackFit={vertices}
-			extraFitPoints={ctl.imageFitPoints}
+			extraFitPoints={[...ctl.imageFitPoints, ...decorFit]}
 			{lamps}
 			selectedLampIds={ctl.selectedLampIds}
 			highlightedLampIds={roHighlightedLamps}
@@ -394,6 +429,10 @@
 			shapes={roShapes}
 			outline={vertices}
 			ariaLabel="Floor plan canvas"
+			{showGrid}
+			{gridFade}
+			{rulers}
+			{axesMarker}
 		>
 			{#snippet field(c)}{@render zoneFields(c)}{/snippet}
 			{#snippet overlay(c)}
@@ -403,7 +442,7 @@
 				{/each}
 			{/snippet}
 			{#snippet underlay()}
-				{#if ctl.planImage}
+				{#if ctl.planImage && planImageShown}
 					<image
 						class="plan-image"
 						href={ctl.planImage.href}
@@ -436,7 +475,7 @@
 			onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 			{precision}
 			fallbackFit={vertices}
-			extraFitPoints={ctl.imageFitPoints}
+			extraFitPoints={[...ctl.imageFitPoints, ...decorFit]}
 			lamps={ctl.onLamps ? [] : lamps}
 			objects={[]}
 			shapes={ctl.onCeiling ? [] : ctl.shapes}
@@ -466,6 +505,10 @@
 			onHostCancel={ctl.cancelHostDrag}
 			onBackgroundDragStart={ctl.onBackgroundDragStart}
 			onBackgroundPointerDown={ctl.onBackgroundPointerDown}
+			{showGrid}
+			{gridFade}
+			{rulers}
+			{axesMarker}
 		>
 			{#snippet underlay(c)}
 				{#if onCeilingSurface && ceiling.ceilingShown && vertices.length >= 3}
@@ -475,7 +518,7 @@
 					{/each}
 				{/if}
 				<!-- Reference image (bottom-left anchored; SVG y is flipped) -->
-				{#if ctl.planImage}
+				{#if ctl.planImage && planImageShown}
 					<image
 						class="plan-image"
 						href={ctl.planImage.href}
@@ -492,7 +535,7 @@
 						class:selected={ctl.planSelected}
 						onpointerdown={ctl.onPlanPointerDown}
 					/>
-					{#if ctl.planSelected}
+					{#if ctl.planSelected && planImageShown}
 						<rect class="plan-outline" x={ctl.planImage.x} y={-(ctl.planImage.y + ctl.planImage.height)} width={ctl.planImage.width} height={ctl.planImage.height} transform={ctl.planImage.transform} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 4}" />
 					{/if}
 				{/if}
@@ -518,11 +561,11 @@
 				{/each}
 				{#if ctl.onZones}
 					{#if ctl.surface === 'floor'}
-						{#each ctl.wallPlaneLines as l (l.id)}
+						{#each ctl.wallPlaneLines.filter((l) => !hiddenIds?.zones.has(l.id)) as l (l.id)}
 							<line class="plan-zone wall-plane" class:off={!l.enabled} class:highlighted={hovered('zones') === l.id} x1={l.x1} y1={-l.y1} x2={l.x2} y2={-l.y2} stroke-width={c.px * 6} role="button" tabindex="-1" aria-label="Zone {l.name}" onpointerdown={(e) => zoneDown(e, l.id)} />
 						{/each}
 					{/if}
-					{#each ctl.surfaceZones.filter((z) => z.id !== ctl.selectedZoneId || (ctl.drawing && z.id !== ctl.redrawZoneId)) as z (z.id)}
+					{#each ctl.surfaceZones.filter((z) => !hiddenIds?.zones.has(z.id) && (z.id !== ctl.selectedZoneId || (ctl.drawing && z.id !== ctl.redrawZoneId))) as z (z.id)}
 						{@const fp = zoneFootprint(z)}
 						<polygon class="plan-zone" class:volume={z.type === 'volume'} class:results={resultZoneIds.has(z.id)} class:off={z.enabled === false} class:highlighted={hovered('zones') === z.id} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => zoneDown(e, z.id)} />
 						{@const lx = Math.min(...fp.map((p) => p[0])) + c.px * 4}

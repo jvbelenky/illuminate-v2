@@ -247,14 +247,15 @@ export class PlanController {
     const seg = this.wallSeg;
     const w = wallIndex(this.surface);
     if (!seg || w === null) return null;
-    const { vertices, roomZ, lamps } = this.scene();
+    const { vertices, roomZ } = this.scene();
+    const lamps = this.scene().lamps.filter((l) => !this.isHidden('lamps', l.id));
     const depth = wallDepth(vertices, seg);
     const lampById = new Map(lamps.map((l) => [l.id, l]));
     const projected = projectLamps(lamps, seg, depth);
     const mdrag = this.markerDrag?.part === 'body' ? this.markerDrag : null;
     const sdrag = this.wallShapeDrag;
     const obstacleByKey = new Map(this.obstacles.map((o) => [o.key, o]));
-    const structures = projectStructures(this.obstacles.map((o) => ({ id: o.key, vertices: o.vertices, z: o.z, height: o.height })), seg, roomZ, depth);
+    const structures = projectStructures(this.obstacles.filter((o) => !this.isHidden('objects', o.id)).map((o) => ({ id: o.key, vertices: o.vertices, z: o.z, height: o.height })), seg, roomZ, depth);
     return {
       outline: wallOutline(seg, roomZ),
       lamps: projected.map((p): LampInstance => {
@@ -337,13 +338,15 @@ export class PlanController {
 
   // --- Obstacles, straight from the scene
   readonly obstacles = $derived.by(() => draftsFromObjects(this.scene().objects));
+  /** An item hidden with its eye: left out of the plan, as 3D leaves it out. */
+  isHidden = (kind: 'lamps' | 'zones' | 'objects', id: string | null): boolean => id !== null && !!this.scene().hidden?.[kind]?.has(id);
   selectedId = $state<string | null>(null);
   readonly selected = $derived(this.selectedId ? this.obstacles.find((o) => o.id === this.selectedId) ?? null : null);
   /** Reflectance: the surface the pointer is over in the list ('walls' or an obstacle id). */
   hoveredSurface = $state<'walls' | string | null>(null);
   readonly shapes = $derived<PlanShape[]>(
     this.obstacles
-      .filter((o) => !(this.onObstacles && o.id === this.selectedId && !this.drawing))
+      .filter((o) => !this.isHidden('objects', o.id) && !(this.onObstacles && o.id === this.selectedId && !this.drawing))
       .map((o) => {
         const lit = this.onReflectance && this.hoveredSurface === o.id;
         return { id: o.key, vertices: o.vertices, name: o.name, selected: (this.onObstacles && o.id === this.selectedId) || lit, dimmed: !this.onObstacles && !lit, disabled: !o.enabled };
@@ -546,7 +549,7 @@ export class PlanController {
     const seg = this.wallSeg;
     if (seg && this.onLamps) {
       // In a wall view the markers are the lamps in front of it, on its canvas (no aim point)
-      const { lamps } = this.scene();
+      const lamps = this.scene().lamps.filter((l) => !this.isHidden('lamps', l.id));
       const front = new Set(projectLamps(lamps, seg).map((p) => p.id));
       return lamps.filter((l) => front.has(l.id)).map((l) => {
         const w = toWall(l.x, l.y, l.z, seg);
@@ -556,7 +559,7 @@ export class PlanController {
     }
     if (seg && this.onZones) {
       // In a wall view, as lamps: the calc points in front of it, on its canvas (no aim point)
-      const points = this.userZones.filter((z) => z.type === 'point');
+      const points = this.userZones.filter((z) => z.type === 'point' && !this.isHidden('zones', z.id));
       const front = new Set(projectLamps(points.map((z) => ({ id: z.id, ...pointPlacement(z) })), seg).map((p) => p.id));
       return points.filter((z) => front.has(z.id)).map((z) => {
         const at = pointPlacement(z);
@@ -569,9 +572,9 @@ export class PlanController {
   });
   private floorMarkers(): Marker[] {
     return this.onLamps
-      ? this.scene().lamps.map((l) => ({ id: l.id, name: l.name || l.id, x: l.x, y: l.y, ax: l.aimx, ay: l.aimy, enabled: l.enabled !== false, label: l.show_label_2d !== false }))
+      ? this.scene().lamps.filter((l) => !this.isHidden('lamps', l.id)).map((l) => ({ id: l.id, name: l.name || l.id, x: l.x, y: l.y, ax: l.aimx, ay: l.aimy, enabled: l.enabled !== false, label: l.show_label_2d !== false }))
       : this.onZones
-        ? this.userZones.filter((z) => z.type === 'point').map((z) => {
+        ? this.userZones.filter((z) => z.type === 'point' && !this.isHidden('zones', z.id)).map((z) => {
             const p = pointPlacement(z);
             return { id: z.id, name: z.name || z.id, x: p.x, y: p.y, ax: p.aimx, ay: p.aimy, enabled: z.enabled !== false, label: z.show_label_2d !== false };
           })
@@ -1335,7 +1338,7 @@ export class PlanController {
       if (!m.add) this.selectLamp(null);
       return;
     }
-    const inside = this.scene().lamps.filter((l) => l.x >= x0 && l.x <= x1 && l.y >= y0 && l.y <= y1).map((l) => l.id);
+    const inside = this.scene().lamps.filter((l) => !this.isHidden('lamps', l.id) && l.x >= x0 && l.x <= x1 && l.y >= y0 && l.y <= y1).map((l) => l.id);
     this.selectedLampIds = m.add ? [...new Set([...this.selectedLampIds, ...inside])] : inside;
   };
 

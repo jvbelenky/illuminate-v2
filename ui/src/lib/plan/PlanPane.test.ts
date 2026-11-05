@@ -24,6 +24,8 @@ vi.mock('$lib/api/client', async (importOriginal) => {
 
 const rect: [number, number][] = [[0, 0], [6, 0], [6, 4], [0, 4]];
 const baseProps = { vertices: rect, units: 'meters' as const, precision: 1 };
+/** No dimension rulers or XYZ marker, so Fit frames the outline alone (as before they were drawn on the plan). */
+const NO_DECOR = { showDimensions: false, showXYZMarker: false };
 
 /** The harness logs every action the plan takes; filter them by name. */
 function callsOf(calls: unknown[][], name: string): unknown[][] {
@@ -384,12 +386,21 @@ describe('PlanPane', () => {
   describe('the outline canvas', () => {
 
     it('fits the view with the origin near the bottom-left corner, not centred', () => {
-      const { container } = mount();
+      const { container } = mount({ room: NO_DECOR });
       const [x, y, size] = (container.querySelector('svg.plan')!.getAttribute('viewBox') ?? '').split(' ').map(Number);
       expect(x).toBeLessThan(0);
       expect(x).toBeGreaterThan(-0.6);
       expect(-(y + size)).toBeGreaterThan(-1.2);
       expect(size).toBeLessThan(7);
+    });
+
+    it('with the rulers and the XYZ marker shown, Fit leaves a tenth of the longest side for them below and left', () => {
+      const { container } = mount();
+      const [x, y, size] = (container.querySelector('svg.plan')!.getAttribute('viewBox') ?? '').split(' ').map(Number);
+      expect(x).toBeLessThan(-0.6);
+      expect(x).toBeGreaterThan(-1.2);
+      expect(-(y + size)).toBeLessThan(-0.6);
+      expect(size).toBeLessThan(8);
     });
 
     it('placing a corner near the canvas edge does not change the zoom', async () => {
@@ -487,7 +498,7 @@ describe('PlanPane', () => {
     });
 
     it('grid snapping is light: a corner near a grid line lands on it, elsewhere it stays put', async () => {
-      const { container, ctl } = mount({ precision: 2 });
+      const { container, ctl } = mount({ precision: 2, room: NO_DECOR });
       await startNewOutline();
       const plan = stubPlan(container);
       await fireEvent.pointerMove(plan, { clientX: 119, clientY: 400 });
@@ -503,7 +514,7 @@ describe('PlanPane', () => {
 
     it('snaps to whole units even when the visible grid is coarser, with a guideline after the first corner', async () => {
       const big: [number, number][] = [[0, 0], [30, 0], [30, 30], [0, 30]];
-      const { container, ctl } = mount({ vertices: big, precision: 2 });
+      const { container, ctl } = mount({ vertices: big, precision: 2, room: NO_DECOR });
       await startNewOutline();
       const plan = stubPlan(container);
       await fireEvent.click(plan, { clientX: 100, clientY: 400 });
@@ -2163,5 +2174,115 @@ describe('PlanPane typing on the plan', () => {
     await fireEvent.keyDown(field('Name')!, { key: 'Enter' });
     expect(callsOf(oc, 'updateObstacle').at(-1)).toEqual(['updateObstacle', 'object-9', { name: 'Table' }]);
     obst.unmount();
+  });
+});
+
+describe('PlanPane view options (one setting for 2D and 3D)', () => {
+  const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+  const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+  const svgOf = (c: HTMLElement) => c.querySelector('svg.plan')!;
+
+  it('Show Grid: the 3D grid, cell and section lines in the 3D colours, faded with distance; off, none', async () => {
+    const on = mount();
+    await tick();
+    const svg = svgOf(on.container);
+    const cells = svg.querySelectorAll('line.grid-line:not(.major)');
+    const sections = svg.querySelectorAll('line.grid-line.major');
+    expect(cells.length).toBeGreaterThan(0);
+    expect(sections.length).toBeGreaterThan(0);
+    // Sections on multiples of 5 m
+    for (const l of sections) {
+      const v = l.getAttribute('x1') === l.getAttribute('x2') ? Number(l.getAttribute('x1')) : -Number(l.getAttribute('y1'));
+      expect(Math.abs(v / 5 - Math.round(v / 5))).toBeLessThan(1e-6);
+    }
+    expect(['#4a4a6a', '#b0b0b0']).toContain(cells[0].getAttribute('stroke'));
+    expect(['#6a6a8a', '#909090']).toContain(sections[0].getAttribute('stroke'));
+    expect(svg.querySelector('g.view-grid')?.getAttribute('mask')).toMatch(/^url\(#plan-grid-fade-/);
+    on.unmount();
+    const off = mount({ room: { showGrid: false } });
+    await tick();
+    expect(svgOf(off.container).querySelector('line.grid-line')).toBeNull();
+    off.unmount();
+  });
+
+  it('Show Dimensions: rulers along X and Y with the 3D ticks at the room precision; off, none', async () => {
+    const on = mount({ precision: 1 });
+    await tick();
+    const labels = Array.from(svgOf(on.container).querySelectorAll('text.ruler-label')).map((t) => t.textContent);
+    expect(labels).toEqual(['0.0', '2.0', '4.0', '6.0', '1.0', '2.0', '3.0', '4.0']);
+    on.unmount();
+    const off = mount({ room: { showDimensions: false } });
+    await tick();
+    expect(svgOf(off.container).querySelector('.rulers')).toBeNull();
+    off.unmount();
+  });
+
+  it('Show Dimensions on a wall: its length across and the room height up', async () => {
+    const { container, ctl } = mount({ precision: 0 });
+    ctl.setSurface('wall:0');
+    await tick();
+    const labels = Array.from(svgOf(container).querySelectorAll('text.ruler-label')).map((t) => t.textContent);
+    // Wall 0 is 6 long, the room 2.7 high
+    expect(labels).toEqual(['0', '2', '4', '6', '1', '2']);
+  });
+
+  it('Show XYZ Marker: X red and Y blue lines and a green Z dot from above; Z up on a wall; off, none', async () => {
+    const { container, ctl, unmount } = mount();
+    await tick();
+    const marker = () => svgOf(container).querySelector('g.xyz-marker');
+    expect(marker()?.querySelector('line[data-axis="x"]')?.getAttribute('stroke')).toBe('#ff0000');
+    expect(marker()?.querySelector('line[data-axis="y"]')?.getAttribute('stroke')).toBe('#0000ff');
+    expect(marker()?.querySelector('circle[data-axis="z"]')?.getAttribute('fill')).toBe('#00ff00');
+    ctl.setSurface('wall:0');
+    await tick();
+    expect(marker()?.querySelector('line[data-axis="z"]')).not.toBeNull();
+    expect(marker()?.querySelector('circle[data-axis="y"]')).not.toBeNull();
+    unmount();
+    const off = mount({ room: { showXYZMarker: false } });
+    await tick();
+    expect(svgOf(off.container).querySelector('g.xyz-marker')).toBeNull();
+    off.unmount();
+  });
+
+  it('Show Floor Plan Image: off hides it on the plan, except where the Floorplan part edits it', async () => {
+    const lampsCtx = mount({ floorplan: placement, image, context: 'lamps', room: { showFloorPlanImage: false } });
+    await tick();
+    expect(lampsCtx.container.querySelector('image.plan-image')).toBeNull();
+    lampsCtx.unmount();
+    const outline = mount({ floorplan: placement, image, room: { showFloorPlanImage: false } });
+    await tick();
+    expect(outline.container.querySelector('image.plan-image')).not.toBeNull();
+    outline.unmount();
+    const ro = mount({ floorplan: placement, image, readonly: true, room: { showFloorPlanImage: false } });
+    await tick();
+    expect(ro.container.querySelector('image.plan-image')).toBeNull();
+    ro.unmount();
+    const shown = mount({ floorplan: placement, image, context: 'lamps' });
+    await tick();
+    expect(shown.container.querySelector('image.plan-image')).not.toBeNull();
+    shown.unmount();
+  });
+
+  it('items hidden with their eye are left out of the plan, as in 3D', async () => {
+    const lamp = { id: 'lamp-1', name: 'Beacon', lamp_type: 'krcl_222' as const, x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
+    const lamp2 = { ...lamp, id: 'lamp-2', name: 'Other', x: 4 };
+    const plane = { id: 'zone-1', name: 'Desk', type: 'plane', surface: 'floor', ref_surface: 'xy', height: 0.8, x1: 1, x2: 3, y1: 1, y2: 2, enabled: true };
+    const point = { id: 'zone-2', name: 'Eye', type: 'point', x: 4, y: 3, z: 1.2, aim_x: 4, aim_y: 4, aim_z: 1.2, enabled: true };
+    const hidden = { lamps: ['lamp-1'], zones: ['zone-1', 'zone-2'], objects: [] };
+    const lamps = mount({ lamps: [lamp, lamp2] as any, context: 'lamps', hidden });
+    await tick();
+    expect(Array.from(lamps.container.querySelectorAll('circle.plan-lamp')).map((c) => c.getAttribute('aria-label'))).toEqual(['Lamp Other']);
+    lamps.unmount();
+    const zones = mount({ zones: [plane, point] as any, context: 'zones', hidden });
+    await tick();
+    expect(zones.container.querySelector('polygon.plan-zone')).toBeNull();
+    expect(zones.container.querySelector('circle.plan-lamp.point')).toBeNull();
+    zones.unmount();
+    // The room context draws the lamps for context: hidden ones are left out, and a 2D label off hides the name
+    const room = mount({ lamps: [lamp, { ...lamp2, show_label_2d: false }] as any, hidden });
+    await tick();
+    expect(room.container.querySelectorAll('circle.lamp').length).toBe(1);
+    expect(room.container.querySelector('text.lamp-label')).toBeNull();
+    room.unmount();
   });
 });

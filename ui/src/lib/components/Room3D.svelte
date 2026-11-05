@@ -5,6 +5,7 @@
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
 	import { roomWireColor } from '$lib/utils/sceneColors';
+	import { rulerTicks, formatTick as formatRulerTick, rulerColors } from '$lib/utils/viewGrid';
 	import { userSettings } from '$lib/stores/settings';
 	import type { RoomConfig } from '$lib/types/project';
 	import { roomVertices } from '$lib/utils/roomGeometry';
@@ -65,15 +66,15 @@
 		floor: '#a0a8b0',
 		ceiling: '#b8c0c8',
 		walls: '#a0a8b0',
-		axisLine: '#666666',
-		tickText: '#333333'
+		axisLine: rulerColors('light').line,
+		tickText: rulerColors('light').text
 	} : {
 		wireframe: roomWireColor('dark'),
 		floor: '#2a2a4a',
 		ceiling: '#1a1a3a',
 		walls: '#2a2a4a',
-		axisLine: '#888888',
-		tickText: '#cccccc'
+		axisLine: rulerColors('dark').line,
+		tickText: rulerColors('dark').text
 	});
 
 	const units = $derived($userSettings.units);
@@ -261,25 +262,11 @@
 	const fontSize = $derived(Math.min(maxDim * 0.04, fromMeters(0.5, units)));
 	const tickSize = $derived(Math.min(maxDim * 0.015, fromMeters(0.2, units)));
 
-	// Generate "nice" tick values for an axis (in original user units)
-	function generateTicks(max: number): number[] {
-		const niceSteps = [1, 2, 2.5, 5, 10];
-		const rawStep = max / 5;
-		const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
-		const normalized = rawStep / magnitude;
-		const niceNorm = niceSteps.find(s => s >= normalized) ?? 10;
-		const step = niceNorm * magnitude;
-
-		const ticks: number[] = [];
-		for (let v = 0; v <= max + step * 0.01; v += step) {
-			ticks.push(Math.round(v * 1e6) / 1e6);
-		}
-		return ticks;
-	}
-
-	// Format tick value to match room's configured precision
+	// "Nice" tick values (display units) and their labels at the room's precision,
+	// shared with the 2D plan's rulers (viewGrid)
+	const generateTicks = rulerTicks;
 	function formatTick(value: number): string {
-		return value.toFixed(room.precision);
+		return formatRulerTick(value, room.precision);
 	}
 
 	// Tick arrays in display units (show 0 only on X axis to mark the origin once).
