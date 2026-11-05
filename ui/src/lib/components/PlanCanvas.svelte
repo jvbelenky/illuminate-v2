@@ -110,6 +110,11 @@
 		/** Draw the draft as a selected area (cyan tint, dashed), as for a ceiling keep-out area. */
 		selectedDraft?: boolean;
 		/**
+		 * Where the draft's tint goes: over everything (default), under the `field`
+		 * layer so results drawn there read true, or nowhere (outline only).
+		 */
+		draftFill?: 'over' | 'under' | 'none';
+		/**
 		 * The draft is a selected shape in select mode (PowerPoint style): a box in
 		 * its own frame with eight resize handles and a rotate handle, instead of
 		 * corner handles. Its body drags to move it.
@@ -189,6 +194,7 @@
 		draggableBody = false,
 		dblClickCorners = false,
 		selectedDraft = false,
+		draftFill = 'over',
 		transformable = false,
 		yaw = $bindable(0),
 		onBodyDoubleClick,
@@ -1604,6 +1610,9 @@
 	{#if contextPoints}
 		<polygon points={contextPoints} class="context-fill" />
 	{/if}
+	{#if draftFill === 'under' && draft.length >= 3 && !drawing}
+		<polygon points={outlinePoints} class="draft-fill" class:selected-area={selectedDraft} />
+	{/if}
 	{#if field}{@render field(ctx)}{/if}
 	{#if contextPoints}
 		<polygon points={contextPoints} class="context-outline" stroke-width={px * 1.5} />
@@ -1633,7 +1642,7 @@
 
 	<!-- Outline (closed polygon in edit mode, open polyline while drawing) -->
 	{#if draft.length >= 3 && !drawing}
-		<polygon points={outlinePoints} class="outline" class:selected-area={selectedDraft} stroke-width={px * 2} stroke-dasharray={selectedDraft ? `${px * 6} ${px * 4}` : undefined} />
+		<polygon points={outlinePoints} class="outline" class:selected-area={selectedDraft} class:unfilled={draftFill !== 'over'} stroke-width={px * 2} stroke-dasharray={selectedDraft ? `${px * 6} ${px * 4}` : undefined} />
 	{:else if draft.length >= 2}
 		<polyline points={outlinePoints} class="outline open" stroke-width={px * 2} />
 	{/if}
@@ -1969,6 +1978,23 @@
 	.plan.invalid .outline {
 		fill: var(--color-error, #e5484d);
 		stroke: var(--color-error, #e5484d);
+	}
+	/* The draft's tint drawn under the host's field layer, or left out, so results show true */
+	.plan .outline.unfilled {
+		fill: none;
+	}
+	.draft-fill {
+		fill: var(--color-accent);
+		fill-opacity: 0.12;
+		stroke: none;
+		pointer-events: none;
+	}
+	.draft-fill.selected-area {
+		fill: var(--color-scene-selected);
+		fill-opacity: 0.18;
+	}
+	.plan.invalid .draft-fill {
+		fill: var(--color-error, #e5484d);
 	}
 	.rubber-band {
 		stroke: var(--color-accent);

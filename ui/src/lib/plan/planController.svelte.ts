@@ -25,6 +25,7 @@ import {
 import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
+import { fitAffine, type Affine } from './zoneField';
 import { clipboard, setClipboard, takePaste, type ClipboardContent } from './clipboard';
 import { stepSurface as stepSurfaceFrom, viewSurfaces, planSurface, wallIndex, wallSegment, zoneSurface, zoneWallIndex, toWall, fromWall, type Surface, type WallSegment } from '$lib/utils/surfaces';
 import { pickMode, type PickRequest } from '$lib/stores/pickMode';
@@ -402,6 +403,37 @@ export class PlanController {
       : this.onCeiling && this.editableKeepOut ? (this.editableKeepOut.yaw ?? 0)
       : 0
   );
+
+  /** The last draft seen at rest (not reactive): what an edit in flight started from. */
+  private restDraft: Vertex[] = [];
+
+  /**
+   * The selected zone while an edit of it is on screen (a drag, resize, turn or
+   * corner edit not yet applied), so its results follow: `transform` maps the
+   * stored outline onto the one on screen when one map does (move, resize,
+   * turn); otherwise `zone` is the zone as the screen outline would make it
+   * (its markers show there, its results hide). Null at rest.
+   */
+  readonly liveZone = $derived.by((): { id: string; transform: Affine | null; zone: CalcZone | null } | null => {
+    if (!this.onZones || this.drawing) return null;
+    const z = this.onWall ? this.selectedWallPlane : this.selectedFootprint;
+    const src = this.source;
+    if (!z || src.length < 3 || this.draft.length < 3) return null;
+    if (samePolygon(this.draft, src)) {
+      // The draft at rest, corner for corner as the edit will move it (the stored
+      // outline may list the same corners from another start)
+      this.restDraft = this.draft;
+      return null;
+    }
+    const transform = fitAffine(samePolygon(this.restDraft, src) ? this.restDraft : src, this.draft);
+    if (transform) return { id: z.id, transform, zone: null };
+    if (validatePolygon(this.draft) !== null) return { id: z.id, transform: null, zone: null };
+    const seg = this.wallSeg;
+    const zone: CalcZone = this.onWall
+      ? (seg ? { ...z, wall_vertices: this.toWallOutline(this.draft, seg), fit_room: false } : z)
+      : { ...z, ...zoneFootprintGeometry(z.type as 'plane' | 'volume', normalizeCCW(this.draft)), fit_room: false };
+    return { id: z.id, transform: null, zone };
+  });
 
   // --- Shapes (structures, zone outlines, keep-out areas), PowerPoint style: a
   // selected shape shows a box to move, resize and rotate it ('select'); a

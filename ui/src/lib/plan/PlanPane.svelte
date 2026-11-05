@@ -73,6 +73,10 @@
 		const k = fieldKind(z, !!freshValues(z, $results?.zones?.[z.id]));
 		return k !== null && k !== 'markers';
 	}).map((z) => z.id)));
+	// A tint never covers results: the room's goes under them, a selected zone showing results is outlined only
+	const draftFill = $derived<'over' | 'under' | 'none'>(
+		ctl.onOutline ? 'under' : ctl.onZones && !ctl.drawing && !!ctl.selectedZoneId && resultZoneIds.has(ctl.selectedZoneId) ? 'none' : 'over'
+	);
 	const points = (vs: Vertex[]) => vs.map(([x, y]) => `${x},${-y}`).join(' ');
 
 	// Read-only (summary, mini view): the selection and the hovered row still show
@@ -243,7 +247,7 @@
 
 <!-- The zones' grid points or results, over the room's fill and under everything else -->
 {#snippet zoneFields(c: CanvasContext)}
-	<PlanZoneField zones={shownFields} allZones={ctl.scene().zones} room={ctl.scene().room} px={c.px} selectedId={ctl.selectedZoneId} hoveredId={hovered('zones')} />
+	<PlanZoneField zones={shownFields} allZones={ctl.scene().zones} room={ctl.scene().room} px={c.px} selectedId={ctl.selectedZoneId} hoveredId={hovered('zones')} live={ro ? null : ctl.liveZone} />
 {/snippet}
 
 <div class="plan-pane" class:mini data-plan-scope>
@@ -283,7 +287,7 @@
 				{#snippet overlay(c)}
 					{@render webs(c, true)}
 					{#each roWallPlanes as z (z.id)}
-						<polygon class="ro-zone" class:selected={z.id === ctl.selectedZoneId} class:highlighted={z.id !== ctl.selectedZoneId} points={points(z.vertices)} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 3}" />
+						<polygon class="ro-zone" class:selected={z.id === ctl.selectedZoneId} class:highlighted={z.id !== ctl.selectedZoneId} class:results={resultZoneIds.has(z.id)} points={points(z.vertices)} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 3}" />
 					{/each}
 				{/snippet}
 				{#snippet hud(c)}{@render neighbours(c, wv.labels, wv.outline[1][0])}{/snippet}
@@ -312,6 +316,7 @@
 				outline={wv.outline}
 				outlineSnapPx={ctl.onZones ? ZONE_OUTLINE_SNAP_PX : undefined}
 				draggableBody={ctl.onZones && !!ctl.selectedWallPlane}
+				{draftFill}
 				transformable={ctl.transformable}
 				bind:yaw={ctl.draftYaw}
 				onBodyDoubleClick={ctl.editCorners}
@@ -376,7 +381,7 @@
 			{#snippet overlay(c)}
 				{@render webs(c, false)}
 				{#each roZones as z (z.id)}
-					<polygon class="ro-zone" class:volume={z.volume} class:selected={z.selected} class:highlighted={!z.selected} points={points(z.footprint)} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 3}" />
+					<polygon class="ro-zone" class:volume={z.volume} class:results={resultZoneIds.has(z.id)} class:selected={z.selected} class:highlighted={!z.selected} points={points(z.footprint)} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 3}" />
 				{/each}
 			{/snippet}
 			{#snippet underlay()}
@@ -422,6 +427,7 @@
 			draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint) || (ctl.onCeiling && !!ctl.editableKeepOut)}
 			dblClickCorners={ctl.onCeiling}
 			selectedDraft={ctl.onCeiling && !!ctl.editableKeepOut}
+			{draftFill}
 			transformable={ctl.transformable}
 			bind:yaw={ctl.draftYaw}
 			onBodyDoubleClick={ctl.editCorners}
@@ -832,6 +838,10 @@
 	.ro-zone.highlighted {
 		fill: color-mix(in srgb, var(--color-scene-selected) 8%, transparent);
 		stroke-opacity: 0.6;
+	}
+	/* Over a zone's own results the selection and hover are its outline only */
+	.ro-zone.results {
+		fill: none;
 	}
 	.plan-zone {
 		fill: color-mix(in srgb, var(--color-scene-item) 10%, transparent);

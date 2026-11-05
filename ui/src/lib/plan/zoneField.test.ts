@@ -5,7 +5,7 @@ import { valueToColor } from '$lib/utils/colormaps';
 import { snapshotDimensions } from '$lib/utils/zoneSnapshot';
 import {
   axisPoints, cellRect, columnMax, fieldGrid, fieldKind, fieldZones, freshValues, globalPlaneRange, gridPoints,
-  gridSpacing, heatmapPixels, heatmapScale, markerPath, markerRadius, markerStep, planeValuesUp,
+  gridSpacing, heatmapPixels, heatmapScale, markerPath, markerRadius, markerStep, planeValuesUp, fitAffine, svgMatrix,
 } from './zoneField';
 
 const room = { x: 6, y: 4, z: 3, colormap: 'plasma' } as RoomConfig;
@@ -203,5 +203,46 @@ describe('what the 2D view draws', () => {
     } as unknown as Record<string, ZoneResult>;
     expect(globalPlaneRange([plane({ id: 'a' }), plane({ id: 'b' }), plane({ id: 'c', enabled: false })], res)).toEqual({ min: 0.5, max: 4 });
     expect(globalPlaneRange([], undefined)).toBeNull();
+  });
+});
+
+describe('a zone mid-edit: the results layer follows a move, resize or turn', () => {
+  const sq: [number, number][] = [[1, 1], [3, 1], [3, 2], [1, 2]];
+  const apply = (m: number[], [x, y]: [number, number]) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+
+  it('a move is a translation, a resize a scale, a turn a rotation', () => {
+    const moved = fitAffine(sq, sq.map(([x, y]) => [x + 0.5, y - 2] as [number, number]))!;
+    expect(moved.map((v) => +v.toFixed(9))).toEqual([1, 0, 0, 1, 0.5, -2]);
+    const scaled = fitAffine(sq, sq.map(([x, y]) => [1 + (x - 1) * 2, y] as [number, number]))!;
+    expect(scaled.map((v) => +v.toFixed(9))).toEqual([2, 0, 0, 1, -1, 0]);
+    const c = Math.cos(Math.PI / 6), s = Math.sin(Math.PI / 6);
+    const turned = sq.map(([x, y]) => [x * c - y * s, x * s + y * c] as [number, number]);
+    const m = fitAffine(sq, turned)!;
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = apply(m, sq[i]);
+      expect(x).toBeCloseTo(turned[i][0], 9);
+      expect(y).toBeCloseTo(turned[i][1], 9);
+    }
+  });
+
+  it('a corner dragged on its own, or a changed corner count, has no map', () => {
+    const moved = sq.map((v) => [...v] as [number, number]);
+    moved[2] = [4, 3];
+    expect(fitAffine(sq, moved)).toBeNull();
+    expect(fitAffine(sq, sq.slice(0, 3))).toBeNull();
+    expect(fitAffine([[0, 0], [1, 1], [2, 2]], [[0, 0], [1, 1], [2, 2]])).toBeNull();
+  });
+
+  it('the SVG matrix flips y, as the canvas draws (x, -y)', () => {
+    expect(svgMatrix([1, 0, 0, 1, 2, 3])).toBe('matrix(1 0 0 1 2 -3)');
+    const c = Math.cos(0.3), s = Math.sin(0.3);
+    const [a, b, cc, d, e, f] = [c, s, -s, c, 1, 2];
+    const parts = svgMatrix([a, b, cc, d, e, f]).slice(7, -1).split(' ').map(Number);
+    // A plan point (x, y) drawn at (x, -y) lands at (x', -y')
+    const [x, y] = [2, 5];
+    const X = parts[0] * x + parts[2] * -y + parts[4];
+    const Y = parts[1] * x + parts[3] * -y + parts[5];
+    expect(X).toBeCloseTo(a * x + cc * y + e, 9);
+    expect(Y).toBeCloseTo(-(b * x + d * y + f), 9);
   });
 });
