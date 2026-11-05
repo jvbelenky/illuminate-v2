@@ -11,7 +11,10 @@ export async function enableReflections(page: Page): Promise<void> {
   await expandReflectancePanel(page);
   const checkbox = page.locator('label').filter({ hasText: 'Enable reflections' }).locator('input[type="checkbox"]');
   if (!(await checkbox.isChecked())) {
-    await checkbox.check();
+    // The checkbox stays off until the speed warning is answered
+    await checkbox.click();
+    await page.getByRole('button', { name: 'Enable', exact: true }).click();
+    await expect(checkbox).toBeChecked();
   }
 }
 

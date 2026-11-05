@@ -55,6 +55,8 @@ export interface UserSettings {
   autoRecalculate: boolean;
   /** Show the "how do you want to start" chooser on a fresh project. */
   showStartChooser: boolean;
+  /** Warn before reflections are turned on. */
+  warnEnableReflections: boolean;
 
   // Lamp defaults
   lampType: LampType;
@@ -114,6 +116,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   // Behavior
   autoRecalculate: false,
   showStartChooser: true,
+  warnEnableReflections: true,
 
   // Lamp defaults
   lampType: 'krcl_222',
