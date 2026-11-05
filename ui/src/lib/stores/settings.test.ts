@@ -69,17 +69,17 @@ describe('settings store workspace layout', () => {
   });
 
   it('keeps a valid stored dock, with a main view the user chose', async () => {
-    const dock = { left: ['editor', 'results'], right: ['mini'], minimized: [], main: '3d', mainChosen: true };
+    const dock = { left: ['editor', 'results'], right: ['mini'], minimized: [], main: '2d', mainChosen: true };
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ workspaceDock: dock }));
     const { userSettings } = await import('./settings');
     expect(get(userSettings).workspaceDock).toEqual(dock);
   });
 
-  it('opens a stored 3D main view on 2D when the user never chose it', async () => {
-    const dock = { left: ['editor', 'results'], right: ['mini'], minimized: [], main: '3d' };
+  it('opens a stored 2D main view on 3D when the user never chose it', async () => {
+    const dock = { left: ['editor', 'results'], right: ['mini'], minimized: [], main: '2d' };
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ workspaceDock: dock }));
     const { userSettings } = await import('./settings');
-    expect(get(userSettings).workspaceDock).toEqual({ ...dock, main: '2d' });
+    expect(get(userSettings).workspaceDock).toEqual({ ...dock, main: '3d' });
   });
 });
 
