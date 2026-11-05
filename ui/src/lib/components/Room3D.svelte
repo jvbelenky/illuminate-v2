@@ -110,6 +110,8 @@
 	const planScale = $derived(planPlacement?.scale ?? 0);
 	const planOffsetX = $derived(planPlacement?.offsetX ?? 0);
 	const planOffsetY = $derived(planPlacement?.offsetY ?? 0);
+	// Clockwise seen from above is a negative turn about the plane's own normal
+	const planTurn = $derived(-((planPlacement?.rotation ?? 0) * Math.PI) / 180);
 	const planRect = $derived(imageRect(
 		{
 			imageId: '', opacity: 1,
@@ -308,7 +310,7 @@
 	distance, so a fixed 3 cm is not enough for a 30 m room seen from 60 m away. The
 	polygon offset additionally pulls the plan's depth towards the camera at grazing
 	angles, where the grid's fragments would otherwise tie with it. -->
-<T.Mesh position={[planRect.x + planRect.width / 2, planLift, -(planRect.y + planRect.height / 2)]} rotation.x={-Math.PI / 2} renderOrder={-1}>
+<T.Mesh position={[planRect.x + planRect.width / 2, planLift, -(planRect.y + planRect.height / 2)]} rotation={[-Math.PI / 2, 0, planTurn]} renderOrder={-1}>
 	<T is={planGeometry} />
 	<T.MeshBasicMaterial map={planTexture} transparent opacity={planPlacement?.opacity ?? 0.6} depthWrite={true} side={THREE.DoubleSide} polygonOffset={true} polygonOffsetFactor={-2} polygonOffsetUnits={-4} />
 </T.Mesh>

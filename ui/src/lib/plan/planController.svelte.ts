@@ -22,7 +22,7 @@ import {
   validatePolygon,
   normalizeCCW,
 } from '$lib/utils/roomGeometry';
-import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
+import { initialPlacement, imageRect, imageCorners, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
 import { fitAffine, type Affine } from './zoneField';
@@ -559,14 +559,15 @@ export class PlanController {
   readonly planImage = $derived.by(() => {
     const image = this.scene().image;
     const placement = this.placement;
-    return placement && image ? { ...imageRect(placement, this.k), href: image.src, opacity: placement.opacity } : null;
+    if (!placement || !image) return null;
+    const r = imageRect(placement, this.k);
+    // SVG y is flipped, so a clockwise turn seen from above is SVG's own rotate() about the centre
+    const rotation = placement.rotation ?? 0;
+    const transform = rotation ? `rotate(${rotation} ${r.x + r.width / 2} ${-(r.y + r.height / 2)})` : undefined;
+    return { ...r, href: image.src, opacity: placement.opacity, rotation, transform };
   });
   /** The image's corners, so Fit shows the plan as well as the outline. */
-  readonly imageFitPoints = $derived.by((): Vertex[] => {
-    if (!this.placement) return [];
-    const r = imageRect(this.placement, this.k);
-    return [[r.x, r.y], [r.x + r.width, r.y + r.height]];
-  });
+  readonly imageFitPoints = $derived.by((): Vertex[] => (this.placement ? imageCorners(this.placement, this.k) : []));
 
   readonly unit = $derived.by(() => unitAbbrev(this.scene().units));
   // Snap step: 10 cm in metric units, 3 inches in imperial ones. Alt disables snapping.
