@@ -7,8 +7,8 @@
 	import { roomWireColor } from '$lib/utils/sceneColors';
 	import { userSettings } from '$lib/stores/settings';
 	import type { RoomConfig } from '$lib/types/project';
-	import { roomVertices, isPolygonRoom } from '$lib/utils/roomGeometry';
-	import { boxWireframe } from '$lib/utils/outlineGeometry';
+	import { roomVertices } from '$lib/utils/roomGeometry';
+	import { outlineWireframe } from '$lib/utils/outlineGeometry';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import { imageRect } from '$lib/utils/floorplanImage';
 	import { unitsPerMeter, fromMeters } from '$lib/utils/unitConversion';
@@ -229,31 +229,10 @@
 	const viewedColor = $derived(selectedColor($theme));
 	const highlightColor = $derived($theme === 'light' ? '#020617' : '#ffffff');
 
-	// Wireframe: floor loop, ceiling loop, verticals
-	const edges = $derived.by(() => {
-		const positions: number[] = [];
-		const n = outline.length;
-		for (let i = 0; i < n; i++) {
-			const [x1, y1] = outline[i];
-			const [x2, y2] = outline[(i + 1) % n];
-			positions.push(x1, 0, -y1, x2, 0, -y2);
-			positions.push(x1, height, -y1, x2, height, -y2);
-			positions.push(x1, 0, -y1, x1, height, -y1);
-		}
-		const geo = new THREE.BufferGeometry();
-		geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-		return geo;
-	});
-
-	// Faint bounding-box hint for polygon rooms (the rulers measure this box)
-	const showBoundingBox = $derived(isPolygonRoom(room));
-	const boundingBoxEdges = $derived(showBoundingBox ? boxWireframe(0, dims.x, 0, dims.y, 0, dims.z) : null);
+	// Wireframe: floor loop, ceiling loop, verticals; the outline alone, never a box
+	const edges = $derived(outlineWireframe(outline, 0, height));
 
 	// Dispose GPU geometry when reassigned or on unmount
-	$effect(() => {
-		const geo = boundingBoxEdges;
-		return () => { geo?.dispose(); };
-	});
 	$effect(() => {
 		const geo = floorGeometry;
 		return () => { geo.dispose(); };
@@ -313,14 +292,6 @@
 	<T is={edges} />
 	<T.LineBasicMaterial color={colors.wireframe} linewidth={2} />
 </T.LineSegments>
-
-{#if boundingBoxEdges}
-<!-- Very faint bounding box of a polygon room, for reference against the rulers -->
-<T.LineSegments>
-	<T is={boundingBoxEdges} />
-	<T.LineBasicMaterial color={colors.wireframe} transparent opacity={0.12} depthWrite={false} />
-</T.LineSegments>
-{/if}
 
 <!-- Semi-transparent floor -->
 <T.Mesh position={[0, 0.001, 0]} rotation.x={-Math.PI / 2}>

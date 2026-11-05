@@ -8,6 +8,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Reflectance calculations use a third of the memory they did (a default room at 25 surface points per axis peaks at 0.6 GB instead of 1.6 GB), and the memory estimate behind the calculation budget now matches what a calculation really uses instead of running 30-40% low. Reflectance up to 25 points per axis fits the budget again
+- The 3D view no longer shows a faint box from the origin to the room's far corner (looking like a ghost of the old room) after the floor outline is redrawn; it draws the outline alone.
 - The server no longer slows down for everyone when a few people run reflectance calculations at once. Two calculations run at a time (was four) and each may use up to 600 MB (was 1.5 GB), sized to the host rather than to a larger one; a finished calculation keeps its results but not its intermediate form factors (most of a reflectance calculation's memory), memory a calculation or an expired session frees is handed back to the operating system instead of staying resident, and the container is capped at 3 GB so it can never push the host into swap
 
 ### Added
