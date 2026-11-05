@@ -125,19 +125,16 @@ describe('EditorPanel', () => {
     expect(get(workspaceUi).part).toBe('structures');
   });
 
-  it('given onDone (a phone), Done closes the stage-tab row, outside the tablist, and calls it', async () => {
-    const onDone = vi.fn();
-    mount({ onDone });
-    const done = q('.editor-stages .editor-done');
-    expect(done?.textContent?.trim()).toBe('Done');
-    expect(done?.closest('[role="tablist"]')).toBeNull();
-    expect(done?.previousElementSibling?.getAttribute('role')).toBe('tablist');
-    await click(done);
-    expect(onDone).toHaveBeenCalledTimes(1);
+  it('the stage-tab row holds only the tabs: no Done, on a phone or not', () => {
+    mount({ onDone: vi.fn() });
+    expect(q('.editor-done')).toBeNull();
+    expect([...q('.editor-stages')!.children].map((c) => c.getAttribute('role'))).toEqual(['tablist']);
   });
 
   const bowtie: [number, number][] = [[0, 0], [6, 4], [6, 0], [0, 4]];
+  /** A corner edit that leaves the outline crossing itself (a move of the box would snap back instead). */
   function makeInvalid(ctl: PlanController) {
+    ctl.editCorners();
     ctl.draft = bowtie;
     ctl.commitDraft();
   }
@@ -145,7 +142,7 @@ describe('EditorPanel', () => {
   const leaves: { name: string; start?: string; click: string; moved: () => boolean; done?: boolean }[] = [
     { name: 'a stage tab', click: '.editor-stage[data-stage="lamps"]', moved: () => get(workspaceUi).stage === 'lamps' },
     { name: 'a part pill', click: '.editor-part[data-part="structures"]', moved: () => get(workspaceUi).part === 'structures' },
-    { name: 'Done', click: '.editor-done', moved: () => false, done: true },
+    { name: 'Summary (Summary | Editor)', click: '.mode-switch button[data-mode="summary"]', moved: () => false, done: true },
   ];
 
   describe.each(leaves)('asks before leaving Floorplan with an invalid outline via $name', (c) => {
@@ -214,11 +211,11 @@ describe('EditorPanel', () => {
     expect(screen.getByRole('tab', { name: 'Room' })).toBeTruthy();
   });
 
-  it('Done also asks before leaving with an invalid outline', async () => {
+  it('Summary also asks before leaving with an invalid outline', async () => {
     const onDone = vi.fn();
     const m = mount({ onDone });
     makeInvalid(m.ctl);
-    await click(q('.editor-done'));
+    await click(q('.mode-switch button[data-mode="summary"]'));
     expect(onDone).not.toHaveBeenCalled();
     await click(screen.getByRole('button', { name: 'Keep saved outline' }));
     expect(onDone).toHaveBeenCalledTimes(1);

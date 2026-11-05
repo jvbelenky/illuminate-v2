@@ -75,23 +75,60 @@ describe('DockArea', () => {
 		expect(container.querySelector('[data-panel=calculate]')).toBeNull();
 	});
 
-	test('Done sits in the Editor title bar before the minimize control, docked or floating, and calls onDone', async () => {
+	test('Summary | Editor takes the Editor title\'s place, docked or floating; its segments flip the mode; there is no Done', async () => {
 		for (const layout of [
 			{ ...DEFAULT_DOCK, left: ['editor'], right: ['mini', 'results'], minimized: [] },
 			{ ...DEFAULT_DOCK, left: ['mini'], right: ['results'], minimized: [], floats: { editor: { x: 100, y: 50, w: 280, h: 500 } } }
 		]) {
-			const onEditorDone = vi.fn();
-			const r = render(Host, base({ layout, onEditorDone }));
-			const bar = panelEl(r.container, 'editor').querySelector('.dock-bar') as HTMLElement;
-			const done = bar.querySelector('button.editor-done') as HTMLElement;
-			expect(done?.textContent?.trim()).toBe('Done');
-			expect(done.nextElementSibling?.getAttribute('aria-label')).toBe('Minimize');
-			expect(r.container.querySelectorAll('button.editor-done').length).toBe(1);
-			expect(panelEl(r.container, 'results').querySelector('.editor-done')).toBeNull();
-			await fireEvent.click(done);
-			expect(onEditorDone).toHaveBeenCalledTimes(1);
-			r.unmount();
+			for (const mode of ['summary', 'editor'] as const) {
+				const onSummary = vi.fn();
+				const onEditor = vi.fn();
+				const r = render(Host, base({ layout, mode, onSummary, onEditor }));
+				const bar = panelEl(r.container, 'editor').querySelector('.dock-bar') as HTMLElement;
+				const sw = bar.querySelector('.mode-switch') as HTMLElement;
+				expect(bar.querySelector('.dock-title')).toBeNull();
+				expect(sw.previousElementSibling?.classList.contains('dock-grip')).toBe(true);
+				const seg = (m: string) => sw.querySelector(`button[data-mode=${m}]`) as HTMLButtonElement;
+				expect([...sw.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['Summary', 'Editor']);
+				expect(seg(mode).getAttribute('aria-pressed')).toBe('true');
+				expect(seg(mode === 'summary' ? 'editor' : 'summary').getAttribute('aria-pressed')).toBe('false');
+				// The active segment does nothing; the other switches
+				await fireEvent.click(seg(mode));
+				expect(onSummary).not.toHaveBeenCalled();
+				expect(onEditor).not.toHaveBeenCalled();
+				await fireEvent.click(seg(mode === 'summary' ? 'editor' : 'summary'));
+				expect((mode === 'summary' ? onEditor : onSummary)).toHaveBeenCalledTimes(1);
+				expect(r.container.querySelector('button.editor-done')).toBeNull();
+				expect(r.container.querySelector('button[aria-label="Minimize"]')).not.toBeNull();
+				expect(panelEl(r.container, 'results').querySelector('.mode-switch')).toBeNull();
+				r.unmount();
+			}
 		}
+	});
+
+	test('a press on Summary | Editor does not start a drag; the grip still does', async () => {
+		const onChange = vi.fn();
+		const { container } = render(Host, base({ onChange, mode: 'summary' }));
+		mockGeometry(container);
+		rect(container.querySelector('.dock-area')!, 0, 0, 1200, 800);
+		const bar = container.querySelector('[data-panel=editor] .dock-bar')!;
+		const seg = bar.querySelector('.mode-switch button[data-mode=editor]')!;
+		ptr('pointerdown', seg, 100, 10);
+		ptr('pointermove', seg, 400, 200);
+		ptr('pointermove', seg, 600, 300);
+		await tick();
+		expect(container.querySelector('.dock-ghost')).toBeNull();
+		ptr('pointerup', seg, 600, 300);
+		expect(onChange).not.toHaveBeenCalled();
+		const grip = bar.querySelector('.dock-grip')!;
+		ptr('pointerdown', grip, 20, 10);
+		ptr('pointermove', grip, 400, 200);
+		ptr('pointermove', grip, 600, 300);
+		await tick();
+		expect(container.querySelector('.dock-ghost')).not.toBeNull();
+		ptr('pointerup', grip, 600, 300);
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange.mock.calls[0][0].floats?.editor).toBeTruthy();
 	});
 
 	test('minimize hides content and keeps the bar', () => {

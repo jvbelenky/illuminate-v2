@@ -197,6 +197,8 @@
 	}
 	.editor-row.open {
 		--color-border: color-mix(in srgb, var(--color-text) 30%, var(--color-bg-secondary));
+		/* Room above the open card's header, and as much again between it and the first section */
+		--row-card-pad: 10px;
 		background: var(--color-bg-secondary);
 		box-shadow: inset 0 0 0 1px var(--color-border);
 	}
@@ -213,6 +215,9 @@
 		align-items: center;
 		gap: 4px;
 		padding: 3px 10px 3px 14px;
+	}
+	.editor-row.open > .row-head {
+		padding-top: var(--row-card-pad);
 	}
 	.row-main {
 		flex: 1;
@@ -333,15 +338,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-xs) 14px 14px;
+		padding: calc(var(--row-card-pad, 10px) - 3px) 14px 14px;
 	}
 	/* Only a very narrow panel gives up the card's 14 px sides */
 	@container (max-width: 279px) {
 		.row-head {
 			padding: 3px 4px 3px 8px;
 		}
+		.editor-row.open > .row-head {
+			padding-top: var(--row-card-pad);
+		}
 		.row-body {
-			padding: var(--spacing-xs) 6px 10px;
+			padding: calc(var(--row-card-pad, 10px) - 3px) 6px 10px;
 		}
 	}
 </style>

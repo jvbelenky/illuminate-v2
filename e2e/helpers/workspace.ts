@@ -61,16 +61,21 @@ export async function openCeilingDesigner(page: Page): Promise<Locator> {
   return designer;
 }
 
-/** Done: back to the read-only summary. */
+/** A side of the Summary | Editor switch (the left panel's title; atop the Design tab on a phone). */
+export function modeSegment(page: Page, mode: 'summary' | 'editor'): Locator {
+  return page.locator(`.mode-switch button[data-mode="${mode}"]`);
+}
+
+/** Summary | Editor's Summary: back to the read-only summary. */
 export async function finishEditing(page: Page): Promise<void> {
-  await page.locator('button.editor-done').click();
+  await modeSegment(page, 'summary').click();
   await expect(page.locator('.summary-panel')).toBeVisible();
 }
 
-/** Make sure the read-only summary is showing (Done, if the editor is). */
+/** Make sure the read-only summary is showing. */
 export async function showSummary(page: Page): Promise<void> {
   const summary = page.locator('.summary-panel');
-  await expect(summary.or(page.locator('button.editor-done'))).toBeVisible({ timeout: 15_000 });
+  await expect(summary.or(page.locator('button.editor-stage').first())).toBeVisible({ timeout: 15_000 });
   if (!(await summary.isVisible())) await finishEditing(page);
 }
 

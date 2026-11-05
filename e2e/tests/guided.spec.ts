@@ -5,7 +5,7 @@ import { attachErrorGuard } from '../helpers/errors';
 import { setRoomDimensions } from '../helpers/room';
 import { addLamp, fixtureSelect, lampEditor } from '../helpers/lamps';
 import { drawObject, expandObjectsPanel, objectEditor, setObjectField, getObjectsFromBackend } from '../helpers/objects';
-import { clickPlan, finishEditing, openStep, planTool, showMain } from '../helpers/workspace';
+import { clickPlan, finishEditing, modeSegment, openStep, planTool, showMain } from '../helpers/workspace';
 
 test.describe('Guided workspace', () => {
   test('start chooser: See an example places a lamp, calculates and lands on the summary', async ({ page }) => {
@@ -89,9 +89,47 @@ test.describe('Guided workspace', () => {
   test('with the welcome turned off, a fresh empty project opens on the summary with the editor closed', async ({ page }) => {
     await waitForSession(page);
     await expect(page.locator('.summary-panel')).toBeVisible();
-    await expect(page.locator('button.editor-done')).toHaveCount(0);
+    await expect(modeSegment(page, 'summary')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.editor-part')).toHaveCount(0);
     await expect(page.locator('button.landing-card')).toHaveCount(0);
+  });
+
+  test('Summary | Editor in the left panel\'s title flips between them, back where the user was; no Done; the grip still drags', async ({ page }) => {
+    await waitForSession(page);
+    const bar = page.locator('.dock-panel[data-panel="editor"] .dock-bar');
+    await expect(bar.locator('.mode-switch')).toBeVisible();
+    await expect(bar.locator('.dock-title')).toHaveCount(0);
+    await expect(modeSegment(page, 'summary')).toHaveAttribute('aria-pressed', 'true');
+    // The first time: Room › Floorplan, as Start designing
+    await modeSegment(page, 'editor').click();
+    await expect(page.locator('.editor-part[data-part="floorplan"][aria-selected="true"]')).toBeVisible();
+    await expect(modeSegment(page, 'editor')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('button.editor-done')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
+    await openStep(page, 'zones');
+    await modeSegment(page, 'summary').click();
+    await expect(page.locator('.summary-panel')).toBeVisible();
+    // Back where the user last was
+    await modeSegment(page, 'editor').click();
+    await expect(page.locator('button.editor-stage[data-stage="zones"]')).toHaveAttribute('aria-selected', 'true');
+    // A press on the switch moves nothing; a drag from the grip floats the panel
+    const panel = page.locator('.dock-panel[data-panel="editor"]');
+    const sw = (await modeSegment(page, 'summary').boundingBox())!;
+    await page.mouse.move(sw.x + sw.width / 2, sw.y + sw.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(sw.x + 400, sw.y + 200, { steps: 5 });
+    await expect(page.locator('.dock-ghost')).toHaveCount(0);
+    await page.mouse.up();
+    await expect(page.locator('.dock-float[data-float="editor"]')).toHaveCount(0);
+    await expect(modeSegment(page, 'editor')).toHaveAttribute('aria-pressed', 'true');
+    const grip = (await bar.locator('.dock-grip').boundingBox())!;
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + 500, grip.y + 250, { steps: 8 });
+    await expect(page.locator('.dock-ghost')).toBeVisible();
+    await page.mouse.up();
+    await expect(page.locator('.dock-float[data-float="editor"]')).toBeVisible();
+    await expect(panel.locator('.mode-switch')).toBeVisible();
   });
 
   test('Results: "Add a lamp to begin" is a button that opens the Lamps step', async ({ page }) => {
@@ -155,23 +193,27 @@ test.describe('Guided workspace', () => {
     const card = page.locator('.app-status-bar[data-next-step]');
     await expect(card).toHaveAttribute('data-next-step', 'no-lamps');
 
-    // A new lamp has no fixture yet: the hint asks for one, the editor prompts, and the placements wait
+    // A new lamp has no fixture yet: the hint asks for one, the editor prompts; no placements, Details... disabled
     await addLamp(page);
     await expect(card).toHaveAttribute('data-next-step', 'lamp-needs-model', { timeout: 15_000 });
     const fixture = fixtureSelect(page);
     await expect(fixture).toBeFocused();
     await expect(fixture.locator('option:checked')).toHaveText('Choose a fixture…');
     const placements = lampEditor(page).locator('button.placement');
-    await expect(placements).toHaveCount(4);
-    for (const b of await placements.all()) await expect(b).toBeDisabled();
+    await expect(placements).toHaveCount(0);
+    const details = lampEditor(page).locator('button.details-btn');
+    await expect(details).toHaveAttribute('aria-disabled', 'true');
+    await expect(details).toHaveAttribute('title', 'Choose a fixture first');
 
-    // Choose a fixture: the lamp is ready and the placements are usable
+    // Choose a fixture: the lamp is ready, the placements show, usable, and Details... is enabled
     await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
     const value = await fixture.locator('option[value^="preset:"]').first().getAttribute('value');
     await fixture.selectOption(value!);
 
     await expect(card).toHaveAttribute('data-next-step', 'never-calculated', { timeout: 15_000 });
+    await expect(placements).toHaveCount(4);
     await expect(placements.first()).toBeEnabled({ timeout: 15_000 });
+    await expect(details).toHaveAttribute('aria-disabled', 'false');
     await page.locator('button.calculate-btn').click();
     await expect(page.locator('button.calculate-btn')).toHaveClass(/up-to-date/, { timeout: 60_000 });
     await expect(card).not.toHaveAttribute('data-next-step', 'never-calculated');

@@ -16,10 +16,12 @@
 		onBarPointerDown: (e: PointerEvent) => void;
 		/** Small icon buttons in the title bar, open or minimized. */
 		tools?: Snippet;
+		/** Shown in place of the title (the left panel's Summary | Editor). */
+		heading?: Snippet;
 		children: Snippet;
 	}
 
-	let { id, title, minimized, dragging = false, floating = false, style, onToggleMinimized, onSwap, onBarPointerDown, tools, children }: Props =
+	let { id, title, minimized, dragging = false, floating = false, style, onToggleMinimized, onSwap, onBarPointerDown, tools, heading, children }: Props =
 		$props();
 </script>
 
@@ -27,7 +29,7 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="dock-bar" onpointerdown={onBarPointerDown}>
 		<span class="dock-grip" aria-hidden="true">⋮⋮</span>
-		<span class="dock-title">{title}</span>
+		{#if heading}{@render heading()}{:else}<span class="dock-title">{title}</span>{/if}
 		<span class="dock-spacer"></span>
 		{#if tools}{@render tools()}{/if}
 		{#if onSwap}
