@@ -12,8 +12,8 @@ const OLD: DockLayout = { left: ['editor'], right: ['mini', 'results'], minimize
 
 describe('dockLayout', () => {
   describe('the main view a session opens on', () => {
-    it('defaults to 2D with the 3D view in the mini panel', () => {
-      expect(DEFAULT_DOCK.main).toBe('2d');
+    it('defaults to 3D with the 2D view in the mini panel', () => {
+      expect(DEFAULT_DOCK.main).toBe('3d');
       expect([...DEFAULT_DOCK.left, ...DEFAULT_DOCK.right]).toContain('mini');
     });
 
@@ -33,15 +33,17 @@ describe('dockLayout', () => {
       expect(sanitizeDock({ ...DEFAULT_DOCK, mainChosen: 'yes' }).mainChosen).toBeUndefined();
     });
 
-    it('openingDock opens on 2D unless 3D was chosen', () => {
-      expect(openingDock(withMain(DEFAULT_DOCK, '3d')).main).toBe('2d');
+    it('openingDock opens on 3D unless 2D was chosen', () => {
+      // A flow (Start designing, a draw) brought 2D forward: not a choice
+      expect(openingDock(withMain(DEFAULT_DOCK, '2d')).main).toBe('3d');
+      expect(openingDock(chooseMain(DEFAULT_DOCK, '2d')).main).toBe('2d');
       expect(openingDock(chooseMain(DEFAULT_DOCK, '3d')).main).toBe('3d');
       expect(openingDock(undefined)).toEqual(DEFAULT_DOCK);
     });
   });
 
-  it('the default: editor over the mini view on the left, Results on the right, 2D main', () => {
-    expect(DEFAULT_DOCK).toEqual({ left: ['editor', 'mini'], right: ['results'], minimized: [], main: '2d' });
+  it('the default: editor over the mini view on the left, Results on the right, 3D main', () => {
+    expect(DEFAULT_DOCK).toEqual({ left: ['editor', 'mini'], right: ['results'], minimized: [], main: '3d' });
     expect(sanitizeDock(undefined)).toEqual(DEFAULT_DOCK);
   });
 
@@ -67,16 +69,16 @@ describe('dockLayout', () => {
 
   it('an old stored layout with a Calculate panel drops it cleanly', () => {
     expect(sanitizeDock({ left: ['editor'], right: ['mini', 'calculate', 'results'], minimized: [], main: '2d' })).toEqual(OLD);
-    expect(sanitizeDock({ left: ['editor', 'mini'], right: ['calculate', 'results'], minimized: ['calculate'], main: '2d' })).toEqual(DEFAULT_DOCK);
+    expect(sanitizeDock({ left: ['editor', 'mini'], right: ['calculate', 'results'], minimized: ['calculate'], main: '3d' })).toEqual(DEFAULT_DOCK);
     expect(sanitizeDock({ left: ['calculate', 'results'], right: ['mini', 'editor'], minimized: ['calculate', 'mini'], main: '3d' }))
       .toEqual({ left: ['results'], right: ['mini', 'editor'], minimized: ['mini'], main: '3d' });
     const f = { x: 10, y: 10, w: 300, h: 120 };
-    expect(sanitizeDock({ left: ['editor', 'mini'], right: ['results'], minimized: [], main: '2d', floats: { calculate: f }, heights: { calculate: 200 } }))
+    expect(sanitizeDock({ left: ['editor', 'mini'], right: ['results'], minimized: [], main: '3d', floats: { calculate: f }, heights: { calculate: 200 } }))
       .toEqual(DEFAULT_DOCK);
-    const old = sanitizeDock({ left: ['editor', 'mini'], right: ['calculate', 'results'], minimized: [], main: '2d', heights: { calculate: 200, mini: 300 } });
+    const old = sanitizeDock({ left: ['editor', 'mini'], right: ['calculate', 'results'], minimized: [], main: '3d', heights: { calculate: 200, mini: 300 } });
     expect(old).toEqual({ ...DEFAULT_DOCK, heights: { mini: 300 } });
     // Still exactly once each
-    expect(sanitizeDock({ left: ['editor'], right: ['mini', 'calculate', 'mini', 'results'], minimized: [], main: '2d' })).toEqual(DEFAULT_DOCK);
+    expect(sanitizeDock({ left: ['editor'], right: ['mini', 'calculate', 'mini', 'results'], minimized: [], main: '3d' })).toEqual(DEFAULT_DOCK);
   });
 
   it('reorders within the same column', () => {
@@ -92,7 +94,7 @@ describe('dockLayout', () => {
     movePanel(DEFAULT_DOCK, 'results', 'left', 0);
     floatPanel(DEFAULT_DOCK, 'editor', 10, 10);
     splitPanels(DEFAULT_DOCK, 'editor', 'mini', 400, 300, -50);
-    expect(DEFAULT_DOCK).toEqual({ left: ['editor', 'mini'], right: ['results'], minimized: [], main: '2d' });
+    expect(DEFAULT_DOCK).toEqual({ left: ['editor', 'mini'], right: ['results'], minimized: [], main: '3d' });
   });
 
   it('toggleMinimized twice is identity', () => {
@@ -102,7 +104,7 @@ describe('dockLayout', () => {
   });
 
   it('swapMain flips main, a choice the layout records', () => {
-    expect(swapMain(DEFAULT_DOCK).main).toBe('3d');
+    expect(swapMain(DEFAULT_DOCK).main).toBe('2d');
     expect(swapMain(DEFAULT_DOCK).mainChosen).toBe(true);
     expect(swapMain(swapMain(DEFAULT_DOCK))).toEqual({ ...DEFAULT_DOCK, mainChosen: true });
   });
@@ -188,7 +190,7 @@ describe('dockLayout', () => {
   });
 
   it('sanitizeDock drops or clamps bad stored widths and keeps the layout', () => {
-    const base = { left: ['editor', 'mini'], right: ['results'], minimized: [], main: '2d' };
+    const base = { left: ['editor', 'mini'], right: ['results'], minimized: [], main: '3d' };
     expect(sanitizeDock({ ...base, widths: 'wide' })).toEqual(DEFAULT_DOCK);
     expect(sanitizeDock({ ...base, widths: { left: 'x', right: NaN } })).toEqual(DEFAULT_DOCK);
     expect(sanitizeDock({ ...base, widths: { left: 10, right: 5000, middle: 300 } }).widths).toEqual({ left: 280, right: 600 });
@@ -363,7 +365,7 @@ describe('dockLayout', () => {
     });
 
     it('sanitizeDock drops bad heights and clamps small ones', () => {
-      const base = { left: ['editor', 'mini'], right: ['results'], minimized: [], main: '2d' };
+      const base = { left: ['editor', 'mini'], right: ['results'], minimized: [], main: '3d' };
       expect(sanitizeDock({ ...base, heights: 'tall' })).toEqual(DEFAULT_DOCK);
       expect(sanitizeDock({ ...base, heights: { mini: NaN, editor: 'x', nope: 300, calculate: 200 } })).toEqual(DEFAULT_DOCK);
       expect(sanitizeDock({ ...base, heights: { mini: 10, editor: 300.6 } }).heights).toEqual({ mini: 130, editor: 301 });

@@ -12,14 +12,20 @@ import { waitForApiIdle } from './network';
  * would apply, and then the in-flight init response (carrying the default room)
  * would land and silently overwrite it. So wait for the API to go quiet too.
  */
-export async function waitForSession(page: Page): Promise<void> {
+export async function waitForSession(page: Page, opts: { mainView?: 'chosen-2d' | 'default' } = {}): Promise<void> {
   // A fresh project shows the start chooser; tests drive the sidebar directly.
-  await page.addInitScript(() => {
+  // A fresh open shows 3D; most tests work on the plan, so they start as a user
+  // who chose 2D (once, before any stored layout: a reload keeps what the test did).
+  const seed2d = (opts.mainView ?? 'chosen-2d') === 'chosen-2d';
+  await page.addInitScript((seed: boolean) => {
     const key = 'illuminate-settings';
     const s = JSON.parse(localStorage.getItem(key) || '{}');
     s.showStartChooser = false;
+    if (seed && !s.workspaceDock) {
+      s.workspaceDock = { left: ['editor', 'mini'], right: ['results'], minimized: [], main: '2d', mainChosen: true };
+    }
     localStorage.setItem(key, JSON.stringify(s));
-  });
+  }, seed2d);
   await page.goto('/');
   await waitForAppReady(page);
 }

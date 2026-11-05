@@ -69,16 +69,21 @@ test.describe('Guided workspace', () => {
     guard.assertClean();
   });
 
-  test('start chooser: Start designing opens the editor at the floor plan', async ({ page }) => {
+  test('start chooser: Start designing opens the editor at the floor plan, on the 2D view', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.app-status-bar')).toBeVisible({ timeout: 15_000 });
     await waitForApiIdle(page);
+    const bar = page.locator('[aria-label="Main view"]');
+    // A fresh open shows 3D
+    await expect(bar.getByRole('button', { name: '3D', exact: true })).toHaveAttribute('aria-pressed', 'true');
     const card = page.locator('button.landing-card[data-choice="empty"]');
     await expect(card).toBeVisible({ timeout: 10_000 });
     await expect(card).toContainText('Start designing');
     await card.click();
     await expect(page.locator('.editor-part[data-part="floorplan"][aria-selected="true"]')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('button.landing-card')).toHaveCount(0);
+    await expect(bar.getByRole('button', { name: '2D', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.dock-panel[data-panel="mini"]')).toContainText('3D');
   });
 
   test('with the welcome turned off, a fresh empty project opens on the summary with the editor closed', async ({ page }) => {
@@ -110,25 +115,38 @@ test.describe('Guided workspace', () => {
     await expect(fixtureSelect(page)).toBeFocused();
   });
 
-  test('the main view opens on 2D (3D in the mini view) unless the user chose 3D', async ({ page }) => {
-    // A stored layout whose 3D main view came from a flow, not a choice
+  test('the main view opens on 3D (2D in the mini view); the floor plan editor brings 2D; the user\'s choice holds', async ({ page }) => {
+    // A stored layout whose 2D main view came from a flow, not a choice
     await page.addInitScript(() => {
       if (sessionStorage.getItem('dock-seeded')) return;
       sessionStorage.setItem('dock-seeded', '1');
       const key = 'illuminate-settings';
       const s = JSON.parse(localStorage.getItem(key) || '{}');
-      s.workspaceDock = { left: ['editor', 'mini'], right: ['results'], minimized: [], main: '3d' };
+      s.workspaceDock = { left: ['editor', 'mini'], right: ['results'], minimized: [], main: '2d' };
       localStorage.setItem(key, JSON.stringify(s));
     });
-    await waitForSession(page);
+    await waitForSession(page, { mainView: 'default' });
     const bar = page.locator('[aria-label="Main view"]');
-    await expect(bar.getByRole('button', { name: '2D', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.dock-panel[data-panel="mini"]')).toContainText('3D');
+    const pressed = (v: '2D' | '3D') => expect(bar.getByRole('button', { name: v, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await pressed('3D');
+    await expect(page.locator('.dock-panel[data-panel="mini"]')).toContainText('2D');
 
-    // Choosing 3D is kept for the next session
+    // Opening the editor on Room › Floorplan (the summary's Room) brings 2D forward; Done keeps it
+    await openStep(page, 'room', 'floorplan');
+    await pressed('2D');
+    await finishEditing(page);
+    await pressed('2D');
+
+    // The user's own pick holds for the session: the floor plan editor no longer switches
     await showMain(page, '3d');
+    await openStep(page, 'room', 'floorplan');
+    await pressed('3D');
+    await finishEditing(page);
+
+    // A chosen view is kept for the next session
+    await showMain(page, '2d');
     await reloadSession(page);
-    await expect(bar.getByRole('button', { name: '3D', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await pressed('2D');
   });
 
   test('status-bar hint walks from no lamps to a calculation', async ({ page }) => {

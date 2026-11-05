@@ -326,13 +326,27 @@
 	function setDock(layout: DockLayout) {
 		userSettings.update((s) => ({ ...s, workspaceDock: layout }));
 	}
+	// A fresh open shows 3D. Opening the editor on Room › Floorplan (Start designing,
+	// the summary's Room) brings 2D forward, until the user picks a view this session.
+	let viewChosen = false;
 	function swapViews() {
+		viewChosen = true;
 		setDock(swapMain(dock));
 	}
 	/** The user picks the main view (2D | 3D): kept across sessions. */
 	function showMain(view: MainView) {
+		viewChosen = true;
 		if (dock.main !== view) setDock(chooseMain(dock, view));
 	}
+	let lastMode: string | null = null;
+	$effect(() => {
+		const s = $workspaceUi;
+		untrack(() => {
+			const opened = s.mode === 'editor' && lastMode !== 'editor';
+			lastMode = s.mode;
+			if (opened && s.stage === 'room' && s.part === 'floorplan' && !viewChosen && !isMobile && dock.main !== '2d') setDock(withMain(dock, '2d'));
+		});
+	});
 	function resetPanels() {
 		setDock(sanitizeDock(DEFAULT_DOCK));
 	}

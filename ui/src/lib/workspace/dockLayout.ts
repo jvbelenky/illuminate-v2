@@ -15,7 +15,7 @@ export interface DockLayout {
   main: MainView;
   /**
    * The user picked the main view (the 2D | 3D switch or the swap button). A stored
-   * layout without it opens on 2D: a flow that brought 3D forward is not a choice.
+   * layout without it opens on 3D: a flow that brought 2D forward is not a choice.
    */
   mainChosen?: boolean;
   /** Widths the user dragged, per column; a column without one follows its panels. */
@@ -81,7 +81,7 @@ export const DEFAULT_DOCK: DockLayout = {
   left: ['editor', 'mini'],
   right: ['results'],
   minimized: [],
-  main: '2d',
+  main: '3d',
 };
 
 function isPanelId(v: unknown): v is DockPanelId {
@@ -251,10 +251,10 @@ export function sanitizeDock(raw: unknown): DockLayout {
   return withKey(layout, 'heights', sanitizeHeights(r.heights, [...layout.left, ...layout.right]));
 }
 
-/** A stored layout as a new session opens it: on 2D unless the user chose the main view. */
+/** A stored layout as a new session opens it: on 3D unless the user chose the main view. */
 export function openingDock(raw: unknown): DockLayout {
   const l = sanitizeDock(raw);
-  return l.mainChosen || l.main === '2d' ? l : { ...fresh(l), main: '2d' };
+  return l.mainChosen || l.main === '3d' ? l : { ...fresh(l), main: '3d' };
 }
 
 /** Move a panel to a column at an index (in that column once the panel is lifted out, clamped). */
@@ -284,7 +284,7 @@ export function chooseMain(l: DockLayout, view: MainView): DockLayout {
 
 /**
  * A flow brings `view` to the main view (the same object when it already is). It is not
- * the user's choice: a later session opens on 2D again.
+ * the user's choice: a later session opens on 3D again.
  */
 export function withMain(l: DockLayout, view: MainView): DockLayout {
   if (l.main === view) return l;
