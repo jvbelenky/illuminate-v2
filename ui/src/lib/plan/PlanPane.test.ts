@@ -1162,6 +1162,20 @@ describe('PlanPane reference image and calibration', () => {
     expect(calls).toEqual([['setPlacement', null, undefined]]);
   });
 
+  it('turns a rotated image about its centre, and Fit takes in its turned corners', () => {
+    const { ctl } = mount({ floorplan: { ...placement, rotation: 10 }, image });
+    // 400 x 200 px at 0.015 m: a 6 x 3 m rectangle centred on (3, 1.5); SVG y is flipped
+    expect(screen.getByLabelText('Floor plan reference image').getAttribute('transform')).toBe('rotate(10 3 -1.5)');
+    const xs = ctl.imageFitPoints.map((p) => p[0]);
+    expect(ctl.imageFitPoints).toHaveLength(4);
+    expect(Math.min(...xs)).toBeLessThan(0);
+  });
+
+  it('an unrotated image has no transform', () => {
+    mount({ floorplan: placement, image });
+    expect(screen.getByLabelText('Floor plan reference image').getAttribute('transform')).toBeNull();
+  });
+
   it('renders the image in feet and in inches when those are the units', () => {
     const feet = mount({ units: 'feet', floorplan: placement, image });
     // 400 * 0.015 m = 6 m, shown in feet

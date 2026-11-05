@@ -394,6 +394,7 @@
 						width={ctl.planImage.width}
 						height={ctl.planImage.height}
 						opacity={ctl.planImage.opacity}
+						transform={ctl.planImage.transform}
 						preserveAspectRatio="none"
 						role="img"
 						aria-label="Floor plan reference image"
@@ -465,6 +466,7 @@
 						width={ctl.planImage.width}
 						height={ctl.planImage.height}
 						opacity={ctl.planImage.opacity}
+						transform={ctl.planImage.transform}
 						preserveAspectRatio="none"
 						role="img"
 						aria-label="Floor plan reference image"
@@ -473,7 +475,7 @@
 						onpointerdown={ctl.onPlanPointerDown}
 					/>
 					{#if ctl.planSelected}
-						<rect class="plan-outline" x={ctl.planImage.x} y={-(ctl.planImage.y + ctl.planImage.height)} width={ctl.planImage.width} height={ctl.planImage.height} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 4}" />
+						<rect class="plan-outline" x={ctl.planImage.x} y={-(ctl.planImage.y + ctl.planImage.height)} width={ctl.planImage.width} height={ctl.planImage.height} transform={ctl.planImage.transform} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 4}" />
 					{/if}
 				{/if}
 			{/snippet}
