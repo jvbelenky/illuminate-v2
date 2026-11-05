@@ -22,7 +22,8 @@ import {
   validatePolygon,
   normalizeCCW,
 } from '$lib/utils/roomGeometry';
-import { initialPlacement, imageRect, imageCorners, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
+import { initialPlacement, imageRect, imageCorners, rescaleAboutPoint, scaleFromMeasurement, DEFAULT_FLOORPLAN_OPACITY } from '$lib/utils/floorplanImage';
+import { placementFromFrame, type ImportFrame } from '$lib/floorplan/importFrame';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
 import { fitAffine, type Affine } from './zoneField';
@@ -44,6 +45,21 @@ const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 type PlanPickType = 'point_position' | 'aim_point' | 'lamp_position' | 'lamp_aim';
 /** A one-shot edit-strip tool: the next canvas gesture does it, then it is off ('corners': the room outline's). */
 export type StripTool = 'grid' | 'move' | 'aim' | 'image' | 'corners';
+
+/** The image the floor plan import window is configuring: a new upload, or the current image reopened. */
+export interface FloorplanImportSession {
+  src: string;
+  mime: string;
+  widthPx: number;
+  heightPx: number;
+  fileName: string | null;
+  /** A PDF's file and page, so the page picker can reopen it. */
+  pdf: { file: File; page: number; pageCount: number } | null;
+  /** The current image's id when reopened (Adjust image…); null for a new image. */
+  imageId: string | null;
+  /** The placement to start from (reopened, or a same-size page of the same PDF). */
+  initial: FloorPlanPlacement | null;
+}
 /** A selected shape (structure, zone outline, keep-out area) is selected for moving, resizing and rotating, or has its corners editable. */
 export type ShapeMode = 'select' | 'corners';
 /** What a drawing makes: a polygon clicked corner by corner, or a rectangle dragged out. */
@@ -1904,8 +1920,92 @@ export class PlanController {
 
   changePdfPage = async (page: number) => {
     if (!this.pdfFile) return;
-    this.pdfPage = page;
-    await this.installDecoded(this.pdfFile, page);
+    // Another page opens the import window; the picker moves once it is applied
+    await this.openImport(this.pdfFile, page);
+  };
+
+  // --- The floor plan import window: Upload and Adjust image… open it on an
+  // image; Create room applies the placement and the outline as one undo step.
+  importSession = $state<FloorplanImportSession | null>(null);
+
+  openImport = async (file: File, page = 1) => {
+    if (!isSupportedFloorPlanFile(file)) {
+      this.imageError = 'Unsupported file type. Use PNG, JPEG, WebP, GIF, SVG or PDF.';
+      return;
+    }
+    if (this.drawing) this.cancelDraw();
+    this.decoding = true;
+    this.imageError = null;
+    try {
+      const decoded: DecodedFloorPlan = await decodeFloorPlanFile(file, { page });
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      const current = this.scene().floorplan;
+      // Another page of the same size starts from the current calibration
+      const same = isPdf && current && this.pdfFile === file && current.widthPx === decoded.widthPx && current.heightPx === decoded.heightPx;
+      this.importSession = {
+        src: decoded.src, mime: decoded.mime, widthPx: decoded.widthPx, heightPx: decoded.heightPx,
+        fileName: file.name,
+        pdf: isPdf ? { file, page, pageCount: decoded.pageCount ?? 1 } : null,
+        imageId: null,
+        initial: same ? current : null,
+      };
+    } catch (e) {
+      this.imageError = e instanceof FloorPlanDecodeError ? e.message : 'Could not read this file.';
+    } finally {
+      this.decoding = false;
+    }
+  };
+
+  /** Adjust image…: reopen the window on the current image, its rotation, origin and scale filled in. */
+  adjustImage = () => {
+    const { floorplan, image } = this.scene();
+    if (!floorplan || !image) return;
+    if (this.drawing) this.cancelDraw();
+    this.importSession = {
+      src: image.src, mime: image.mime, widthPx: floorplan.widthPx, heightPx: floorplan.heightPx,
+      fileName: this.imageFileName, pdf: null, imageId: image.id, initial: floorplan,
+    };
+  };
+
+  closeImport = () => {
+    this.importSession = null;
+  };
+
+  /** Create room: the image placed by the frame and (unless kept) the outline, in one undo step. */
+  applyImport = async (result: { frame: ImportFrame; outlineMeters: Vertex[] | null }) => {
+    const s = this.importSession;
+    if (!s) return;
+    let placement = placementFromFrame(result.frame, s.imageId ?? crypto.randomUUID(), s.initial?.opacity ?? DEFAULT_FLOORPLAN_OPACITY);
+    let vertices: Vertex[] | null = null;
+    if (result.outlineMeters && result.outlineMeters.length >= 3) {
+      let ring = normalizeCCW(result.outlineMeters);
+      // The room lives at x, y >= 0: an outline reaching below the origin moves up, its image with it
+      const dx = Math.max(0, -Math.min(...ring.map((p) => p[0])));
+      const dy = Math.max(0, -Math.min(...ring.map((p) => p[1])));
+      if (dx || dy) {
+        ring = ring.map(([x, y]) => [x + dx, y + dy] as Vertex);
+        placement = { ...placement, offsetX: placement.offsetX + dx, offsetY: placement.offsetY + dy };
+      }
+      const units = this.scene().units;
+      const k = this.k;
+      vertices = ring.map(([x, y]) => [Math.max(0, roundToUnit(x * k, units)), Math.max(0, roundToUnit(y * k, units))] as Vertex);
+    }
+    this.dirty = false;
+    this.selectedIndex = -1;
+    this.planSelected = false;
+    // One synchronous task: the history records both edits as one step
+    if (s.imageId) this.actions.setPlacement(placement);
+    else this.actions.setPlacement(placement, { id: placement.imageId, mime: s.mime, src: s.src });
+    if (vertices) this.actions.setOutline(vertices);
+    if (!s.imageId) {
+      this.imageFileName = s.fileName;
+      this.pdfFile = s.pdf?.file ?? null;
+      this.pdfPageCount = s.pdf && s.pdf.pageCount > 1 ? s.pdf.pageCount : 0;
+      this.pdfPage = s.pdf?.page ?? 1;
+    }
+    this.importSession = null;
+    await tick();
+    this.canvas?.fitView();
   };
 
   removeImage = () => {

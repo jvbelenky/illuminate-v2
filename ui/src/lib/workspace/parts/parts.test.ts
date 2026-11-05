@@ -95,7 +95,9 @@ describe('Floorplan part', () => {
     const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
     mount({ part: 'floorplan', floorplan: placement, image });
     const card = screen.getByRole('region', { name: 'Floor plan image' });
-    for (const name of ['Upload floor plan image', 'Set scale…', 'Move image', 'Remove']) expect(within(card).getByRole('button', { name })).toBeTruthy();
+    for (const name of ['Upload floor plan image', 'Adjust image…', 'Remove']) expect(within(card).getByRole('button', { name })).toBeTruthy();
+    expect(within(card).queryByRole('button', { name: 'Set scale…' })).toBeNull();
+    expect(within(card).queryByRole('button', { name: 'Move image' })).toBeNull();
     expect(card.contains(screen.getByLabelText('Reference image opacity'))).toBe(true);
   });
 
@@ -154,28 +156,87 @@ describe('Floorplan part corners', () => {
   });
 });
 
-describe('Floorplan part Set scale', () => {
-  const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+describe('Floorplan part: the import window', () => {
+  const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6, rotation: -3 };
   const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+  const windowOpen = () => screen.queryByRole('dialog', { name: 'Floor plan from image' });
 
-  it('Set scale… starts the measure tool and clicking it again stops it; absent without an image', async () => {
-    const { unmount } = mount({ part: 'floorplan' });
-    expect(screen.queryByRole('button', { name: 'Set scale…' })).toBeNull();
-    unmount();
-    const { ctl } = mount({ part: 'floorplan', floorplan: placement, image });
-    const btn = screen.getByRole('button', { name: 'Set scale…' });
-    await fireEvent.click(btn);
-    expect(ctl.tool).toBe('custom');
-    expect(btn.classList.contains('active')).toBe(true);
-    await fireEvent.click(btn);
-    expect(ctl.tool).toBe('edit');
+  it('Adjust image… reopens the window on Align axes with the current alignment, origin and scale done', async () => {
+    mount({ part: 'floorplan', floorplan: placement, image });
+    expect(windowOpen()).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Adjust image…' }));
+    const dlg = windowOpen()!;
+    expect(dlg).toBeTruthy();
+    expect(dlg.querySelector('.fi-msg')!.textContent).toBe('Click two points along a wall that should line up with the grid.');
+    const steps = Array.from(dlg.querySelectorAll('.fi-step'));
+    expect(steps.map((s) => s.classList.contains('done'))).toEqual([true, true, true, false]);
+    expect(steps[2].textContent).toMatch(/Set scale\s*67 px\/m/);
+    expect(dlg.querySelector('svg.fi-svg')!.getAttribute('data-rotation')).toBe('-3');
+    // Step 4 offers to keep the current outline, which finishes the step
+    await fireEvent.click(steps[3]);
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Keep current outline' }));
+    expect(dlg.querySelectorAll('.fi-step')[3].classList.contains('done')).toBe(true);
+    expect(dlg.querySelectorAll('.vertex-row')).toHaveLength(4);
   });
 
-  it('is disabled while drawing', async () => {
+  it('Adjust image… is disabled while drawing', async () => {
     const { ctl } = mount({ part: 'floorplan', floorplan: placement, image });
     ctl.startDraw();
     await tick();
-    expect((screen.getByRole('button', { name: 'Set scale…' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Adjust image…' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('Next without an origin names it; OK goes there', async () => {
+    const { ctl } = mount({ part: 'floorplan' });
+    ctl.importSession = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null };
+    await tick();
+    const dlg = windowOpen()!;
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Next →' }));
+    expect(dlg.querySelector('.fi-msg')!.textContent).toBe('Click or drag to place the origin (0, 0).');
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Next →' }));
+    const prompt = within(dlg).getByRole('alertdialog');
+    expect(prompt.textContent).toMatch(/Set the origin first/);
+    await fireEvent.click(within(prompt).getByRole('button', { name: 'OK' }));
+    expect(within(dlg).queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('closing an untouched window changes nothing and asks nothing', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'floorplan', calls });
+    ctl.importSession = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null };
+    await tick();
+    await fireEvent.click(within(windowOpen()!).getByTitle('Close'));
+    expect(windowOpen()).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('Create room applies the placement with its rotation and the outline (in display units, moved to x, y >= 0)', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'floorplan', calls, units: 'centimeters', vertices: [[0, 0], [600, 0], [600, 400], [0, 400]] });
+    ctl.importSession = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null };
+    await ctl.applyImport({
+      frame: { widthPx: 400, heightPx: 200, rotation: 2, origin: [50, 150], pxPerM: 50 },
+      outlineMeters: [[-0.5, 0], [4, 0], [4, 2], [-0.5, 2]],
+    });
+    const [, placed, img] = callsOf(calls, 'setPlacement')[0] as [string, { rotation: number; scale: number; imageId: string }, { id: string }];
+    expect(placed.rotation).toBe(2);
+    expect(placed.scale).toBeCloseTo(0.02, 9);
+    expect(placed.imageId).toBe(img.id);
+    const [, outline] = callsOf(calls, 'setOutline')[0] as [string, number[][]];
+    expect(outline).toEqual([[0, 0], [450, 0], [450, 200], [0, 200]]);
+    expect(ctl.importSession).toBeNull();
+  });
+
+  it('Keep current outline applies the placement alone', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'floorplan', calls, floorplan: placement, image });
+    ctl.adjustImage();
+    await ctl.applyImport({ frame: { widthPx: 400, heightPx: 200, rotation: 0, origin: [0, 200], pxPerM: 40 }, outlineMeters: null });
+    expect(callsOf(calls, 'setOutline')).toHaveLength(0);
+    const [, placed, newImage] = callsOf(calls, 'setPlacement')[0] as [string, { imageId: string; rotation?: number }, unknown];
+    expect(placed.imageId).toBe('img-1');
+    expect('rotation' in placed).toBe(false);
+    expect(newImage).toBeUndefined();
   });
 });
 
