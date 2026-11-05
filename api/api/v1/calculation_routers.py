@@ -72,6 +72,7 @@ from .session_schemas import (
 )
 from .safety_helpers import limit_level_fields, tlv_fraction as _tlv_fraction, zone_limit_tlvs
 from .resource_limits import (
+    trim_heap,
     estimate_session_cost,
     check_budget,
     log_calculation_start,
@@ -95,6 +96,19 @@ _calc_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CALCULATIONS * 2)
 
 # Semaphore to limit concurrent calculations
 _calc_semaphore: asyncio.Semaphore | None = None
+
+
+def _calculate_and_trim(room) -> None:
+    """room.calculate(), drop the cached form factors (most of a calculated
+    room's memory with reflectance on: ~380 of ~430 MB at 25 points per axis;
+    the next calculation rebuilds them at about a fifth of its cost), then
+    return the freed memory to the OS. Runs in the calculation executor, so
+    none of it is on the event loop."""
+    try:
+        room.calculate()
+        room.release_form_factors()
+    finally:
+        trim_heap()
 
 
 def _get_calc_semaphore() -> asyncio.Semaphore:
@@ -200,7 +214,7 @@ async def calculate_session(session: InitializedSessionDep):
             try:
                 await asyncio.wait_for(
                     loop.run_in_executor(
-                        _calc_executor, session.room.calculate
+                        _calc_executor, _calculate_and_trim, session.room
                     ),
                     timeout=CALCULATION_TIMEOUT_SECONDS
                 )

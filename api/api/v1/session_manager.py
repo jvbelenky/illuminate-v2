@@ -20,7 +20,7 @@ import logging
 from guv_calcs.room import Room
 from guv_calcs.project import Project
 
-from .resource_limits import MAX_CONCURRENT_SESSIONS
+from .resource_limits import MAX_CONCURRENT_SESSIONS, trim_heap
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +140,10 @@ class SessionManager:
             for sid in expired:
                 del self._sessions[sid]
                 logger.info(f"Cleaned up expired session: {sid[:8]}...")
-            return len(expired)
+        if expired:
+            # Their rooms' cached grids are freed; give the pages back to the OS
+            trim_heap()
+        return len(expired)
 
     def create_session(self, session_id: Optional[str] = None, token_hash: Optional[str] = None) -> Session:
         """
@@ -208,11 +211,12 @@ class SessionManager:
             True if deleted, False if not found
         """
         with self._lock:
-            if session_id in self._sessions:
-                del self._sessions[session_id]
-                logger.info(f"Deleted session: {session_id[:8]}...")
-                return True
-            return False
+            if session_id not in self._sessions:
+                return False
+            del self._sessions[session_id]
+            logger.info(f"Deleted session: {session_id[:8]}...")
+        trim_heap()
+        return True
 
     def get_or_create(self, session_id: str) -> Session:
         """

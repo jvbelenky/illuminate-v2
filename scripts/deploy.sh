@@ -20,6 +20,18 @@ TEST_URL="https://illuminate.osluv.org${TEST_BASE_PATH}"
 TEST_CORS_ORIGIN="https://illuminate.osluv.org"
 KEEP_TEST_IMAGES=3
 
+# The host (8 GB, shared with other containers) went into swap when a few
+# reflectance calculations ran at once, which slowed every request for every
+# user. The cap keeps illuminate from taking the host down with it: past it
+# the container is OOM-killed and restarts (sessions are re-created by the
+# frontend from sessionStorage). It is sized with the per-calculation budget
+# in api/api/v1/resource_limits.py (MAX_PEAK_MEMORY_MB x MAX_CONCURRENT_CALCULATIONS
+# plus the ~400 MB baseline and idle sessions' results).
+MEMORY_OPTS=(--memory=3g --memory-swap=3g)
+TEST_MEMORY_OPTS=(--memory=2g --memory-swap=2g)
+# uvicorn logs every request; without a cap the json-file log grows forever
+LOG_OPTS=(--log-opt max-size=10m --log-opt max-file=3)
+
 # --- Determine action ---
 action="${1:-deploy}"
 
@@ -56,6 +68,7 @@ case "$action" in
       -p 127.0.0.1:8000:8000 \
       -e CORS_ORIGINS=https://illuminate.osluv.org \
       --restart=unless-stopped \
+      "${MEMORY_OPTS[@]}" "${LOG_OPTS[@]}" \
       "${IMAGE_NAME}:v${VERSION}"
 
     echo "=== Cleaning up old images (keeping last ${KEEP_IMAGES}) ==="
@@ -112,6 +125,7 @@ case "$action" in
       -p "127.0.0.1:${TEST_PORT}:8000" \
       -e CORS_ORIGINS="${TEST_CORS_ORIGIN}" \
       --restart=unless-stopped \
+      "${TEST_MEMORY_OPTS[@]}" "${LOG_OPTS[@]}" \
       "${TEST_IMAGE_NAME}:${SHA}"
 
     echo "=== Cleaning up old test images (keeping last ${KEEP_TEST_IMAGES}) ==="
@@ -172,6 +186,7 @@ case "$action" in
       -p 127.0.0.1:8000:8000 \
       -e CORS_ORIGINS=https://illuminate.osluv.org \
       --restart=unless-stopped \
+      "${MEMORY_OPTS[@]}" "${LOG_OPTS[@]}" \
       "${IMAGE_NAME}:${target}"
 
     echo ""

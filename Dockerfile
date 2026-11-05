@@ -37,6 +37,10 @@ RUN uv run python -c "import matplotlib.pyplot as plt; plt.figure(); plt.close()
 # Fail the build if WeasyPrint cannot render (missing system libraries)
 RUN uv run python -c "from weasyprint import HTML; assert HTML(string='<p>ok</p>').write_pdf()[:4] == b'%PDF'"
 ENV STATIC_DIR=/app/frontend
+# Each worker thread otherwise gets its own glibc malloc arena, and arenas hold
+# on to freed calculation memory; two is plenty for one uvicorn worker. The API
+# also calls malloc_trim after calculations (api/v1/resource_limits.py).
+ENV MALLOC_ARENA_MAX=2
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"

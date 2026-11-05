@@ -12,6 +12,7 @@ from api.v1.resource_limits import (
     check_budget,
     get_budget_reduction_suggestions,
     MAX_PEAK_MEMORY_MB,
+    trim_heap,
     MAX_CALC_TIME_SECONDS,
 )
 from guv_calcs.performance import (
@@ -325,3 +326,40 @@ class TestResourceLimitConstants:
     def test_max_calc_time_less_than_timeout(self):
         from api.v1.resource_limits import CALCULATION_TIMEOUT_SECONDS
         assert MAX_CALC_TIME_SECONDS < CALCULATION_TIMEOUT_SECONDS
+
+
+# ============================================================
+# trim_heap
+# ============================================================
+
+class TestTrimHeap:
+    def test_returns_freed_memory_to_the_os(self):
+        """Freed small blocks stay in glibc's arena until trim_heap hands them back."""
+        import gc
+        import os
+        import numpy as np
+
+        if not os.path.exists("/proc/self/statm"):
+            pytest.skip("Linux-only measurement")
+
+        def rss_mb():
+            pages = int(open("/proc/self/statm").read().split()[1])
+            return pages * os.sysconf("SC_PAGE_SIZE") / 2**20
+
+        gc.collect()
+        trim_heap()
+        base = rss_mb()
+        # 8 KB blocks are below the mmap threshold, so freeing them leaves the
+        # pages in the arena (measured: ~158 MB still resident after del).
+        blocks = [np.ones(1024, dtype="float64") for _ in range(20_000)]
+        del blocks
+        gc.collect()
+        resident = rss_mb() - base
+        if resident < 100:
+            pytest.skip(f"allocator already released the memory ({resident:.0f} MB resident)")
+        trim_heap()
+        assert rss_mb() - base < 30, "freed memory was not returned to the OS"
+
+    def test_is_safe_to_call_repeatedly(self):
+        for _ in range(3):
+            trim_heap()
