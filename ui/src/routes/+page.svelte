@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { globalPlaneRange } from '$lib/plan/zoneField';
 	import { buildExploreZoneOptions } from '$lib/utils/exploreZones';
 	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, plotSettings, ceilingLayout } from '$lib/stores/project';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
@@ -466,21 +467,8 @@
 		return $zones.every(z => (z.display_mode ?? 'heatmap') === first) ? first : null;
 	});
 
-	// Global value range across plane zones only (for global heatmap normalization)
-	const globalValueRange = $derived.by(() => {
-		if (!$results?.zones) return null;
-		let min = Infinity, max = -Infinity;
-		for (const zone of $zones) {
-			if (zone.enabled === false) continue;
-			if (zone.type !== 'plane') continue;
-			const result = $results.zones[zone.id];
-			if (!result?.values) continue;
-			if (result.statistics.min != null && result.statistics.min < min) min = result.statistics.min;
-			if (result.statistics.max != null && result.statistics.max > max) max = result.statistics.max;
-		}
-		if (!isFinite(min) || !isFinite(max)) return null;
-		return { min, max };
-	});
+	// Global value range across plane zones only (for global heatmap normalization; the 2D plan uses the same)
+	const globalValueRange = $derived(globalPlaneRange($zones, $results?.zones));
 
 	// Explore data modal: zone options and fluence from results
 	const exploreZoneOptions = $derived(buildExploreZoneOptions($zones, $results?.zones));

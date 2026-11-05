@@ -16,6 +16,9 @@
 	import SurfaceSwitcher from './SurfaceSwitcher.svelte';
 	import PlanEditStrip from './PlanEditStrip.svelte';
 	import PlanWebLayer from './PlanWebLayer.svelte';
+	import PlanZoneField from './PlanZoneField.svelte';
+	import { fieldZones, fieldKind, freshValues } from './zoneField';
+	import { results } from '$lib/stores/project';
 	import InlineValueInput from './InlineValueInput.svelte';
 	import { parseCoordinateInput } from './segmentLength';
 	import { displayDimension } from '$lib/utils/formatting';
@@ -63,6 +66,13 @@
 	const onCeilingSurface = $derived(ctl.onCeiling);
 	const ceilingItems = $derived(onCeilingSurface && ceiling.ceilingShown && ceiling.itemsShown ? ceiling.items.filter((i) => !i.hidden) : []);
 	const ceilingDown = (e: PointerEvent, id: string) => ctl.onCeilingItemPointerDown(e, id);
+	// The planes and volumes whose markers or results the view shows (in every context, as 3D does)
+	const shownFields = $derived(fieldZones(ctl.scene().zones, ctl.surface, ctl.scene().roomZ, ctl.scene().hidden?.zones));
+	// Zones drawing their results: their outline drops its tint, so the colours read true
+	const resultZoneIds = $derived(new Set(shownFields.filter((z) => {
+		const k = fieldKind(z, !!freshValues(z, $results?.zones?.[z.id]));
+		return k !== null && k !== 'markers';
+	}).map((z) => z.id)));
 	const points = (vs: Vertex[]) => vs.map(([x, y]) => `${x},${-y}`).join(' ');
 
 	// Read-only (summary, mini view): the selection and the hovered row still show
@@ -231,6 +241,11 @@
 	/>
 {/snippet}
 
+<!-- The zones' grid points or results, over the room's fill and under everything else -->
+{#snippet zoneFields(c: CanvasContext)}
+	<PlanZoneField zones={shownFields} allZones={ctl.scene().zones} room={ctl.scene().room} px={c.px} selectedId={ctl.selectedZoneId} hoveredId={hovered('zones')} />
+{/snippet}
+
 <div class="plan-pane" class:mini data-plan-scope>
 	{#if toolbar && !ro}
 		<div class="surface-row">
@@ -264,6 +279,7 @@
 				outlineSnapPx={ctl.onZones ? ZONE_OUTLINE_SNAP_PX : undefined}
 				ariaLabel={wallLabel}
 			>
+				{#snippet field(c)}{@render zoneFields(c)}{/snippet}
 				{#snippet overlay(c)}
 					{@render webs(c, true)}
 					{#each roWallPlanes as z (z.id)}
@@ -314,6 +330,7 @@
 				onHostCancel={ctl.cancelHostDrag}
 				ariaLabel={wallLabel}
 			>
+				{#snippet field(c)}{@render zoneFields(c)}{/snippet}
 				{#snippet overlay(c)}
 					{@render webs(c, true)}
 					{#if ctl.pointPick && ctl.placeCursor}
@@ -321,7 +338,7 @@
 					{/if}
 					{#if ctl.onZones}
 						{#each wv.planes.filter((z) => z.id !== ctl.selectedZoneId || (ctl.drawing && z.id !== ctl.redrawZoneId)) as z (z.id)}
-							<polygon class="plan-zone" class:off={!z.enabled} class:highlighted={hovered('zones') === z.id} points={points(z.vertices)} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name}" onpointerdown={(e) => zoneDown(e, z.id)} />
+							<polygon class="plan-zone" class:off={!z.enabled} class:results={resultZoneIds.has(z.id)} class:highlighted={hovered('zones') === z.id} points={points(z.vertices)} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name}" onpointerdown={(e) => zoneDown(e, z.id)} />
 						{/each}
 					{/if}
 					{#if ctl.onLamps}
@@ -355,6 +372,7 @@
 			outline={vertices}
 			ariaLabel="Floor plan canvas"
 		>
+			{#snippet field(c)}{@render zoneFields(c)}{/snippet}
 			{#snippet overlay(c)}
 				{@render webs(c, false)}
 				{#each roZones as z (z.id)}
@@ -453,6 +471,7 @@
 					{/if}
 				{/if}
 			{/snippet}
+			{#snippet field(c)}{@render zoneFields(c)}{/snippet}
 			{#snippet overlay(c)}
 				{@render webs(c, false)}
 				{#each ceilingItems as it (it.id)}
@@ -479,7 +498,7 @@
 					{/if}
 					{#each ctl.surfaceZones.filter((z) => z.id !== ctl.selectedZoneId || (ctl.drawing && z.id !== ctl.redrawZoneId)) as z (z.id)}
 						{@const fp = zoneFootprint(z)}
-						<polygon class="plan-zone" class:volume={z.type === 'volume'} class:off={z.enabled === false} class:highlighted={hovered('zones') === z.id} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => zoneDown(e, z.id)} />
+						<polygon class="plan-zone" class:volume={z.type === 'volume'} class:results={resultZoneIds.has(z.id)} class:off={z.enabled === false} class:highlighted={hovered('zones') === z.id} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => zoneDown(e, z.id)} />
 						{@const lx = Math.min(...fp.map((p) => p[0])) + c.px * 4}
 						{@const ly = Math.max(...fp.map((p) => p[1])) - c.px * 13}
 						{#if z.show_label_2d !== false}
@@ -826,6 +845,9 @@
 	.plan-zone:hover {
 		fill: color-mix(in srgb, var(--color-scene-selected) 14%, transparent);
 		stroke: color-mix(in srgb, var(--color-scene-selected) 55%, transparent);
+	}
+	.plan-zone.results {
+		fill: transparent;
 	}
 	.plan-zone.off {
 		fill: none;
