@@ -203,40 +203,41 @@ test.describe('Polygon rooms', () => {
     await expect.poll(async () => parseFloat(await row.nth(0).inputValue())).toBeCloseTo(x0 + 0.5, 6);
   });
 
-  test('upload a floor plan, calibrate it, save and reload the project', async ({ page }) => {
+  test('upload a floor plan through the import window, save and reload the project', async ({ page }) => {
     await waitForSession(page);
     await expandRoomPanel(page);
     const part = page.locator('.floorplan-part');
     await openGeometry(page);
 
-    // Upload: the image layer appears on the plan
+    // Upload: the import window opens on the image
     await part.locator('input[type="file"]').setInputFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
-    const img = planSvg(page).locator('image.plan-image');
-    await expect(img).toBeVisible();
-    // The default rectangle is still there, so the upload asks whether to clear it
-    await page.getByRole('button', { name: 'Clear', exact: true }).click();
-    await expect(part.locator('.vertex-row')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Set scale now' }).click();
-
-    // Calibrate: two clicks on the canvas, then a distance
-    const plan = planSvg(page);
-    const box = await plan.boundingBox();
-    if (!box) throw new Error('plan canvas not visible');
-    await plan.click({ position: { x: box.width * 0.3, y: box.height * 0.5 } });
-    await plan.click({ position: { x: box.width * 0.6, y: box.height * 0.5 } });
-    const distance = page.locator('#measured-distance');
-    await expect(distance).toBeVisible();
-    await distance.fill('3');
-    await distance.press('Enter');
-    // Scale confirmed with no outline: the editor offers to start tracing
-    await expect(part.locator('.reference-panel')).toBeVisible();
-    await page.getByRole('button', { name: 'Start tracing' }).click();
-    await plan.click({ position: { x: box.width * 0.3, y: box.height * 0.7 } });
-    await plan.click({ position: { x: box.width * 0.7, y: box.height * 0.7 } });
-    await plan.click({ position: { x: box.width * 0.7, y: box.height * 0.3 } });
-    await plan.click({ position: { x: box.width * 0.3, y: box.height * 0.3 } });
-    await page.keyboard.press('Enter');
+    const win = page.getByRole('dialog', { name: 'Floor plan from image' });
+    await expect(win).toBeVisible();
+    const clickImage = async (p: [number, number]) => {
+      const [x, y] = await page.locator('.fi-image').evaluate((el, [px, py]) => {
+        const q = new DOMPoint(px, py).matrixTransform((el as SVGGraphicsElement).getScreenCTM()!);
+        return [q.x, q.y];
+      }, p);
+      await page.mouse.click(x, y);
+    };
+    // Already aligned; origin; a 3 m scale; trace four corners and close on the first
+    await win.getByRole('button', { name: 'Already aligned' }).click();
+    await clickImage([10, 50]);
+    await win.getByRole('button', { name: 'Next →' }).click();
+    await clickImage([10, 50]);
+    await clickImage([110, 50]);
+    await page.locator('#fi-distance').fill('3');
+    await win.getByRole('button', { name: 'Next →' }).click();
+    await win.getByRole('button', { name: 'Trace', exact: true }).click();
+    for (const p of [[10, 50], [110, 50], [110, 10], [10, 10], [10, 50]] as [number, number][]) await clickImage(p);
+    await expect(win.locator('.vertex-row')).toHaveCount(4);
+    await win.getByRole('button', { name: 'Create room' }).click();
+    await expect(win).toHaveCount(0);
+    await expect(planSvg(page).locator('image.plan-image')).toBeVisible();
+    await openGeometry(page);
     await expect(part.locator('.vertex-row')).toHaveCount(4);
+    // 100 px at 3 m: the room is 3 m wide
+    await expect.poll(async () => Number(await part.getByLabel('Width', { exact: true }).inputValue())).toBeCloseTo(3, 1);
     await closePlan(page);
 
     // The summary's plan still shows the image
