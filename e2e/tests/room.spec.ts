@@ -139,6 +139,7 @@ test.describe('Polygon rooms', () => {
   });
 
   test('the outline sits in a box: a corner handle widens the room (undo restores it), the rotate handle turns it a quarter, a double-click edits its vertices', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await waitForSession(page);
     await expandRoomPanel(page);
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(6);
@@ -147,6 +148,7 @@ test.describe('Polygon rooms', () => {
     await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
     await expect(plan.getByRole('button', { name: 'Vertex 1', exact: true })).toHaveCount(0);
     for (const name of ['Edit vertices', 'Rotate 90°', 'Draw new outline']) await expect(planTool(page, name)).toBeVisible();
+    await expect(page.locator('.main-view-controls .plan-toolbar')).not.toHaveClass(/compact/);
     await expect(planTool(page, 'Copy')).toHaveCount(0);
     await expect(planTool(page, 'Delete')).toHaveCount(0);
 

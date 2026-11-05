@@ -231,8 +231,9 @@ test.describe('Main view corners', () => {
           return a.x + a.width <= b.x || a.y + a.height <= b.y;
         }, { message: `${part ?? stage}: the strip clears Calculate` }).toBe(true);
         // Labels at desktop widths; glyphs only on a narrow view. A selected structure's four
-        // tools are wider (their labels at 1440 px are pinned in objects.spec)
-        if (width >= 1280 && part !== 'structures') await expect(strip).not.toHaveClass(/compact/);
+        // tools and the room outline's three are wider (their labels at 1440 px are pinned in
+        // objects.spec and room.spec)
+        if (width >= 1280 && part === undefined) await expect(strip).not.toHaveClass(/compact/);
         await page.screenshot({ path: testInfo.outputPath(`corners-${width}-${part ?? stage}.png`) });
       }
     });
