@@ -28,7 +28,7 @@
 >
 	{#snippet body()}
 		<div class="dialog-body">
-			<p>Reflections make calculations significantly slower and usually change the results only slightly.</p>
+			<p>Reflections make calculations significantly slower and usually change the results by about 5–10%.</p>
 			<label class="dont-show">
 				<input type="checkbox" bind:checked={dontShowAgain} />
 				<span>Don't show this again</span>
