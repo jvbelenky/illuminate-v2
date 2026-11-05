@@ -151,10 +151,21 @@ describe('detectOutline', () => {
       expectCorners(right, [[256, 50], [450, 50], [450, 250], [256, 250]]);
     });
 
-    it('floor mode: the outer envelope, interior walls ignored', () => {
+    it('floor mode: the inner face of the exterior walls, interior walls filled', () => {
       const { img } = twoRooms();
-      const { outline } = detectOutline(img, { mode: 'floor' }, { pxPerM: 50 });
-      expectCorners(outline, [[40, 40], [460, 40], [460, 260], [40, 260]]);
+      const { outline, region } = detectOutline(img, { mode: 'floor' }, { pxPerM: 50 });
+      expectCorners(outline, [[50, 50], [450, 50], [450, 250], [50, 250]]);
+      // The interior wall lies inside the region; the exterior wall does not
+      expect(region![150 * 500 + 252]).toBe(1);
+      expect(region![150 * 500 + 45]).toBe(0);
+    });
+
+    it('room mode: a stub wall into the room does not notch the outline', () => {
+      const cv = canvas(500, 300);
+      cv.room(50, 50, 450, 250, 10);
+      cv.rect(150, 50, 156, 150);
+      const { outline } = detectOutline(cv.img, { mode: 'room', seed: [300, 150] }, { pxPerM: 50 });
+      expectCorners(outline, [[50, 50], [450, 50], [450, 250], [50, 250]]);
     });
 
     it('the wall mask is exported for reuse', () => {

@@ -1,10 +1,12 @@
 <script lang="ts" module>
 	import type { ImportFrame, Pt } from './importFrame';
+	import type { WallMeters } from './wallStructures';
 
-	/** What Create room hands back: the frame (rotation, origin, scale) and the outline in room metres, or null to keep the current outline. */
+	/** What Create room hands back: the frame (rotation, origin, scale), the outline in room metres (null keeps the current outline) and the interior walls to build. */
 	export interface FloorplanImportResult {
 		frame: ImportFrame;
 		outlineMeters: Pt[] | null;
+		walls?: WallMeters[];
 	}
 </script>
 
@@ -23,7 +25,7 @@
 		snapRotation, straightenRotation, toAligned,
 	} from './importFrame';
 	import { guideMessage, moveNext, moveTo, NEED_TEXT, STEP_LABELS, type AlignTool, type ImportStep, type StepFacts } from './importSteps';
-	import { detectOutline } from './autoDetect';
+	import { detectPlanAsync } from './detectClient';
 	import { LENGTH_UNITS, fromMeters, toMeters, unitAbbrev, unitDecimals, type LengthUnit } from '$lib/utils/unitConversion';
 	import { validatePolygon } from '$lib/utils/roomGeometry';
 
@@ -67,6 +69,12 @@
 	let detected = $state<'found' | 'none' | null>(null);
 	let detecting = $state(false);
 	let selV = $state(-1);
+	/** Interior walls found by auto-detect: centre line and thickness in image pixels. */
+	type IWall = { id: number; a: Pt; b: Pt; thickness: number; on: boolean };
+	let walls = $state<IWall[]>([]);
+	let wallsOpen = $state(true);
+	let hoverWall = $state(-1);
+	let detectToken = 0;
 	let worked = $state(false);
 	let need = $state<{ step: 2 | 3 | 4; title: string; body: string } | null>(null);
 	let confirmClose = $state(false);
@@ -95,6 +103,35 @@
 	const tableDecimals = $derived(Math.max(precision, unitDecimals(units)));
 	const roundShown = (v: number) => Math.round(v * 10 ** tableDecimals) / 10 ** tableDecimals;
 	const tableRows = $derived(outlineMeters.map(([x, y]) => [roundShown(fromMeters(x, units)), roundShown(fromMeters(y, units))] as [number, number]));
+	const allWallsOn = $derived(walls.length > 0 && walls.every((w) => w.on));
+	const someWallsOn = $derived(walls.some((w) => w.on));
+	/** "length × thickness unit" in the project's units. */
+	function wallDims(w: IWall): string {
+		if (!pxPerM) return '';
+		const len = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) / pxPerM;
+		return `${roundShown(fromMeters(len, units))} × ${roundShown(fromMeters(w.thickness / pxPerM, units))} ${unitLabel}`;
+	}
+	function toggleWall(i: number) {
+		walls = walls.map((w, k) => (k === i ? { ...w, on: !w.on } : w));
+		markWork();
+	}
+	function toggleAllWalls() {
+		const on = !allWallsOn;
+		walls = walls.map((w) => ({ ...w, on }));
+		markWork();
+	}
+	function removeWall(i: number) {
+		walls = walls.filter((_, k) => k !== i);
+		hoverWall = -1;
+		markWork();
+	}
+	/** A wall's rectangle in the aligned frame. */
+	function wallRect(w: IWall): string {
+		const a = al(w.a), b = al(w.b);
+		const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+		const nx = (-(b[1] - a[1]) / len) * (w.thickness / 2), ny = ((b[0] - a[0]) / len) * (w.thickness / 2);
+		return [[a[0] + nx, a[1] + ny], [b[0] + nx, b[1] + ny], [b[0] - nx, b[1] - ny], [a[0] - nx, a[1] - ny]].map((p) => `${p[0]},${p[1]}`).join(' ');
+	}
 
 	function markWork() {
 		worked = true;
@@ -220,6 +257,10 @@
 				selV = -1;
 			} else outline = [...outline, img];
 			markWork();
+			return;
+		}
+		if (h?.startsWith('w')) {
+			toggleWall(Number(h.slice(1)));
 			return;
 		}
 		if (h) {
@@ -390,7 +431,9 @@
 
 	function finish() {
 		const keep = how === 'keep' && !!currentOutline;
-		onApply({ frame: { ...frame }, outlineMeters: keep ? null : outlineMeters.map((p) => [p[0], p[1]] as Pt) });
+		const scale = pxPerM;
+		const built = keep || !scale ? [] : walls.filter((w) => w.on).map((w) => ({ a: pixelToMeters(frame, w.a), b: pixelToMeters(frame, w.b), thickness: w.thickness / scale }));
+		onApply({ frame: { ...frame }, outlineMeters: keep ? null : outlineMeters.map((p) => [p[0], p[1]] as Pt), walls: built });
 	}
 
 	function requestClose() {
@@ -429,6 +472,9 @@
 
 	// --- Step 4
 	function chooseTrace() {
+		detectToken++;
+		detecting = false;
+		walls = [];
 		how = 'trace';
 		outline = [];
 		tracing = true;
@@ -437,6 +483,9 @@
 		markWork();
 	}
 	function chooseAuto() {
+		detectToken++;
+		detecting = false;
+		walls = [];
 		how = 'auto';
 		autoMode = 'room';
 		outline = [];
@@ -446,6 +495,9 @@
 		markWork();
 	}
 	function chooseKeep() {
+		detectToken++;
+		detecting = false;
+		walls = [];
 		how = 'keep';
 		outline = [];
 		tracing = false;
@@ -504,6 +556,7 @@
 	/** Auto-detect on the aligned image: a room around `seed` (image pixels), or the whole floor. */
 	async function runDetect(seed: Pt | null) {
 		if (!pxPerM) return;
+		const token = ++detectToken;
 		detecting = true;
 		selV = -1;
 		markWork();
@@ -528,23 +581,30 @@
 			ctx.drawImage(im, 0, 0, widthPx, heightPx);
 			const data = ctx.getImageData(0, 0, w, h);
 			const toCanvas = (p: Pt): Pt => { const q = al(p); return [(q[0] - b.x) * f, (q[1] - b.y) * f]; };
-			const result = detectOutline(
-				{ width: w, height: h, data: data.data, channels: 4 },
+			const result = await detectPlanAsync(
+				{ width: w, height: h, data: data.data },
 				seed ? { mode: 'room', seed: toCanvas(seed) } : { mode: 'floor' },
 				{ pxPerM: pxPerM * f },
 			);
+			// Trace, Keep or a newer detection took over meanwhile
+			if (token !== detectToken) return;
+			const back = (p: Pt): Pt => fromAligned(frame, [p[0] / f + b.x, p[1] / f + b.y]);
 			if (result.outline && result.outline.length >= 3) {
-				outline = result.outline.map(([x, y]) => fromAligned(frame, [x / f + b.x, y / f + b.y]));
+				outline = result.outline.map(back);
+				walls = result.walls.map((s, i) => ({ id: i, a: back(s.a), b: back(s.b), thickness: s.thickness / f, on: true }));
 				detected = 'found';
 			} else {
 				outline = [];
+				walls = [];
 				detected = 'none';
 			}
 		} catch {
+			if (token !== detectToken) return;
 			outline = [];
+			walls = [];
 			detected = 'none';
 		} finally {
-			detecting = false;
+			if (token === detectToken) detecting = false;
 		}
 	}
 
@@ -628,6 +688,9 @@
 		{:else}
 			<polygon class="fi-outline closed" points={pts(shownOutline)} stroke-width={3 / s} />
 		{/if}
+		{#each walls as w, i (w.id)}
+			<polygon class="fi-iwall" class:off={!w.on} class:hot={i === hoverWall} data-handle="w{i}" points={wallRect(w)} stroke-width={(i === hoverWall ? 3.5 : 2) / s} stroke-dasharray={w.on ? undefined : `${6 / s} ${4 / s}`} role="button" aria-label="Wall {i + 1}" aria-pressed={w.on} onpointerenter={() => (hoverWall = i)} onpointerleave={() => (hoverWall = -1)} />
+		{/each}
 		{#each shownOutline as v, i (i)}
 			{@const q = al(v)}
 			<circle class="fi-handle vertex" class:sel={i === selV} data-handle="v{i}" cx={q[0]} cy={q[1]} r={r} stroke-width={2 / s} role="button" aria-label="Vertex {i + 1}" />
@@ -712,6 +775,24 @@
 						{#if shownOutline.length && !tracing}
 							<span class="fi-hdr">Vertices</span>
 							<VertexTable vertices={tableRows} unit={unitLabel} precision={tableDecimals} selectedIndex={selV} addLabel="+ Add vertex" roomy oncommit={setVertex} onremove={removeVertex} onadd={addVertex} onselect={(i) => (selV = i)} />
+						{/if}
+						{#if walls.length && !tracing}
+							<button type="button" class="fi-disc" class:open={wallsOpen} aria-expanded={wallsOpen} onclick={() => (wallsOpen = !wallsOpen)}>
+								<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
+								Interior walls ({walls.length})
+							</button>
+							{#if wallsOpen}
+								<label class="fi-check"><input type="checkbox" checked={allWallsOn} indeterminate={someWallsOn && !allWallsOn} onchange={toggleAllWalls} />Include interior walls</label>
+								<ul class="fi-walls" aria-label="Interior walls">
+									{#each walls as w, i (w.id)}
+										<li class="fi-wrow" class:hot={i === hoverWall} onpointerenter={() => (hoverWall = i)} onpointerleave={() => (hoverWall = -1)}>
+											<label class="fi-check"><input type="checkbox" checked={w.on} onchange={() => toggleWall(i)} />Wall {i + 1}</label>
+											<span class="fi-wdim">{wallDims(w)}</span>
+											<button type="button" class="fi-del" title="Delete" aria-label="Delete wall {i + 1}" onclick={() => removeWall(i)}>✕</button>
+										</li>
+									{/each}
+								</ul>
+							{/if}
 						{/if}
 					</div>
 				{/if}
@@ -1063,6 +1144,85 @@
 	.fi-outline {
 		fill: none;
 		stroke: var(--color-scene-selected);
+	}
+	.fi-iwall {
+		fill: color-mix(in srgb, var(--color-scene-selected) 22%, transparent);
+		stroke: var(--color-scene-selected);
+		cursor: pointer;
+	}
+	.fi-iwall.off {
+		fill: transparent;
+		stroke: var(--color-text-muted);
+	}
+	.fi-iwall.hot {
+		fill: color-mix(in srgb, var(--color-scene-selected) 50%, transparent);
+	}
+	.fi-disc {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-top: 4px;
+		padding: 4px 0;
+		border: 0;
+		background: none;
+		color: var(--color-text);
+		font-size: 13px;
+		font-weight: 600;
+		cursor: pointer;
+		text-align: left;
+	}
+	.fi-disc svg {
+		transition: transform 0.15s;
+	}
+	.fi-disc.open svg {
+		transform: rotate(90deg);
+	}
+	.fi-check {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 13px;
+		color: var(--color-text);
+		cursor: pointer;
+	}
+	.fi-walls {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.fi-wrow {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 8px;
+		padding: 2px 4px;
+		border-radius: 4px;
+	}
+	.fi-wrow.hot {
+		background: color-mix(in srgb, var(--color-scene-selected) 16%, transparent);
+	}
+	.fi-wdim {
+		font-size: 13px;
+		color: var(--color-text-muted);
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.fi-del {
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		border: 0;
+		border-radius: 4px;
+		background: var(--color-btn-fill);
+		color: var(--color-text);
+		cursor: pointer;
+	}
+	.fi-del:hover {
+		background: var(--color-btn-fill-hover);
 	}
 	.fi-outline.closed {
 		fill: color-mix(in srgb, var(--color-scene-selected) 16%, transparent);
