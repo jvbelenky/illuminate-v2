@@ -20,6 +20,7 @@ vi.mock('$lib/stores/lampLibrary', async () => {
 });
 
 import { project, room, objects } from '$lib/stores/project';
+import { userSettings } from '$lib/stores/settings';
 
 function input(): HTMLInputElement {
   return document.getElementById('reflectance-all') as HTMLInputElement;
@@ -107,5 +108,64 @@ describe('ReflectanceStep', () => {
     render(ReflectanceStep, { props: { onShowReflectanceSettings: open } });
     await fireEvent.click(screen.getByRole('button', { name: 'Edit surfaces…' }));
     expect(open).toHaveBeenCalled();
+  });
+
+  describe('enable warning', () => {
+    const box = () => screen.getByLabelText('Enable reflections') as HTMLInputElement;
+    beforeEach(() => {
+      userSettings.update((s) => ({ ...s, warnEnableReflections: true }));
+      project.updateRoom({ enable_reflectance: false });
+    });
+
+    it('asks before enabling; Cancel keeps reflections off', async () => {
+      render(ReflectanceStep, { props: { onShowReflectanceSettings: vi.fn() } });
+      await fireEvent.click(box());
+      expect(screen.getByText('Enable reflections?')).toBeTruthy();
+      expect(get(room).enable_reflectance).toBe(false);
+      await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByText('Enable reflections?')).toBeNull();
+      expect(get(room).enable_reflectance).toBe(false);
+      expect(box().checked).toBe(false);
+    });
+
+    it('Enable turns reflections on as one undo step', async () => {
+      render(ReflectanceStep, { props: { onShowReflectanceSettings: vi.fn() } });
+      await fireEvent.click(box());
+      await fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+      expect(get(room).enable_reflectance).toBe(true);
+      expect(get(userSettings).warnEnableReflections).toBe(true);
+    });
+
+    it('"Don\'t show this again" is saved on Enable and skips the next warning', async () => {
+      render(ReflectanceStep, { props: { onShowReflectanceSettings: vi.fn() } });
+      await fireEvent.click(box());
+      await fireEvent.click(screen.getByLabelText("Don't show this again"));
+      await fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+      expect(get(userSettings).warnEnableReflections).toBe(false);
+      await fireEvent.click(box()); // off
+      expect(get(room).enable_reflectance).toBe(false);
+      await fireEvent.click(box()); // on, no dialog
+      expect(screen.queryByText('Enable reflections?')).toBeNull();
+      expect(get(room).enable_reflectance).toBe(true);
+    });
+
+    it('ticking the checkbox then cancelling does not save it', async () => {
+      render(ReflectanceStep, { props: { onShowReflectanceSettings: vi.fn() } });
+      await fireEvent.click(box());
+      await fireEvent.click(screen.getByLabelText("Don't show this again"));
+      await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(get(userSettings).warnEnableReflections).toBe(true);
+    });
+
+    it('no dialog when turning off, loading, or undoing', async () => {
+      project.updateRoom({ enable_reflectance: true });
+      render(ReflectanceStep, { props: { onShowReflectanceSettings: vi.fn() } });
+      await fireEvent.click(box()); // off
+      expect(screen.queryByText('Enable reflections?')).toBeNull();
+      expect(get(room).enable_reflectance).toBe(false);
+      await project.history.undo(); // back on
+      expect(get(room).enable_reflectance).toBe(true);
+      expect(screen.queryByText('Enable reflections?')).toBeNull();
+    });
   });
 });
