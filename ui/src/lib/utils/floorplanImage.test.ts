@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   pixelToRoom, roomToPixel, initialPlacement, rescaleAboutPoint,
-  scaleFromMeasurement, imageRect, DEFAULT_FLOORPLAN_OPACITY,
+  scaleFromMeasurement, imageRect, imageCorners, DEFAULT_FLOORPLAN_OPACITY,
 } from './floorplanImage';
 import type { FloorPlanPlacement } from '$lib/types/project';
 
@@ -22,6 +22,34 @@ describe('pixel <-> room mapping', () => {
     const [px, py] = roomToPixel(base, x, y);
     expect(px).toBeCloseTo(37, 9);
     expect(py).toBeCloseTo(61, 9);
+  });
+});
+
+describe('rotated placement', () => {
+  const rotated: FloorPlanPlacement = { ...base, rotation: 90 };
+  it('turns the image clockwise about its centre', () => {
+    // Centre (1 + 5, 2 + 2.5); the unrotated top-left corner (1, 7) is 5 left and 2.5 up of it.
+    // A quarter turn clockwise puts it 2.5 right and 5 up: (8.5, 9.5)
+    const [x, y] = pixelToRoom(rotated, 0, 0);
+    expect(x).toBeCloseTo(8.5, 9);
+    expect(y).toBeCloseTo(9.5, 9);
+    // The centre does not move
+    const c = pixelToRoom(rotated, 100, 50);
+    expect(c[0]).toBeCloseTo(6, 9);
+    expect(c[1]).toBeCloseTo(4.5, 9);
+  });
+  it('round-trips with any rotation', () => {
+    const p = { ...base, rotation: -7.5 };
+    const [x, y] = pixelToRoom(p, 37, 61);
+    const [px, py] = roomToPixel(p, x, y);
+    expect(px).toBeCloseTo(37, 9);
+    expect(py).toBeCloseTo(61, 9);
+  });
+  it('imageCorners follow the rotation', () => {
+    const corners = imageCorners(rotated, 1);
+    expect(corners[0][0]).toBeCloseTo(8.5, 9);
+    expect(corners[0][1]).toBeCloseTo(9.5, 9);
+    expect(imageCorners(base, 2)[1]).toEqual([22, 14]);
   });
 });
 
