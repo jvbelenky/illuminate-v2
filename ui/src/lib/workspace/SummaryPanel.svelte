@@ -6,6 +6,8 @@
 	import './parts/parts.css';
 	import ItemRow from './parts/ItemRow.svelte';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
+	import EnableReflectionsDialog from '$lib/components/EnableReflectionsDialog.svelte';
+	import { ReflectionsToggle } from '$lib/components/reflectionsToggle.svelte';
 	import { lampColor, lampWavelength } from '$lib/utils/wavelengthColor';
 	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
 	import { fixtureKeyOf } from '$lib/utils/lampFixture';
@@ -65,6 +67,13 @@
 		return `On · R ${refl(lo) === refl(hi) ? refl(lo) : `${refl(lo)}–${refl(hi)}`}`;
 	});
 
+	// Turning reflections on asks first, as Room › Reflectance does
+	const reflToggle = new ReflectionsToggle((on) => actions.updateRoom({ enable_reflectance: on }));
+	function toggleReflections(event: Event) {
+		const box = event.currentTarget as HTMLInputElement;
+		if (!reflToggle.set(box.checked)) box.checked = false;
+	}
+
 	const zones = $derived(scene.zones.filter((z) => !z.isStandard));
 	const standardZones = $derived(scene.room.useStandardZones ? scene.zones.filter((z) => z.isStandard) : []);
 	let standardOpen = $state(false);
@@ -84,6 +93,10 @@
 	}
 </script>
 
+{#if reflToggle.confirming}
+	<EnableReflectionsDialog onEnable={reflToggle.enable} onCancel={reflToggle.cancel} />
+{/if}
+
 <div class="summary-panel">
 	{#each SECTIONS as s (s.edit)}
 		<section class="summary-block">
@@ -96,7 +109,21 @@
 				<div class="ep-kv"><span>Dimensions</span><b>{dimensions}</b></div>
 				<div class="ep-kv"><span>Floor area</span><b>{qty(area)} {abbrev}²</b></div>
 				<div class="ep-kv"><span>Volume</span><b>{qty(area * scene.roomZ)} {abbrev}³</b></div>
-				<div class="ep-kv"><span>Reflections</span><b>{reflections}</b></div>
+				<div class="ep-kv refl-row">
+					<span>Reflections</span>
+					<span class="refl-value">
+						<b>{reflections}</b>
+						<input
+							type="checkbox"
+							role="switch"
+							class="refl-switch"
+							aria-label="Reflections"
+							title={scene.room.enable_reflectance ? 'Turn reflections off' : 'Turn reflections on'}
+							checked={!!scene.room.enable_reflectance}
+							onchange={toggleReflections}
+						/>
+					</span>
+				</div>
 			{:else if s.edit === 'room:structures'}
 				{#if scene.objects.length === 0}<span class="ep-chip">None</span>{/if}
 				<div class="ep-list">
@@ -195,6 +222,54 @@
 </div>
 
 <style>
+	/* Reflections: its state, then a switch in the app's style (as Fit to room) */
+	.refl-row {
+		align-items: center;
+	}
+	.refl-value {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		min-width: 0;
+	}
+	.refl-switch {
+		appearance: none;
+		-webkit-appearance: none;
+		position: relative;
+		flex: none;
+		/* Over the phone layout's 20 px checkbox size */
+		width: 32px !important;
+		height: 18px !important;
+		min-width: 32px;
+		min-height: 18px;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		border-radius: 9px;
+		background: color-mix(in srgb, var(--color-text) 25%, var(--color-bg-tertiary));
+		cursor: pointer;
+		transition: background-color 0.15s;
+	}
+	.refl-switch::after {
+		content: '';
+		position: absolute;
+		left: 2px;
+		top: 2px;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: #fff;
+		transition: transform 0.15s;
+	}
+	.refl-switch:checked {
+		background: var(--color-highlight);
+	}
+	.refl-switch:checked::after {
+		transform: translateX(14px);
+	}
+	.refl-switch:focus-visible {
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 40%, transparent);
+	}
 	.summary-panel {
 		display: flex;
 		flex-direction: column;
