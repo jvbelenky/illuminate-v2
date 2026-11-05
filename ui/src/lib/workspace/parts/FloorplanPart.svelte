@@ -2,7 +2,9 @@
 	// Room › Floorplan: the room's size and units, its area and volume, the
 	// reference image to trace over; the vertex table is folded under Vertices, below the image card.
 	import './parts.css';
-	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
+	import VertexTable from '$lib/components/VertexTable.svelte';
+	import FloorplanImportModal, { type FloorplanImportResult } from '$lib/floorplan/FloorplanImportModal.svelte';
+	import { frameFromPlacement, type Pt } from '$lib/floorplan/importFrame';
 	import { polygonArea } from '$lib/utils/roomGeometry';
 	import { displayQuantity } from '$lib/utils/formatting';
 	import { unitAbbrev, LENGTH_UNITS, roundToUnit } from '$lib/utils/unitConversion';
@@ -39,7 +41,19 @@
 		const input = event.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
 		input.value = '';
-		if (file) ctl.onFileChosen(file);
+		if (file) ctl.openImport(file);
+	}
+
+	// The import window: reopened on the current image, its frame and outline come along
+	const session = $derived(ctl.importSession);
+	const importInitial = $derived.by(() => {
+		if (!session?.initial) return null;
+		const f = frameFromPlacement(session.initial);
+		return f.origin && f.pxPerM ? { rotation: f.rotation, origin: f.origin, pxPerM: f.pxPerM } : null;
+	});
+	const importOutline = $derived<Pt[] | null>(session?.imageId && scene.vertices.length >= 3 ? scene.vertices.map(([x, y]) => [x / ctl.k, y / ctl.k] as Pt) : null);
+	function applyImport(result: FloorplanImportResult) {
+		void ctl.applyImport(result);
 	}
 
 	let geometryOpen = $state(false);
@@ -111,9 +125,8 @@
 				{/if}
 				{#if ctl.placement}
 					<div class="image-tools">
-						<button type="button" class="secondary set-scale-btn" class:active={ctl.tool === 'custom'} aria-pressed={ctl.tool === 'custom'} disabled={ctl.drawing} onclick={ctl.startSetScale}>Set scale…</button>
 						{#if ctl.hasImage}
-							<button type="button" class="secondary move-image-btn" class:active={ctl.activeTool === 'image'} aria-pressed={ctl.activeTool === 'image'} disabled={ctl.drawing} onclick={() => ctl.inCanvas(() => ctl.toggleTool('image'))}>Move image</button>
+							<button type="button" class="secondary adjust-image-btn" disabled={ctl.drawing} onclick={ctl.adjustImage}>Adjust image…</button>
 						{/if}
 						<button type="button" class="secondary remove-image-btn" onclick={ctl.removeImage}>Remove</button>
 					</div>
@@ -127,27 +140,34 @@
 		Vertices
 	</button>
 	{#if geometryOpen}
-		<div class="vertex-table">
-			<div class="vertex-header">
-				<span></span>
-				<span>X ({ctl.unit})</span>
-				<span>Y ({ctl.unit})</span>
-				<span></span>
-			</div>
-			<div class="vertex-rows">
-				{#each ctl.draft as [vx, vy], i (i)}
-					<div class="vertex-row" class:selected={ctl.selectedIndex === i}>
-						<span class="row-index" title="Vertex {i + 1}">{i + 1}</span>
-						<ValidatedNumberInput value={vx} precision={scene.precision} min={0} step={ctl.snapStep} disabled={ctl.drawing} oncommit={(v) => ctl.setVertexCoord(i, 0, v)} />
-						<ValidatedNumberInput value={vy} precision={scene.precision} min={0} step={ctl.snapStep} disabled={ctl.drawing} oncommit={(v) => ctl.setVertexCoord(i, 1, v)} />
-						<button type="button" class="secondary remove-btn" title="Remove vertex {i + 1}" aria-label="Remove vertex {i + 1}" disabled={ctl.drawing || ctl.draft.length <= 3} onclick={() => ctl.removeVertex(i)}>×</button>
-					</div>
-				{/each}
-			</div>
-			<button type="button" class="secondary add-vertex-btn" disabled={ctl.drawing || ctl.draft.length < 2} onclick={ctl.addVertex}>Add vertex</button>
-		</div>
+		<VertexTable
+			vertices={ctl.draft}
+			unit={ctl.unit}
+			precision={scene.precision}
+			selectedIndex={ctl.selectedIndex}
+			min={0}
+			step={ctl.snapStep}
+			disabled={ctl.drawing}
+			oncommit={(i, axis, v) => ctl.setVertexCoord(i, axis, v)}
+			onremove={(i) => ctl.removeVertex(i)}
+			onadd={ctl.addVertex}
+		/>
 	{/if}
 </div>
+
+{#if session}
+	<FloorplanImportModal
+		src={session.src}
+		widthPx={session.widthPx}
+		heightPx={session.heightPx}
+		{units}
+		precision={scene.precision}
+		initial={importInitial}
+		currentOutline={importOutline}
+		onApply={applyImport}
+		onClose={ctl.closeImport}
+	/>
+{/if}
 
 <style>
 	.dims-block {
@@ -254,7 +274,7 @@
 		gap: 6px;
 		font-size: var(--font-size-sm);
 	}
-	/* Set scale and Move image side by side; Remove (and a lone button) the full width */
+	/* Adjust image and Remove side by side; a lone button the full width */
 	.image-tools {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -288,63 +308,6 @@
 		color: var(--color-text-muted);
 	}
 	.reference-row input[type='range'] {
-		width: 100%;
-	}
-	.image-card button.secondary.active,
-	.image-card button.secondary.active:hover:not(:disabled) {
-		background: var(--color-highlight);
-		border-color: var(--color-highlight);
-		color: var(--color-on-highlight);
-	}
-	.vertex-table {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		min-height: 0;
-	}
-	.vertex-rows {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-height: 0;
-		max-height: 16rem;
-		overflow-y: auto;
-		scrollbar-gutter: stable;
-		padding-right: 2px;
-	}
-	.vertex-header {
-		scrollbar-gutter: stable;
-		overflow-y: hidden;
-		padding-right: 2px;
-	}
-	.vertex-header,
-	.vertex-row {
-		display: grid;
-		grid-template-columns: 1.6rem 1fr 1fr 1.4rem;
-		gap: var(--spacing-xs);
-		align-items: center;
-	}
-	.vertex-header {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-	}
-	.row-index {
-		text-align: center;
-		font-size: var(--font-size-xs);
-		font-family: var(--font-mono, monospace);
-		color: var(--color-text-muted);
-	}
-	.vertex-row.selected .row-index {
-		color: var(--color-scene-selected);
-		font-weight: 600;
-	}
-	.remove-btn {
-		width: 100%;
-		padding: 0;
-		height: 1.6rem;
-		line-height: 1;
-	}
-	.add-vertex-btn {
 		width: 100%;
 	}
 </style>
