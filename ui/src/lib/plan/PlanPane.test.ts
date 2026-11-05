@@ -50,9 +50,9 @@ function px(plan: SVGSVGElement, x: number, y: number): [number, number] {
   return [((x - vx) / vsize) * 560, ((-y - vy) / vsize) * 560];
 }
 
-/** Click Draw: it clears the corners and starts drawing straight away. */
+/** Click Draw new outline: it clears the corners and starts drawing straight away. */
 async function startNewOutline() {
-  await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Draw new outline' }));
 }
 
 /** Draw a triangle on the plan and close it with Enter. */
@@ -127,7 +127,7 @@ describe('PlanPane', () => {
     expect(labels(container)).toEqual(['Move', 'Aim', 'Copy', 'Delete']);
     unmount();
     const out = render(Harness, { props: { ...baseProps, context: 'outline' } });
-    expect(labels(out.container)).toEqual(['Draw', 'Edit vertices']);
+    expect(labels(out.container)).toEqual(['Edit vertices', 'Rotate 90°', 'Draw new outline']);
     out.unmount();
     // Structures and zones: nothing selected, no shape tools (their Add cards make them)
     const zones = render(Harness, { props: { ...baseProps, context: 'zones' } });
@@ -253,7 +253,7 @@ describe('PlanPane', () => {
 
     // Control: the same scene, editable, with a lamp selected, does show them
     const edit = render(Harness, { props: { ...props, context: 'outline' } });
-    expect(edit.container.querySelectorAll('circle.vertex').length).toBeGreaterThan(0);
+    expect(edit.container.querySelector('.transform-box')).not.toBeNull();
     expect(edit.container.querySelector('.plan-toolbar')).not.toBeNull();
     edit.unmount();
     const lampsEdit = render(Harness, { props });
@@ -327,13 +327,9 @@ describe('PlanPane', () => {
     const { ctl } = mount({ readonly: true });
     ctl.setVertexCoord(1, 1, 6);
     ctl.requestLeave(() => {});
-    ctl.askTrace = true;
-    ctl.askSetScale = true;
     await tick();
     expect(ctl.pendingLeave).not.toBeNull();
     expect(screen.queryByText('Outline not saved')).toBeNull();
-    expect(screen.queryByText('Trace the room outline')).toBeNull();
-    expect(screen.queryByText('Set the scale now?')).toBeNull();
   });
 
   it('Escape cancels a drawing in a standalone pane, and only once', async () => {
@@ -357,36 +353,7 @@ describe('PlanPane', () => {
     expect(ctl.drawing).toBe(true);
   });
 
-  describe('upload flow', () => {
-    const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
-    const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
-
-    it('upload offers Set scale and Escape dismisses it, leaving the outline alone', async () => {
-      const { ctl } = mount();
-      await ctl.onFileChosen(new File(['x'], 'plan.png', { type: 'image/png' }));
-      await screen.findByLabelText('Floor plan reference image');
-      await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
-      await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
-      expect(ctl.tool).toBe('custom');
-      // The page forwards Escape to the controller (+page.svelte passes handleEscape={false})
-      expect(ctl.onEscapeKey()).toBe(true);
-      expect(ctl.tool).toBe('edit');
-      expect(ctl.draft).toHaveLength(4);
-    });
-
-    it('a restored image does not clear the outline; a confirmed scale returns to editing', async () => {
-      const { container, ctl } = mount({ floorplan: placement, image });
-      expect(ctl.draft).toHaveLength(4);
-      ctl.startSetScale();
-      const plan = stubPlan(container);
-      await fireEvent.click(plan, { clientX: 100, clientY: 300 });
-      await fireEvent.click(plan, { clientX: 300, clientY: 300 });
-      const input = await screen.findByLabelText('Measured distance');
-      await fireEvent.input(input, { target: { value: '4' } });
-      await fireEvent.keyDown(input, { key: 'Enter' });
-      expect(ctl.tool).toBe('edit');
-      expect(ctl.draft).toHaveLength(4);
-    });
+  describe('the outline canvas', () => {
 
     it('fits the view with the origin near the bottom-left corner, not centred', () => {
       const { container } = mount();
@@ -477,7 +444,7 @@ describe('PlanPane', () => {
 
     it('Space+drag pans while drawing without placing a corner', async () => {
       const { container, ctl } = mount({ vertices: [] });
-      await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Draw new outline' }));
       const plan = stubPlan(container);
       const before = plan.getAttribute('viewBox');
       await fireEvent.pointerEnter(plan);
@@ -517,42 +484,14 @@ describe('PlanPane', () => {
       await fireEvent.click(plan, { clientX: 151, clientY: 250 });
       expect(ctl.fmt(ctl.draft[1][0])).toBe('9.00');
     });
-
-    it('uploading over an outline asks whether to clear it; Clear empties the corners (not yet applied), then Set scale opens', async () => {
-      const calls: unknown[][] = [];
-      const { ctl } = mount({ calls });
-      await ctl.onFileChosen(new File(['x'], 'plan.png', { type: 'image/png' }));
-      await screen.findByLabelText('Floor plan reference image');
-      expect(screen.getByText('Clear the old outline?')).toBeTruthy();
-      await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
-      expect(screen.queryByText('Clear the old outline?')).toBeNull();
-      expect(ctl.draft).toHaveLength(0);
-      expect(callsOf(calls, 'setOutline')).toHaveLength(0);
-      expect(screen.getByText('Set the scale now?')).toBeTruthy();
-      await fireEvent.click(screen.getByRole('button', { name: 'Later' }));
-      expect(ctl.tool).toBe('edit');
-    });
   });
 
-  describe('after calibration', () => {
-    const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
-    const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
-
-    it('the second scale click snaps to a right angle from the first when nearly straight', async () => {
-      const { container, ctl } = mount({ floorplan: placement, image });
-      ctl.startSetScale();
-      const plan = stubPlan(container);
-      await fireEvent.click(plan, { clientX: 100, clientY: 300 });
-      // 200 px right, 10 px up: ~2.9° off horizontal, snapped flat
-      await fireEvent.click(plan, { clientX: 300, clientY: 290 });
-      const line = container.querySelector('.measure-line')!;
-      expect(parseFloat(line.getAttribute('y2')!)).toBeCloseTo(parseFloat(line.getAttribute('y1')!), 6);
-    });
+  describe('drawing angles', () => {
 
     it('walls snap to a right angle only when nearly straight; otherwise the angle is free', async () => {
       const draw = async (alt: boolean, dy: number) => {
         const { container, unmount } = mount({ vertices: [] });
-        await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+        await fireEvent.click(screen.getByRole('button', { name: 'Draw new outline' }));
         const plan = stubPlan(container);
         await fireEvent.click(plan, { clientX: 100, clientY: 400 });
         await fireEvent.pointerMove(plan, { clientX: 300, clientY: 400 - dy, altKey: alt });
@@ -572,10 +511,119 @@ describe('PlanPane', () => {
     });
   });
 
+  describe('the room outline in its box', () => {
+    const labels = (container: HTMLElement) => Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.getAttribute('aria-label'));
+    const press = async (plan: SVGSVGElement, target: Element, from: [number, number], to: [number, number], opts: { shiftKey?: boolean; altKey?: boolean } = {}) => {
+      const [x0, y0] = px(plan, ...from);
+      const [x1, y1] = px(plan, ...to);
+      await fireEvent.pointerDown(target, { clientX: x0, clientY: y0, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: x1, clientY: y1, pointerId: 1, ...opts });
+      await fireEvent.pointerUp(plan, { pointerId: 1 });
+      await tick();
+    };
+    const extents = (vs: number[][]) => [Math.min(...vs.map((p) => p[0])), Math.max(...vs.map((p) => p[0])), Math.min(...vs.map((p) => p[1])), Math.max(...vs.map((p) => p[1]))];
+
+    it('shows its box, not its corners; the strip offers Edit vertices, Rotate 90° and Draw new outline (no Copy or Delete)', () => {
+      const { container } = mount();
+      expect(container.querySelector('.transform-box')).not.toBeNull();
+      expect(container.querySelectorAll('circle.vertex')).toHaveLength(0);
+      expect(container.querySelectorAll('.mid-handle')).toHaveLength(0);
+      expect(labels(container)).toEqual(['Edit vertices', 'Rotate 90°', 'Draw new outline']);
+    });
+
+    it('dragging inside moves the room: one setOutline on release, lamps and structures left alone', async () => {
+      const calls: unknown[][] = [];
+      const box = { id: 'object-9', name: 'Desk', shape: 'box' as const, width: 1, length: 1, height: 0.75, x: 2, y: 2, z: 0, yaw: 0, pitch: 0, roll: 0, reflectance: 0.1, transmittance: 0, enabled: true };
+      const { container } = mount({ calls, lamps: [lamp] as any, objects: [box] });
+      const plan = stubPlan(container);
+      await press(plan, plan, [3, 2], [4, 3]);
+      const outlines = callsOf(calls, 'setOutline');
+      expect(outlines).toHaveLength(1);
+      expect(extents(outlines[0][1] as number[][])).toEqual([1, 7, 1, 5]);
+      expect(calls.filter((c) => c[0] !== 'setOutline')).toEqual([]);
+    });
+
+    it('a corner handle resizes about the opposite corner, Shift keeping the ratio', async () => {
+      const calls: unknown[][] = [];
+      const { container } = mount({ calls });
+      const plan = stubPlan(container);
+      await press(plan, screen.getByRole('button', { name: 'Resize top-right' }), [6, 4], [9, 4.2], { shiftKey: true });
+      const outlines = callsOf(calls, 'setOutline');
+      expect(outlines).toHaveLength(1);
+      expect(extents(outlines[0][1] as number[][])).toEqual([0, 9, 0, 6]);
+    });
+
+    it('the rotate handle turns it a quarter about its centre (moved back to x, y >= 0)', async () => {
+      const calls: unknown[][] = [];
+      const { container, ctl } = mount({ calls });
+      const plan = stubPlan(container);
+      const knob = screen.getByRole('button', { name: 'Rotate' }).querySelector('circle.tb-knob')!;
+      const k: [number, number] = [Number(knob.getAttribute('cx')), -Number(knob.getAttribute('cy'))];
+      const c: [number, number] = [3, 2];
+      await press(plan, screen.getByRole('button', { name: 'Rotate' }), k, [c[0] - (k[1] - c[1]), c[1]]);
+      const outlines = callsOf(calls, 'setOutline');
+      expect(outlines).toHaveLength(1);
+      expect(extents(outlines[0][1] as number[][])).toEqual([1, 5, 0, 6]);
+      expect(ctl.draftYaw).toBe(0);
+    });
+
+    it('a double click inside shows its corners; Done (or Esc) goes back to the box', async () => {
+      const { container, ctl } = mount();
+      const plan = stubPlan(container);
+      const [x, y] = px(plan, 3, 2);
+      for (let i = 0; i < 2; i++) {
+        await fireEvent.pointerDown(plan, { clientX: x, clientY: y, button: 0, pointerId: 1 });
+        await fireEvent.pointerUp(plan, { clientX: x, clientY: y, pointerId: 1 });
+      }
+      await fireEvent.dblClick(plan, { clientX: x, clientY: y });
+      await tick();
+      expect(ctl.shapeMode).toBe('corners');
+      expect(container.querySelectorAll('circle.vertex')).toHaveLength(4);
+      expect(container.querySelector('.transform-box')).toBeNull();
+      expect(labels(container)).toEqual(['Done']);
+      await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+      expect(ctl.shapeMode).toBe('select');
+      expect(container.querySelector('.transform-box')).not.toBeNull();
+      await fireEvent.click(screen.getByRole('button', { name: 'Edit vertices' }));
+      expect(ctl.shapeMode).toBe('corners');
+      await fireEvent.keyDown(window, { key: 'Escape' });
+      await tick();
+      expect(ctl.shapeMode).toBe('select');
+    });
+
+    it('one finger inside the room pans the view (the room fills a phone); a mouse drag moves it', async () => {
+      const calls: unknown[][] = [];
+      const { container } = mount({ calls });
+      const plan = stubPlan(container);
+      const before = plan.getAttribute('viewBox');
+      const [x, y] = px(plan, 3, 2);
+      await fireEvent.pointerDown(plan, { clientX: x, clientY: y, button: 0, pointerId: 5, pointerType: 'touch' });
+      await fireEvent.pointerMove(plan, { clientX: x + 60, clientY: y, pointerId: 5, pointerType: 'touch' });
+      await fireEvent.pointerUp(plan, { clientX: x + 60, clientY: y, pointerId: 5, pointerType: 'touch' });
+      expect(plan.getAttribute('viewBox')).not.toBe(before);
+      expect(callsOf(calls, 'setOutline')).toHaveLength(0);
+    });
+
+    it('moving the room leaves the floor plan image where it is', async () => {
+      const calls: unknown[][] = [];
+      const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+      const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+      const { container, ctl } = mount({ calls, floorplan: placement, image });
+      const plan = stubPlan(container);
+      // A press on the image inside the room is the room's
+      await press(plan, screen.getByLabelText('Floor plan reference image'), [2, 1], [3, 1]);
+      expect(callsOf(calls, 'setOutline')).toHaveLength(1);
+      expect(callsOf(calls, 'setPlacement')).toHaveLength(0);
+      expect(ctl.planSelected).toBe(false);
+    });
+  });
+
   describe('applies as you go', () => {
     it('a corner drag applies once when it ends; an untouched outline is never re-applied', async () => {
       const calls: unknown[][] = [];
-      const { container } = mount({ calls });
+      const { container, ctl } = mount({ calls });
+      ctl.editCorners();
+      await tick();
       const plan = stubPlan(container);
       const handle = container.querySelectorAll('circle.vertex')[2] as SVGCircleElement;
       await fireEvent.pointerDown(handle, { clientX: 500, clientY: 200, button: 0, pointerId: 1 });
@@ -610,7 +658,7 @@ describe('PlanPane', () => {
 
     it('Ctrl+Z while drawing removes the last corner instead of undoing', async () => {
       const { container, ctl } = mount({ vertices: [] });
-      await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Draw new outline' }));
       const plan = stubPlan(container);
       await fireEvent.click(plan, { clientX: 100, clientY: 400 });
       await fireEvent.click(plan, { clientX: 300, clientY: 400 });
@@ -1092,21 +1140,10 @@ describe('PlanPane', () => {
 
 // Ported from the retired Plan pop-up suite: the reference image, calibration
 // and outline prompts now live on the pane, the controller and the Floorplan part.
-describe('PlanPane reference image and calibration', () => {
+describe('PlanPane reference image', () => {
   const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
   const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
   const lamp = { id: 'lamp-7', name: 'Beacon', lamp_type: 'krcl_222' as const, preset_id: 'beacon', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
-  const pngFile = () => new File(['x'], 'plan.png', { type: 'image/png' });
-
-  /** Complete Set scale: two clicks and a typed distance. */
-  async function calibrate(container: HTMLElement, distance = '4') {
-    const plan = stubPlan(container);
-    await fireEvent.click(plan, { clientX: 100, clientY: 300 });
-    await fireEvent.click(plan, { clientX: 300, clientY: 300 });
-    const input = await screen.findByLabelText('Measured distance');
-    await fireEvent.input(input, { target: { value: distance } });
-    await fireEvent.keyDown(input, { key: 'Enter' });
-  }
 
   it('labels each lamp dot with the lamp name, falling back to its id', () => {
     const named = (id: string, name?: string) => ({ ...lamp, id, name });
@@ -1114,43 +1151,6 @@ describe('PlanPane reference image and calibration', () => {
     const labels = Array.from(container.querySelectorAll('text.lamp-label')).map((t) => t.textContent);
     expect(labels).toEqual(['Corner unit', 'lamp-2']);
     expect(container.querySelectorAll('circle.lamp')).toHaveLength(2);
-  });
-
-  it('shows no image layer by default; upload adds it fitted to the room', async () => {
-    const { container, ctl } = mount({ part: 'floorplan' });
-    expect(container.querySelector('image.plan-image')).toBeNull();
-    expect(container.querySelector('.reference-panel')).toBeNull();
-    expect(screen.getByRole('button', { name: /floor plan image/i })).toBeTruthy();
-    await ctl.onFileChosen(pngFile());
-    const img = await screen.findByLabelText('Floor plan reference image');
-    // 400px long edge fitted to 6 m => width 6, height 3
-    expect(img.getAttribute('width')).toBe('6');
-    expect(img.getAttribute('height')).toBe('3');
-    expect(container.querySelector('.reference-panel')).not.toBeNull();
-  });
-
-  it('applies each finished edit at once: the upload, the calibration and a new outline', async () => {
-    const calls: unknown[][] = [];
-    const { container, ctl } = mount({ calls });
-    await ctl.onFileChosen(pngFile());
-    await screen.findByLabelText('Floor plan reference image');
-    const [, uploaded, img] = callsOf(calls, 'setPlacement')[0] as [string, { widthPx: number; imageId: string }, { id: string; src: string }];
-    expect(img.src).toBe('data:image/png;base64,AAAA');
-    expect(uploaded.widthPx).toBe(400);
-    expect(uploaded.imageId).toBe(img.id);
-    await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
-    expect(ctl.draft).toHaveLength(4);
-    expect(ctl.tool).toBe('custom');
-    await calibrate(container);
-    expect(ctl.tool).toBe('edit');
-    expect(callsOf(calls, 'setPlacement')).toHaveLength(2);
-    expect(callsOf(calls, 'setOutline')).toHaveLength(0);
-    await startNewOutline();
-    await drawTriangle(container);
-    const outlines = callsOf(calls, 'setOutline');
-    expect(outlines).toHaveLength(1);
-    expect(outlines[0][1]).toHaveLength(3);
   });
 
   it('Remove takes the image away', async () => {
@@ -1205,60 +1205,12 @@ describe('PlanPane reference image and calibration', () => {
     expect(calls).toEqual([]);
   });
 
-  it('re-uploading the same-size image keeps the calibration and skips set-scale', async () => {
-    const calls: unknown[][] = [];
-    const calibrated = { imageId: 'img-old', widthPx: 400, heightPx: 200, scale: 0.0321, offsetX: 1.25, offsetY: -0.5, opacity: 0.6 };
-    const { ctl } = mount({ calls, floorplan: calibrated, image: null });
-    await ctl.onFileChosen(pngFile());
-    await screen.findByLabelText('Floor plan reference image');
-    // The decoder returns 400x200, the placement's size: no re-fit, no set-scale
-    expect(ctl.tool).toBe('edit');
-    expect(ctl.askSetScale).toBe(false);
-    const [, kept, img] = callsOf(calls, 'setPlacement')[0] as [string, typeof calibrated, { id: string }];
-    expect(kept.scale).toBe(calibrated.scale);
-    expect(kept.offsetX).toBe(calibrated.offsetX);
-    expect(kept.offsetY).toBe(calibrated.offsetY);
-    expect(kept.imageId).toBe(img.id);
-    expect(kept.imageId).not.toBe('img-old');
-  });
-
-  it('uploading while drawing leaves draw mode', async () => {
-    const { container, ctl } = mount();
-    await startNewOutline();
-    expect(container.querySelector('svg.plan.drawing')).not.toBeNull();
-    await ctl.onFileChosen(pngFile());
-    await screen.findByLabelText('Floor plan reference image');
-    expect(container.querySelector('svg.plan.drawing')).toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
-    expect(ctl.tool).toBe('custom');
-    // Cancelling the drawing restored the outline that was there before
-    expect(ctl.draft).toHaveLength(4);
-  });
-
-  it('two clicks and a distance rescale the image about the room origin', async () => {
-    const calls: unknown[][] = [];
-    const { container, ctl } = mount({ calls, floorplan: placement, image });
-    ctl.startSetScale();
-    await calibrate(container);
-    const [, scaled] = callsOf(calls, 'setPlacement').at(-1) as [string, typeof placement];
-    expect(scaled.scale).not.toBeCloseTo(placement.scale, 6);
-    expect(scaled.scale).toBeGreaterThan(0);
-    expect(scaled.offsetX).toBeCloseTo(0, 9);
-    expect(scaled.offsetY).toBeCloseTo(0, 9);
-  });
-
-  it('startSetScale again returns to the edit tool', () => {
-    const { ctl } = mount({ floorplan: placement, image });
-    ctl.startSetScale();
-    expect(ctl.tool).toBe('custom');
-    ctl.startSetScale();
-    expect(ctl.tool).toBe('edit');
-  });
-
   it('click selects the plan (highlight + position readout); a second press drags it; Escape deselects', async () => {
     const calls: unknown[][] = [];
     const { container, ctl } = mount({ calls, floorplan: placement, image });
+    // Inside the room the outline's box takes presses; editing vertices, the image does
+    ctl.editCorners();
+    await tick();
     const plan = stubPlan(container);
     const img = screen.getByLabelText('Floor plan reference image');
     expect(container.querySelector('.plan-outline')).toBeNull();
@@ -1280,26 +1232,6 @@ describe('PlanPane reference image and calibration', () => {
     expect(ctl.onEscapeKey()).toBe(true);
     await tick();
     expect(container.querySelector('.plan-outline')).toBeNull();
-  });
-
-  it('changing units keeps an in-progress measurement, converting it to the new units', async () => {
-    const calls: unknown[][] = [];
-    const { container, ctl } = mount({ calls, floorplan: placement, image });
-    ctl.startSetScale();
-    const plan = stubPlan(container);
-    await fireEvent.click(plan, { clientX: 100, clientY: 300 });
-    await fireEvent.click(plan, { clientX: 300, clientY: 300 });
-    await fireEvent.input(screen.getByLabelText('Measured distance'), { target: { value: '2' } });
-    const line = container.querySelector('line.measure-line')!;
-    const x1 = Number(line.getAttribute('x1'));
-    const x2 = Number(line.getAttribute('x2'));
-    await fireEvent.change(screen.getByLabelText('Distance units'), { target: { value: 'centimeters' } });
-    expect(calls).toContainEqual(['changeUnits', 'centimeters']);
-    expect((screen.getByLabelText('Measured distance') as HTMLInputElement).value).toBe('200');
-    expect(ctl.tool).toBe('custom');
-    const moved = container.querySelector('line.measure-line')!;
-    expect(Number(moved.getAttribute('x1'))).toBeCloseTo(x1 * 100, 6);
-    expect(Number(moved.getAttribute('x2'))).toBeCloseTo(x2 * 100, 6);
   });
 
   it('changing units keeps the same area on screen instead of refitting', async () => {
@@ -1326,10 +1258,10 @@ describe('PlanPane reference image and calibration', () => {
     expect(footprints[0].getAttribute('points')!.trim().split(' ')).toHaveLength(4);
   });
 
-  describe('outline prompts', () => {
+  describe('Draw new outline', () => {
     it('Draw starts drawing at once with corners present, and cancelling restores them', async () => {
       const { ctl } = mount();
-      await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Draw new outline' }));
       expect(screen.queryByRole('dialog')).toBeNull();
       expect(ctl.drawing).toBe(true);
       ctl.cancelDraw();
@@ -1339,38 +1271,9 @@ describe('PlanPane reference image and calibration', () => {
 
     it('Draw starts drawing straight away when there are no corners', async () => {
       const { ctl } = mount({ vertices: [] });
-      await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Draw new outline' }));
       expect(screen.queryByRole('dialog')).toBeNull();
       expect(ctl.drawing).toBe(true);
-    });
-
-    it('after the scale is set with no outline, offers to trace; Start tracing begins drawing', async () => {
-      const { container, ctl } = mount({ vertices: [], floorplan: placement, image });
-      ctl.startSetScale();
-      await calibrate(container);
-      expect(screen.getByText('Trace the room outline')).toBeTruthy();
-      expect(screen.getByText(/at least three points/)).toBeTruthy();
-      await fireEvent.click(screen.getByRole('button', { name: 'Start tracing' }));
-      expect(screen.queryByText('Trace the room outline')).toBeNull();
-      expect(ctl.drawing).toBe(true);
-    });
-
-    it('the trace offer is not shown when an outline already exists', async () => {
-      const { container, ctl } = mount({ floorplan: placement, image });
-      ctl.startSetScale();
-      await calibrate(container);
-      expect(screen.queryByText('Trace the room outline')).toBeNull();
-    });
-
-    it('skipping the scale with no outline still prompts to trace', async () => {
-      const { container, ctl } = mount({ vertices: [] });
-      await ctl.onFileChosen(pngFile());
-      await screen.findByText('Set the scale now?');
-      await fireEvent.click(screen.getByRole('button', { name: 'Later' }));
-      expect(screen.getByText('Trace the room outline')).toBeTruthy();
-      await fireEvent.click(screen.getByRole('button', { name: 'Later' }));
-      expect(screen.queryByText('Trace the room outline')).toBeNull();
-      expect(container.querySelector('.rubber-band')).toBeNull();
     });
   });
 
@@ -1619,7 +1522,7 @@ describe('PlanPane reference image and calibration', () => {
       } finally {
         outside.remove();
       }
-      await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Draw new outline' }));
       const plan = stubPlan(container);
       await fireEvent.pointerEnter(plan);
       expect(await fireEvent.keyDown(document.body, { key: ' ' })).toBe(false);
@@ -2113,7 +2016,7 @@ describe('PlanPane ceiling context', () => {
       await fireEvent.change(screen.getByRole('combobox', { name: '2D view' }), { target: { value: 'floor' } });
       await tick();
       expect(container.querySelector('image.plan-image')).not.toBeNull();
-      expect(container.querySelectorAll('circle.vertex').length).toBeGreaterThan(0);
+      expect(container.querySelector('.transform-box')).not.toBeNull();
       expect(container.querySelector('.wall-neighbour')).toBeNull();
     });
 

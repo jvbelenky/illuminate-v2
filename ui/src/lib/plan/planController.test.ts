@@ -1,6 +1,7 @@
 import { describe, test, expect, vi } from 'vitest';
 import { tick } from 'svelte';
-import { PlanController } from './planController.svelte';
+import { PlanController, intoFirstQuadrant } from './planController.svelte';
+import { resizeByHandle, rotateByDrag } from './shapeTransform';
 import type { PlanActions, PlanScene } from './planActions';
 import { DEFAULT_CEILING_LAYOUT } from '$lib/ceiling/ceilingLayout';
 import { defaultProject, type CalcZone, type LampInstance, type SceneObject } from '$lib/types/project';
@@ -89,8 +90,14 @@ describe('PlanController', () => {
     expect(ctl.dirty).toBe(false);
   });
 
-  test('an invalid (self-crossing) outline is held back and marks dirty', () => {
+  test('an invalid (self-crossing) outline is held back: dirty while editing vertices, snapped back from the box', () => {
     const { ctl, actions } = make();
+    ctl.draft = [[0, 0], [6, 4], [6, 0], [0, 4]];
+    ctl.commitDraft();
+    expect(actions.setOutline).not.toHaveBeenCalled();
+    expect(ctl.dirty).toBe(false);
+    expect(ctl.draft).toEqual(rect);
+    ctl.editCorners();
     ctl.draft = [[0, 0], [6, 4], [6, 0], [0, 4]];
     ctl.commitDraft();
     expect(actions.setOutline).not.toHaveBeenCalled();
@@ -104,6 +111,7 @@ describe('PlanController', () => {
     expect(first).toHaveBeenCalledTimes(1);
     expect(ctl.pendingLeave).toBeNull();
 
+    ctl.editCorners();
     ctl.draft = [[0, 0], [6, 4], [6, 0], [0, 4]];
     ctl.commitDraft();
     const second = vi.fn();
@@ -115,6 +123,7 @@ describe('PlanController', () => {
   test('resolveLeave keep-saved reverts the draft and proceeds; stay keeps it', () => {
     const { ctl } = make();
     const crossed: Vertex[] = [[0, 0], [6, 4], [6, 0], [0, 4]];
+    ctl.editCorners();
     ctl.draft = crossed;
     ctl.commitDraft();
 
@@ -903,18 +912,6 @@ describe('one-shot edit-strip tools', () => {
     expect(ctl.onBackgroundDragStart(ptr(5, 5))).toBe(false);
   });
 
-  test('Edit vertices ends after one corner edit; Escape cancels it', () => {
-    const { ctl } = make();
-    ctl.canvas = canvas();
-    ctl.toggleTool('corners');
-    expect(ctl.toolCursor).toBe('default');
-    ctl.onCanvasEdit();
-    expect(ctl.activeTool).toBeNull();
-    ctl.toggleTool('corners');
-    expect(ctl.onEscapeKey()).toBe(true);
-    expect(ctl.activeTool).toBeNull();
-  });
-
   test('Draw has the crosshair cursor while drawing; switching context drops a tool', () => {
     const { ctl } = make();
     ctl.drawing = true;
@@ -925,6 +922,126 @@ describe('one-shot edit-strip tools', () => {
     expect(ctl.toolCursor).toBe('crosshair');
     ctl.setContext('obstacles');
     expect(ctl.activeTool).toBeNull();
+  });
+});
+
+describe('the room outline on Floorplan: transform mode unless Edit vertices', () => {
+  const canvas = () => ({ pointerToRoom: (e: any) => [e.clientX, e.clientY], snapValue: (v: number) => v, isSpaceHeld: () => false, isDragging: () => false, focus() {}, startDraw: vi.fn(), cancelDraw: vi.fn(), fitView: vi.fn() }) as any;
+  const lastOutline = (actions: PlanActions) => vi.mocked(actions.setOutline).mock.calls.at(-1)![0] as Vertex[];
+  const bbox = (vs: Vertex[]) => ({ x0: Math.min(...vs.map((p) => p[0])), x1: Math.max(...vs.map((p) => p[0])), y0: Math.min(...vs.map((p) => p[1])), y1: Math.max(...vs.map((p) => p[1])) });
+
+  test('the outline is in its box by default; Edit vertices, Esc and the editor toggle switch modes', () => {
+    const { ctl } = make();
+    ctl.canvas = canvas();
+    expect(ctl.onOutline).toBe(true);
+    expect(ctl.outlineEditable).toBe(true);
+    expect(ctl.shapeSelected).toBe(true);
+    expect(ctl.transformable).toBe(true);
+    ctl.editCorners();
+    expect(ctl.shapeMode).toBe('corners');
+    expect(ctl.transformable).toBe(false);
+    expect(ctl.onEscapeKey()).toBe(true);
+    expect(ctl.shapeMode).toBe('select');
+    expect(ctl.transformable).toBe(true);
+    // The Floorplan part's Edit vertices is a toggle
+    ctl.editOutlineCorners();
+    expect(ctl.shapeMode).toBe('corners');
+    ctl.editOutlineCorners();
+    expect(ctl.shapeMode).toBe('select');
+    // Another context drops corner editing
+    ctl.editCorners();
+    ctl.setContext('lamps');
+    expect(ctl.shapeMode).toBe('select');
+    expect(ctl.shapeSelected).toBe(false);
+  });
+
+  test('no box while drawing, with no outline, or on a wall', () => {
+    const { ctl } = make();
+    ctl.drawing = true;
+    expect(ctl.transformable).toBe(false);
+    ctl.drawing = false;
+    ctl.setSurface('wall:0');
+    expect(ctl.outlineEditable).toBe(false);
+    expect(ctl.transformable).toBe(false);
+    const empty = make({ vertices: [] }).ctl;
+    expect(empty.outlineEditable).toBe(false);
+    expect(empty.transformable).toBe(false);
+  });
+
+  test('a move commits once as the new outline; the room keeps its height', () => {
+    const { ctl, actions } = make();
+    ctl.draft = rect.map(([x, y]) => [x + 1, y + 0.5] as Vertex);
+    ctl.onCanvasEdit();
+    expect(actions.setOutline).toHaveBeenCalledTimes(1);
+    const b = bbox(lastOutline(actions));
+    expect(b).toEqual({ x0: 1, x1: 7, y0: 0.5, y1: 4.5 });
+    expect(actions.updateRoom).not.toHaveBeenCalled();
+    expect(actions.updateObstacle).not.toHaveBeenCalled();
+    expect(actions.updateLamp).not.toHaveBeenCalled();
+  });
+
+  test('a corner handle with Shift scales both sides about the opposite corner (W and L follow)', () => {
+    const { ctl, actions } = make();
+    // The top-right handle dragged to (9, 5): 1.5x wide; Shift keeps the 6 x 4 ratio
+    ctl.draft = resizeByHandle(ctl.draft, 0, { sx: 1, sy: 1 }, [9, 5], { keepRatio: true });
+    ctl.onCanvasEdit();
+    expect(bbox(lastOutline(actions))).toEqual({ x0: 0, x1: 9, y0: 0, y1: 6 });
+    // Without Shift only the dragged sides move
+    const free = make();
+    free.ctl.draft = resizeByHandle(free.ctl.draft, 0, { sx: 1, sy: 0 }, [8, 2]);
+    free.ctl.onCanvasEdit();
+    expect(bbox(lastOutline(free.actions))).toEqual({ x0: 0, x1: 8, y0: 0, y1: 4 });
+  });
+
+  test('a rotate drag snaps to 15° (Alt frees it) about the centre; the box is upright again after it', () => {
+    const { ctl, actions } = make({ vertices: [[2, 2], [8, 2], [8, 6], [2, 6]] });
+    // From straight above the centre (5, 4), turned a little past a quarter turn counter-clockwise
+    const r = rotateByDrag(ctl.draft, 0, [5, 10], [-1, 4.3]);
+    expect(r.yaw).toBe(90);
+    ctl.draft = r.vertices;
+    ctl.draftYaw = r.yaw;
+    ctl.onCanvasEdit();
+    expect(bbox(lastOutline(actions))).toEqual({ x0: 3, x1: 7, y0: 1, y1: 7 });
+    expect(ctl.draftYaw).toBe(0);
+    expect(rotateByDrag(rect, 0, [3, 10], [-1, 4.3], true).yaw).not.toBe(90);
+  });
+
+  test('Rotate 90° turns the room; a turn that crosses the axes moves it back to x, y >= 0', () => {
+    const { ctl, actions } = make();
+    ctl.rotateSelected90();
+    expect(actions.setOutline).toHaveBeenCalledTimes(1);
+    // 6 x 4 about (3, 2) reaches x = 1..5, y = -1..5: moved up by 1
+    expect(bbox(lastOutline(actions))).toEqual({ x0: 1, x1: 5, y0: 0, y1: 6 });
+    expect(lastOutline(actions).every(([x, y]) => x >= 0 && y >= 0)).toBe(true);
+  });
+
+  test('intoFirstQuadrant moves a polygon just enough, and leaves one already there alone', () => {
+    const vs: Vertex[] = [[-1, 2], [3, -0.5], [4, 4]];
+    expect(intoFirstQuadrant(vs)).toEqual([[0, 2.5], [4, 0], [5, 4.5]]);
+    expect(intoFirstQuadrant(rect)).toBe(rect);
+  });
+
+  test('a corner typed in the table stays on screen when invalid, even in the box', () => {
+    const { ctl, actions } = make();
+    ctl.setVertexCoord(1, 1, 6);
+    expect(ctl.dirty).toBe(true);
+    expect(actions.setOutline).not.toHaveBeenCalled();
+  });
+
+  test('a press on the floor plan image inside the room moves the room, not the image', () => {
+    const placement = { imageId: 'img', widthPx: 100, heightPx: 50, scale: 0.05, offsetX: 0, offsetY: 0, opacity: 0.5 };
+    const image = { src: 'data:image/png;base64,AAAA', mime: 'image/png', id: 'img' } as any;
+    const { ctl } = make({ floorplan: placement, image });
+    ctl.canvas = canvas();
+    const ev = (x: number, y: number) => ({ button: 0, clientX: x, clientY: y, pointerId: 1, currentTarget: {}, preventDefault: vi.fn(), stopPropagation: vi.fn() }) as any;
+    const inside = ev(2, 1);
+    ctl.onPlanPointerDown(inside);
+    expect(inside.stopPropagation).not.toHaveBeenCalled();
+    expect(ctl.planSelected).toBe(false);
+    // In Edit vertices (or with Move image) the image takes the press
+    ctl.editCorners();
+    ctl.onPlanPointerDown(ev(2, 1));
+    expect(ctl.planSelected).toBe(true);
   });
 });
 

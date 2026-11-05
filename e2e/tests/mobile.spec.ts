@@ -141,7 +141,7 @@ test.describe('Mobile layout', () => {
 
     // A full screen the user chose stays after a drawing ends
     await fullButton(page).click();
-    await view(page).locator('.plan-toolbar').getByRole('button', { name: 'Draw', exact: true }).click();
+    await view(page).locator('.plan-toolbar').getByRole('button', { name: 'Draw new outline', exact: true }).click();
     await page.keyboard.press('Escape');
     await expect(exitButton(page)).toBeVisible();
   });

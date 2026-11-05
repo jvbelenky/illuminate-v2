@@ -105,6 +105,8 @@
 		coordLabels?: [string, string];
 		/** A pointer-down inside the draft moves it whole (instead of panning). */
 		draggableBody?: boolean;
+		/** With `draggableBody`, a finger moves the body too; off, one finger inside it pans (the room outline fills a phone's view). */
+		touchMovesBody?: boolean;
 		/** Shift+double-click a corner to remove it (a plain double-click types its position). */
 		dblClickCorners?: boolean;
 		/** Draw the draft as a selected area (cyan tint, dashed), as for a ceiling keep-out area. */
@@ -192,6 +194,7 @@
 		onShapeRename,
 		coordLabels = ['X', 'Y'],
 		draggableBody = false,
+		touchMovesBody = true,
 		dblClickCorners = false,
 		selectedDraft = false,
 		draftFill = 'over',
@@ -851,16 +854,19 @@
 		if (draggableBody && event.button === 0 && !spaceHeld && editing && !drawing && draft.length >= 3) {
 			const p = pointerToRoom(event);
 			if (pointInPolygon(draft, p[0], p[1])) {
-				event.preventDefault();
 				// A double press on a selected shape edits its corners
 				if (transformBox && onBodyDoubleClick && isDoublePress()) {
+					event.preventDefault();
 					lastPress = null;
 					drag = null;
 					onBodyDoubleClick();
 					return;
 				}
-				beginBodyDrag(event, p);
-				return;
+				if (touchMovesBody || event.pointerType !== 'touch') {
+					event.preventDefault();
+					beginBodyDrag(event, p);
+					return;
+				}
 			}
 		}
 		if (event.button === 0 && !spaceHeld && pannable && onBackgroundDragStart?.(event)) {

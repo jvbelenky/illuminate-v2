@@ -3,6 +3,7 @@
 	// reference image to trace over; the vertex table is folded under Vertices, below the image card.
 	import './parts.css';
 	import VertexTable from '$lib/components/VertexTable.svelte';
+	import Glyph from '$lib/workspace/Glyph.svelte';
 	import FloorplanImportModal, { type FloorplanImportResult } from '$lib/floorplan/FloorplanImportModal.svelte';
 	import { frameFromPlacement, type Pt } from '$lib/floorplan/importFrame';
 	import { polygonArea } from '$lib/utils/roomGeometry';
@@ -57,6 +58,8 @@
 	}
 
 	let geometryOpen = $state(false);
+	// Edit vertices is a mode toggle (the outline otherwise sits in its move/resize/rotate box)
+	const cornering = $derived(ctl.onOutline && ctl.shapeMode === 'corners');
 </script>
 
 <div class="ep-part floorplan-part">
@@ -93,7 +96,10 @@
 	{/if}
 
 	<div class="plan-actions">
-		<button type="button" class="secondary plan-btn" disabled={ctl.drawing} onclick={ctl.requestNewOutline}>Draw new outline</button>
+		<div class="shape-tools">
+			<button type="button" class="secondary plan-btn" disabled={ctl.drawing} onclick={ctl.requestNewOutline}><Glyph name="pen" size={16} /><span>Draw new outline</span></button>
+			<button type="button" class="secondary plan-btn" class:active={cornering} aria-pressed={cornering} disabled={ctl.drawing || !ctl.hasOutline} onclick={ctl.editOutlineCorners}><Glyph name="corners" size={16} /><span>Edit vertices</span></button>
+		</div>
 	</div>
 
 	<section class="ep-addcard image-card" aria-label="Floor plan image">

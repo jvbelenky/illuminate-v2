@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The 2D pane: the plan canvas, the per-context toolbar under it, and the
-	// prompts that belong to the canvas (leave-confirm, new outline, image).
+	// leave-confirm prompt that belongs to the canvas.
 	// All editing state lives in the PlanController; this is a view over it.
 	// Exactly one PlanPane hosts a given controller: it follows the stored
 	// polygon, takes over Ctrl+Z, and handles the plan's keyboard shortcuts.
@@ -10,7 +10,6 @@
 	import { tick, untrack } from 'svelte';
 	import { pushUndoInterceptor } from '$lib/utils/undoKeys';
 	import { zoneFootprint } from '$lib/utils/zoneFootprint';
-	import { unitAbbrev, LENGTH_UNITS } from '$lib/utils/unitConversion';
 	import type { Vertex } from '$lib/utils/roomGeometry';
 	import CeilingIcon from '$lib/ceiling/CeilingIcon.svelte';
 	import SurfaceSwitcher from './SurfaceSwitcher.svelte';
@@ -213,13 +212,6 @@
 		if (ro) return;
 		return pushUndoInterceptor((key) => key === 'undo' && ctl.undoInterceptor());
 	});
-
-	// Focus the distance field as soon as the popover appears, so the user can type
-	// the measurement straight after the second click.
-	$effect(() => {
-		if (ro) return;
-		if (ctl.measure?.b) document.getElementById('measured-distance')?.focus();
-	});
 </script>
 
 <svelte:window onkeydown={ro ? undefined : onKey} />
@@ -329,7 +321,6 @@
 				onCustomClick={ctl.onCustomClick}
 				onCustomMove={ctl.onCustomMove}
 				onCustomLeave={ctl.onCustomLeave}
-				onCustomEnter={ctl.onScaleEnter}
 				onHostMove={ctl.onHostMove}
 				onHostPointerUp={ctl.onHostPointerUp}
 				onHostCancel={ctl.cancelHostDrag}
@@ -425,7 +416,8 @@
 			outline={ctl.onOutline ? undefined : vertices}
 			outlineSnapPx={ctl.onZones ? ZONE_OUTLINE_SNAP_PX : undefined}
 			allowNegative={ctl.onObstacles}
-			draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint) || (ctl.onCeiling && !!ctl.editableKeepOut)}
+			draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint) || (ctl.onCeiling && !!ctl.editableKeepOut) || (ctl.onOutline && ctl.transformable)}
+			touchMovesBody={!ctl.onOutline}
 			dblClickCorners={ctl.onCeiling}
 			selectedDraft={ctl.onCeiling && !!ctl.editableKeepOut}
 			{draftFill}
@@ -442,7 +434,6 @@
 			onCustomClick={ctl.onCustomClick}
 			onCustomMove={ctl.onCustomMove}
 			onCustomLeave={ctl.onCustomLeave}
-			onCustomEnter={ctl.onScaleEnter}
 			onHostMove={ctl.onHostMove}
 			onHostPointerUp={ctl.onHostPointerUp}
 			onHostCancel={ctl.cancelHostDrag}
@@ -545,13 +536,6 @@
 				{#if ctl.onReflectance && ctl.hoveredSurface === 'walls' && vertices.length >= 3}
 					<polygon class="surface-highlight" points={vertices.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 5} />
 				{/if}
-				{#if ctl.measureLine}
-					<line x1={ctl.measureLine.x1} y1={ctl.measureLine.y1} x2={ctl.measureLine.x2} y2={ctl.measureLine.y2} class="measure-line" stroke-width={c.px * 2} stroke-dasharray="{c.px * 3} {c.px * 2}" />
-					<circle cx={ctl.measureLine.x1} cy={ctl.measureLine.y1} r={c.handleR * 0.9} class="measure-dot" stroke-width={c.px * 2} />
-					{#if ctl.measureLine.done}
-						<circle cx={ctl.measureLine.x2} cy={ctl.measureLine.y2} r={c.handleR * 0.9} class="measure-dot" stroke-width={c.px * 2} />
-					{/if}
-				{/if}
 			{/snippet}
 			{#snippet hud(c)}
 				{#if paneInline}
@@ -593,31 +577,6 @@
 						<span>{ctl.unit}</span>
 					</div>
 				{/if}
-				{#if ctl.measure?.b}
-					<div class="measure-popover" role="dialog" aria-label="Set scale">
-						<span class="popover-title">How long is this line?</span>
-						<span>{Math.round(ctl.measuredPixels)} px =</span>
-						<label class="visually-hidden" for="measured-distance">Measured distance</label>
-						<input
-							id="measured-distance"
-							type="number"
-							inputmode="decimal"
-							min="0"
-							step="any"
-							placeholder="distance"
-							value={ctl.measuredDistance ?? ''}
-							oninput={(e) => { const v = parseFloat((e.currentTarget as HTMLInputElement).value); ctl.measuredDistance = Number.isFinite(v) ? v : null; }}
-							onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); ctl.confirmMeasure(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); ctl.cancelMeasure(); } }}
-						/>
-						<select class="measure-units" value={units} onchange={ctl.handleUnitsChange} aria-label="Distance units">
-							{#each LENGTH_UNITS as u (u)}
-								<option value={u}>{unitAbbrev(u)}</option>
-							{/each}
-						</select>
-						<button type="button" class="primary" disabled={!(ctl.measuredDistance && ctl.measuredDistance > 0)} onclick={ctl.confirmMeasure}>OK</button>
-						<button type="button" class="secondary" onclick={ctl.cancelMeasure}>Cancel</button>
-					</div>
-				{/if}
 			{/snippet}
 		</PlanCanvas>
 	{/if}
@@ -640,42 +599,6 @@
 			variant="warning"
 			onConfirm={() => ctl.resolveLeave('keep-saved')}
 			onCancel={() => ctl.resolveLeave('stay')}
-		/>
-	{/if}
-
-	{#if ctl.askClearOutline}
-		<ConfirmDialog
-			title="Clear the old outline?"
-			message="The floorplan is loaded. Remove the existing vertices so you can trace the room fresh, or keep them."
-			confirmLabel="Clear"
-			cancelLabel="Keep"
-			variant="warning"
-			onConfirm={() => ctl.answerClearOutline(true)}
-			onCancel={() => ctl.answerClearOutline(false)}
-		/>
-	{/if}
-
-	{#if ctl.askTrace}
-		<ConfirmDialog
-			title="Trace the room outline"
-			message="Place at least three points on the plan to mark the room's vertices."
-			confirmLabel="Start tracing"
-			cancelLabel="Later"
-			variant="success"
-			onConfirm={() => ctl.answerTrace(true)}
-			onCancel={() => ctl.answerTrace(false)}
-		/>
-	{/if}
-
-	{#if ctl.askSetScale}
-		<ConfirmDialog
-			title="Set the scale now?"
-			message="Click two points on the plan a known distance apart and type that distance. You can also do this later with Set scale."
-			confirmLabel="Set scale now"
-			cancelLabel="Later"
-			variant="success"
-			onConfirm={() => ctl.answerSetScale(true)}
-			onCancel={() => ctl.answerSetScale(false)}
 		/>
 	{/if}
 {/if}
@@ -732,43 +655,6 @@
 		width: 4.2rem;
 		padding: 2px 4px;
 		font-size: var(--font-size-xs);
-	}
-	/* Set scale is a tool: the category blue */
-	.measure-line {
-		stroke: var(--color-highlight);
-	}
-	.measure-dot {
-		fill: var(--color-bg, #fff);
-		stroke: var(--color-highlight);
-	}
-	.measure-popover {
-		position: absolute;
-		left: 50%;
-		top: 12px;
-		transform: translateX(-50%);
-		display: flex;
-		gap: var(--spacing-xs);
-		align-items: center;
-		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: var(--font-size-sm, var(--font-size-base));
-		background: var(--color-bg, #fff);
-		border: 2px solid var(--color-highlight);
-		border-radius: var(--radius-sm, 4px);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-		width: max-content;
-		max-width: calc(100% - 24px);
-		white-space: nowrap;
-	}
-	.measure-popover .popover-title {
-		font-weight: 600;
-		margin-right: var(--spacing-xs);
-	}
-	.measure-popover input {
-		width: 5.5rem;
-	}
-	.measure-popover .measure-units {
-		width: auto;
-		min-width: 0;
 	}
 	.marquee {
 		fill: color-mix(in srgb, var(--color-highlight) 10%, transparent);
@@ -936,13 +822,6 @@
 	}
 	.wall-neighbour.right {
 		transform: translateX(-100%);
-	}
-	.visually-hidden {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip: rect(0 0 0 0);
 	}
 </style>
 

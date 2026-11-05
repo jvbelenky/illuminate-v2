@@ -72,10 +72,10 @@ describe('Floorplan part', () => {
     expect(document.querySelector('input[type="file"]')).not.toBeNull();
   });
 
-  it('Draw new outline sits below a divider; Upload floor plan image is on its own card after the outline, Vertices below it', () => {
+  it('Draw new outline and Edit vertices sit below a divider; Upload floor plan image is on its own card after the outline, Vertices below it', () => {
     mount({ part: 'floorplan' });
     const buttons = [...document.querySelectorAll('.plan-actions button')].map((b) => b.textContent?.trim());
-    expect(buttons).toEqual(['Draw new outline']);
+    expect(buttons).toEqual(['Draw new outline', 'Edit vertices']);
     const card = screen.getByRole('region', { name: 'Floor plan image' });
     expect(card.classList.contains('ep-addcard')).toBe(true);
     // No heading: the card itself is the separation
@@ -88,6 +88,18 @@ describe('Floorplan part', () => {
     expect(screen.queryByRole('button', { name: /Geometry/ })).toBeNull();
     // No image: the card holds the upload alone
     expect(card.querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('Edit vertices toggles the outline between its box and its corners', async () => {
+    const { ctl } = mount({ part: 'floorplan' });
+    const btn = within(document.querySelector('.plan-actions') as HTMLElement).getByRole('button', { name: 'Edit vertices' });
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    await fireEvent.click(btn);
+    expect(ctl.shapeMode).toBe('corners');
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(btn);
+    expect(ctl.shapeMode).toBe('select');
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('with an image loaded, its controls are on the card', () => {

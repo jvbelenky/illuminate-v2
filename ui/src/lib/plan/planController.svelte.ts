@@ -3,7 +3,6 @@ import { get } from 'svelte/store';
 import type PlanCanvas from '$lib/components/PlanCanvas.svelte';
 import type { CanvasTool, PlanShape } from '$lib/components/PlanCanvas.svelte';
 import type { CalcZone, FloorPlanPlacement, LampInstance } from '$lib/types/project';
-import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 import type { PlanContext } from '$lib/workspace/editorNav';
 import type { PlanActions, PlanScene } from './planActions';
 import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry, type ObstacleDraft } from '$lib/utils/obstacleDrafts';
@@ -21,8 +20,9 @@ import {
   edgeMidpoints,
   validatePolygon,
   normalizeCCW,
+  pointInPolygon,
 } from '$lib/utils/roomGeometry';
-import { initialPlacement, imageRect, imageCorners, rescaleAboutPoint, scaleFromMeasurement, DEFAULT_FLOORPLAN_OPACITY } from '$lib/utils/floorplanImage';
+import { imageRect, imageCorners, DEFAULT_FLOORPLAN_OPACITY } from '$lib/utils/floorplanImage';
 import { placementFromFrame, type ImportFrame } from '$lib/floorplan/importFrame';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
@@ -43,8 +43,8 @@ const clone = (vs: Vertex[]) => vs.map((v) => [v[0], v[1]] as Vertex);
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 /** The picks the plan answers: a point's Place and Aim, a lamp's Position and Aim. */
 type PlanPickType = 'point_position' | 'aim_point' | 'lamp_position' | 'lamp_aim';
-/** A one-shot edit-strip tool: the next canvas gesture does it, then it is off ('corners': the room outline's). */
-export type StripTool = 'grid' | 'move' | 'aim' | 'image' | 'corners';
+/** A one-shot edit-strip tool: the next canvas gesture does it, then it is off. */
+export type StripTool = 'grid' | 'move' | 'aim' | 'image';
 
 /** The image the floor plan import window is configuring: a new upload, or the current image reopened. */
 export interface FloorplanImportSession {
@@ -60,7 +60,7 @@ export interface FloorplanImportSession {
   /** The placement to start from (reopened, or a same-size page of the same PDF). */
   initial: FloorPlanPlacement | null;
 }
-/** A selected shape (structure, zone outline, keep-out area) is selected for moving, resizing and rotating, or has its corners editable. */
+/** A selected shape (structure, zone outline, keep-out area, or the room outline on Floorplan) is selected for moving, resizing and rotating, or has its corners editable. */
 export type ShapeMode = 'select' | 'corners';
 /** What a drawing makes: a polygon clicked corner by corner, or a rectangle dragged out. */
 export type DrawShape = 'polygon' | 'rect';
@@ -90,6 +90,15 @@ export function samePolygon(a: Vertex[], b: Vertex[]): boolean {
   return false;
 }
 
+/** The polygon moved up and right just enough that no corner is below zero (unchanged when none is). */
+export function intoFirstQuadrant(vs: Vertex[]): Vertex[] {
+  if (!vs.length) return vs;
+  const dx = Math.max(0, -Math.min(...vs.map((p) => p[0])));
+  const dy = Math.max(0, -Math.min(...vs.map((p) => p[1])));
+  if (dx === 0 && dy === 0) return vs;
+  return vs.map(([x, y]) => [Math.max(0, r6(x + dx)), Math.max(0, r6(y + dy))] as Vertex);
+}
+
 export { isTypingTarget, planShouldHandleKey } from './planKeys';
 
 /**
@@ -111,7 +120,7 @@ export class PlanController {
   // flight. An edit that leaves the polygon invalid stays local (drawn red) and
   // is not applied, so the stored scene is always the last valid one.
   draft = $state<Vertex[]>([]);
-  // 'custom' is the Set scale tool: the canvas hands clicks and moves to us
+  // 'custom' while placing or picking: the canvas hands clicks and moves to us
   tool = $state<CanvasTool>('edit');
   drawing = $state(false);
   selectedIndex = $state(-1);
@@ -158,8 +167,6 @@ export class PlanController {
         return 'move';
       case 'aim':
         return 'crosshair';
-      case 'corners':
-        return 'default';
       default:
         return null;
     }
@@ -173,16 +180,14 @@ export class PlanController {
     if (this.drawing || (t === 'grid' && !this.tilesActive)) return;
     this.activeTool = t;
     if (t === 'image') this.planSelected = true;
-    else if (t === 'corners') this.planSelected = false;
   };
   endTool = () => {
     this.activeTool = null;
     this.#toolGesture = false;
   };
-  /** A corner edit settled on the canvas: apply it (Edit corners is done). */
+  /** An edit settled on the canvas (a corner, a move, a resize or a turn): apply it. */
   onCanvasEdit = () => {
     this.commitDraft();
-    if (this.activeTool === 'corners') this.endTool();
   };
   /** A press on empty canvas with a tool armed: the tool takes the drag. */
   private startToolDrag(event: PointerEvent): boolean {
@@ -306,7 +311,7 @@ export class PlanController {
     if (next === this.surface) return;
     const refit = wallIndex(next) !== null || this.onWall;
     if (this.drawing) this.canvas?.cancelDraw();
-    if (this.tool === 'custom') { this.cancelMeasure(); this.tool = 'edit'; }
+    if (this.tool === 'custom') this.tool = 'edit';
     this.planSelected = false;
     this.selectedId = null;
     this.selectedLampIds = [];
@@ -451,18 +456,23 @@ export class PlanController {
     return { id: z.id, transform: null, zone };
   });
 
-  // --- Shapes (structures, zone outlines, keep-out areas), PowerPoint style: a
-  // selected shape shows a box to move, resize and rotate it ('select'); a
-  // double-click, Edit corners in the strip or its editor, edits its corners
-  // ('corners'). Esc, Done, or the editor's toggle goes back.
+  // --- Shapes (structures, zone outlines, keep-out areas, and the room outline
+  // on Floorplan), PowerPoint style: a selected shape shows a box to move,
+  // resize and rotate it ('select'); a double-click, Edit vertices in the strip
+  // or its editor, edits its corners ('corners'). Esc, Done, or the editor's
+  // toggle goes back. The room outline is always "selected" on Floorplan.
   shapeMode = $state<ShapeMode>('select');
   /** The draft's own frame (degrees): the box turns with it, and a rotate changes it. */
   draftYaw = $state(0);
   /** What the drawing in progress makes. */
   drawShape = $state<DrawShape>('polygon');
+  /** On Floorplan, on the plan view, with an outline: the room outline is the canvas's shape. */
+  get outlineEditable(): boolean {
+    return this.onOutline && !this.onWall && this.hasOutline;
+  }
   /** A selected shape whose outline is the canvas's polygon (on this surface, shown). */
   get shapeSelected(): boolean {
-    return this.structureCornersEditable || this.zoneCornersEditable || (this.onCeiling && !!this.editableKeepOut);
+    return this.outlineEditable || this.structureCornersEditable || this.zoneCornersEditable || (this.onCeiling && !!this.editableKeepOut);
   }
   /** The canvas shows the selected shape's transform box. */
   get transformable(): boolean {
@@ -595,31 +605,6 @@ export class PlanController {
   readonly midpoints = $derived(this.draft.length >= 2 ? edgeMidpoints(this.draft) : []);
 
 
-  // --- Set scale: click two points a known distance apart, type the distance.
-  measure = $state<{ a: Vertex; b: Vertex | null } | null>(null);
-  measuredDistance = $state<number | null>(null);
-  // After a new upload: with an outline present, keep it or clear it; then offer Set scale
-  askClearOutline = $state(false);
-  askSetScale = $state(false);
-  // The plan is only a picture: nothing reads the room out of it. Once it is in
-  // place and there is no outline yet, offer to start tracing (like Set scale).
-  askTrace = $state(false);
-  cursorFree = $state<Vertex | null>(null);
-
-  readonly measuredPixels = $derived.by(() => {
-    if (!this.measure?.b || !this.placement) return 0;
-    return Math.hypot(this.measure.b[0] - this.measure.a[0], this.measure.b[1] - this.measure.a[1]) / this.k / this.placement.scale;
-  });
-  readonly measureLine = $derived.by(() => {
-    const measure = this.measure;
-    if (!measure) return null;
-    const [x1, y1] = [measure.a[0], -measure.a[1]];
-    const end = measure.b ?? (this.tool === 'custom' && this.cursorFree ? this.cursorFree : null);
-    if (!end) return { x1, y1, x2: x1, y2: y1, done: false };
-    const [x2, y2] = [end[0], -end[1]];
-    return { x1, y1, x2, y2, done: measure.b !== null };
-  });
-
   // --- The plan: click to select it (highlight + position readout); a selected
   // plan drags anywhere on the image, snapping its offset to the grid unless Alt.
   // Clicking elsewhere or Escape deselects.
@@ -664,8 +649,12 @@ export class PlanController {
     if (this.draftYaw !== yaw) this.draftYaw = yaw;
   };
 
-  /** Apply the draft as the outline or the selected obstacle's footprint, if valid and changed. */
-  commitDraft = () => {
+  /**
+   * Apply the draft as the outline or the selected obstacle's footprint, if
+   * valid and changed. `typed`: a corner typed in the vertex table, which (like
+   * a corner drag) stays on screen when invalid instead of snapping back.
+   */
+  commitDraft = (typed = false) => {
     if (this.drawing) return;
     // A turned zone keeps to the room (its wall): what a turn carries outside is cut off.
     // (A whole-room plane turned 90° in a room longer than wide no longer fits in it.)
@@ -673,13 +662,15 @@ export class PlanController {
       const clipped = this.clipToSurface(this.draft);
       if (clipped) this.draft = clipped;
     }
+    // The room lives at x, y >= 0: a move or turn that carries the outline below the axes moves it back up
+    if (this.outlineEditable && this.shapeMode === 'select' && !typed) this.draft = intoFirstQuadrant(this.draft);
     if (this.onWall) {
       // On a wall only the selected wall plane's outline is editable
       const z = this.onZones ? this.selectedWallPlane : null;
       const seg = this.wallSeg;
       if (!z || !seg) return;
       if (validatePolygon(this.draft) !== null) {
-        this.rejectDraft();
+        this.rejectDraft(typed);
         return;
       }
       this.dirty = false;
@@ -694,13 +685,15 @@ export class PlanController {
     if (this.onZones && !this.selectedFootprint) return;
     if (this.onCeiling && !this.editableKeepOut) return;
     if (validatePolygon(this.draft) !== null) {
-      this.rejectDraft();
+      this.rejectDraft(typed);
       return;
     }
     this.dirty = false;
     const next = normalizeCCW(this.draft);
     const yaw = normalizeYaw(this.draftYaw);
     if (this.onOutline) {
+      // The room has no yaw of its own: a turned outline is just its new corners (its height stays)
+      this.draftYaw = 0;
       if (!samePolygon(next, this.scene().vertices)) this.actions.setOutline(next);
     } else if (this.onCeiling) {
       const k = this.editableKeepOut!;
@@ -727,8 +720,8 @@ export class PlanController {
    * An invalid polygon on screen: while its corners are edited (or the outline)
    * it stays, drawn red, to be fixed; a move, resize or turn of the box snaps back.
    */
-  private rejectDraft() {
-    if (this.shapeSelected && this.shapeMode === 'select') this.revertDraft();
+  private rejectDraft(typed: boolean) {
+    if (this.shapeSelected && this.shapeMode === 'select' && !typed) this.revertDraft();
     else this.dirty = true;
   }
 
@@ -777,7 +770,7 @@ export class PlanController {
   setContext = (next: PlanContext) => {
     if (next === this.context) return;
     if (this.drawing) this.canvas?.cancelDraw();
-    if (this.tool === 'custom') { this.cancelMeasure(); this.tool = 'edit'; }
+    if (this.tool === 'custom') this.tool = 'edit';
     this.planSelected = false;
     this.hoveredSurface = null;
     this.hoveredItem = null;
@@ -807,11 +800,8 @@ export class PlanController {
    */
   resetForNewScene = () => {
     if (this.drawing) this.canvas?.cancelDraw();
-    if (this.tool === 'custom') { this.cancelMeasure(); this.tool = 'edit'; }
+    if (this.tool === 'custom') this.tool = 'edit';
     this.pendingLeave = null;
-    this.askClearOutline = false;
-    this.askSetScale = false;
-    this.askTrace = false;
     this.dirty = false;
     this.planSelected = false;
     this.hoveredSurface = null;
@@ -903,6 +893,11 @@ export class PlanController {
   /** The keep-out area editor's Edit corners. */
   editKeepOutCorners = (id: string) => {
     this.toggleCornersOf(this.selectedCeilingId === id, () => this.selectCeilingItem(id));
+  };
+  /** Floorplan's Edit vertices: edit the room outline's corners (again goes back to the box). */
+  editOutlineCorners = () => {
+    if (this.onWall && !this.drawing) this.setSurface('floor');
+    this.toggleCornersOf(true, () => {});
   };
 
   /**
@@ -1210,8 +1205,8 @@ export class PlanController {
       this.endTool();
       return true;
     }
-    // Editing a shape's corners: back to select mode, still selected
-    if (this.shapeMode === 'corners' && !this.drawing) {
+    // Editing a shape's corners: back to select mode, still selected (a selected floor plan image is let go first)
+    if (this.shapeMode === 'corners' && !this.drawing && !(this.onOutline && this.planSelected)) {
       this.endCorners();
       return true;
     }
@@ -1238,15 +1233,6 @@ export class PlanController {
     }
     if (this.planSelected) {
       this.planSelected = false;
-      return true;
-    }
-    if (this.tool === 'custom' && this.measure) {
-      this.cancelMeasure();
-      return true;
-    }
-    if (this.tool === 'custom') {
-      this.tool = 'edit';
-      this.measure = null;
       return true;
     }
     if (this.drawing) {
@@ -1638,15 +1624,13 @@ export class PlanController {
   onCustomClick = (event: MouseEvent) => {
     if (this.pointPick) this.pickAt(event);
     else if ((this.onLamps || this.onZones) && this.placing) this.placeAt(event);
-    else this.onScaleClick(event);
   };
   onCustomMove = (event: PointerEvent) => {
     if (this.pointPick || ((this.onLamps || this.onZones) && this.placing)) {
       if (this.canvas) this.placeCursor = this.snappedPointer(event);
-    } else this.onScaleMove(event);
+    }
   };
   onCustomLeave = () => {
-    this.cursorFree = null;
     this.placeCursor = null;
   };
 
@@ -1854,7 +1838,7 @@ export class PlanController {
     const next = clone(this.draft);
     next[index][axis] = this.onObstacles ? value : Math.max(0, value);
     this.draft = next;
-    this.commitDraft();
+    this.commitDraft(true);
   };
   removeVertex = (index: number) => {
     this.withCanvas(() => this.canvas?.removeVertex(index));
@@ -1870,53 +1854,10 @@ export class PlanController {
     next.splice(longest + 1, 0, [mx, my]);
     this.draft = next;
     this.selectedIndex = longest + 1;
-    this.commitDraft();
+    this.commitDraft(true);
   };
 
   // --- Reference image
-
-  onFileChosen = async (file: File) => {
-    if (!isSupportedFloorPlanFile(file)) {
-      this.imageError = 'Unsupported file type. Use PNG, JPEG, WebP, GIF, SVG or PDF.';
-      return;
-    }
-    // Drawing and the image tools are mutually exclusive modes (as in
-    // `handleUnitsChange`); an upload leaves draw mode.
-    if (this.drawing) this.cancelDraw();
-    this.pdfFile = file.type === 'application/pdf' || /\.pdf$/i.test(file.name) ? file : null;
-    this.pdfPage = 1;
-    await this.installDecoded(file, 1);
-  };
-
-  installDecoded = async (file: File, page: number) => {
-    this.decoding = true;
-    this.imageError = null;
-    try {
-      const decoded: DecodedFloorPlan = await decodeFloorPlanFile(file, { page });
-      this.pdfPageCount = decoded.pageCount ?? 0;
-      const id = crypto.randomUUID();
-      const newImage: FloorPlanImage = { id, mime: decoded.mime, src: decoded.src };
-      this.imageFileName = file.name;
-      const { floorplan, vertices } = this.scene();
-      // Re-upload of the same-size image keeps a restored placement's calibration
-      if (floorplan && floorplan.widthPx === decoded.widthPx && floorplan.heightPx === decoded.heightPx) {
-        this.actions.setPlacement({ ...floorplan, imageId: id }, newImage);
-      } else {
-        // Size the image to the current room, then offer Set scale (Escape dismisses it)
-        const bb = polygonBoundingBox(this.draft.length >= 3 ? this.draft : vertices);
-        this.actions.setPlacement(initialPlacement(id, decoded.widthPx, decoded.heightPx, bb.xMax / this.k, bb.yMax / this.k), newImage);
-        await tick();
-        this.canvas?.fitView();
-        // With an outline already drawn, ask whether this plan replaces it; then offer Set scale
-        if (this.onOutline && this.draft.length >= 3) this.askClearOutline = true;
-        else this.askSetScale = true;
-      }
-    } catch (e) {
-      this.imageError = e instanceof FloorPlanDecodeError ? e.message : 'Could not read this file.';
-    } finally {
-      this.decoding = false;
-    }
-  };
 
   changePdfPage = async (page: number) => {
     if (!this.pdfFile) return;
@@ -2014,8 +1955,6 @@ export class PlanController {
     this.imageError = null;
     this.pdfFile = null;
     this.pdfPageCount = 0;
-    if (this.tool === 'custom') this.tool = 'edit';
-    this.measure = null;
     this.actions.setPlacement(null);
   };
 
@@ -2033,120 +1972,16 @@ export class PlanController {
     if (floorplan) this.actions.setPlacement({ ...floorplan, [axis]: displayValue / this.k });
   };
 
-  answerClearOutline = (clear: boolean) => {
-    this.askClearOutline = false;
-    if (clear) {
-      // The stored outline stays until the new one is traced
-      this.draft = [];
-      this.dirty = true;
-      this.selectedIndex = -1;
-    }
-    this.askSetScale = true;
-  };
-  answerSetScale = (now: boolean) => {
-    this.askSetScale = false;
-    if (now) this.startSetScale();
-    else {
-      this.tool = 'edit';
-      this.promptToTrace();
-    }
-  };
-
-  promptToTrace = () => {
-    if (!this.onOutline || this.draft.length >= 3 || !this.hasImage) return;
-    this.askTrace = true;
-  };
-  answerTrace = (now: boolean) => {
-    this.askTrace = false;
-    if (now && !this.drawing) this.startDraw();
-  };
-
-  startSetScale = () => {
-    if (!this.placement) return;
-    if (!this.canvas && this.onNeedCanvas) {
-      this.withCanvas(() => this.startSetScale());
-      return;
-    }
-    this.planSelected = false;
-    if (this.tool === 'custom') {
-      this.cancelMeasure();
-      this.tool = 'edit';
-      return;
-    }
-    if (this.drawing) this.cancelDraw();
-    this.tool = 'custom';
-    this.measure = null;
-    this.measuredDistance = null;
-    this.selectedIndex = -1;
-    this.canvas?.focus();
-  };
-
-  afterCalibration = () => {
-    this.tool = 'edit';
-    this.promptToTrace();
-  };
-
-  onScaleClick = (event: MouseEvent) => {
-    const canvas = this.canvas;
-    if (this.tool !== 'custom' || !this.placement || !canvas) return;
-    // No grid snapping (the user points at pixels), but the second point snaps
-    // to a right angle from the first: a measured wall is almost always straight.
-    const raw = canvas.pointerToRoom(event);
-    const measure = this.measure;
-    if (!measure) {
-      this.measure = { a: raw, b: null };
-    } else if (!measure.b) {
-      const p = canvas.snapAngle(measure.a, raw, [1, 0], event).point;
-      if (Math.hypot(p[0] - measure.a[0], p[1] - measure.a[1]) < 1e-9) return;
-      this.measure = { a: measure.a, b: p };
-    }
-  };
-
-  onScaleMove = (event: PointerEvent) => {
-    const canvas = this.canvas;
-    if (!canvas) return;
-    const raw = canvas.pointerToRoom(event);
-    const measure = this.measure;
-    this.cursorFree = measure && !measure.b ? canvas.snapAngle(measure.a, raw, [1, 0], event).point : raw;
-  };
-
-  onScaleEnter = (): boolean => {
-    if (this.measure?.b) {
-      this.confirmMeasure();
-      return true;
-    }
-    return false;
-  };
-
-  confirmMeasure = async () => {
-    const measure = this.measure;
-    const placement = this.placement;
-    if (!measure?.b || !placement || this.measuredDistance === null) return;
-    const k = this.k;
-    const a: [number, number] = [measure.a[0] / k, measure.a[1] / k];
-    const b: [number, number] = [measure.b[0] / k, measure.b[1] / k];
-    const newScale = scaleFromMeasurement(placement, a, b, this.measuredDistance / k);
-    if (newScale === null) return;
-    // Rescale about the room origin: a plan whose corner sits on (0,0) stays there,
-    // so no part of the room drifts below the axes where it could not be traced.
-    this.actions.setPlacement(rescaleAboutPoint(placement, [0, 0], newScale));
-    this.measure = null;
-    this.measuredDistance = null;
-    await tick();
-    this.canvas?.fitView();
-    this.afterCalibration();
-  };
-
-  cancelMeasure = () => {
-    this.measure = null;
-    this.measuredDistance = null;
-  };
-
   onPlanPointerDown = (event: PointerEvent) => {
     // Another tool takes the press as a canvas press
     if (this.activeTool && this.activeTool !== 'image') return;
     const placement = this.placement;
     if (!placement || !this.planInteractive || event.button !== 0 || this.canvas?.isSpaceHeld()) return;
+    // Inside the room its box takes the press (moves the room), unless the image is selected or Move image is on
+    if (!this.activeTool && !this.planSelected && this.transformable && this.outlineEditable && this.canvas) {
+      const [x, y] = this.canvas.pointerToRoom(event);
+      if (pointInPolygon(this.draft, x, y)) return;
+    }
     event.preventDefault();
     event.stopPropagation();
     this.selectedIndex = -1;
@@ -2214,14 +2049,6 @@ export class PlanController {
     if (next === units) return;
     const factor = lengthFactor(units, next);
     if (this.drawing) this.cancelDraw();
-    // A Set scale in progress carries on: its points and typed distance are in
-    // display units, so convert them (the user may switch units just to type the
-    // known length). The placement is in meters and needs no conversion.
-    const scalePoint = ([x, y]: Vertex): Vertex => [x * factor, y * factor];
-    const measure = this.measure;
-    if (measure) this.measure = { a: scalePoint(measure.a), b: measure.b ? scalePoint(measure.b) : null };
-    if (this.measuredDistance !== null) this.measuredDistance = roundToUnit(this.measuredDistance * factor, next);
-    this.cursorFree = null;
     // The stored scene converts itself; an unsaved local edit follows along
     if (this.dirty) this.draft = this.draft.map(([x, y]) => [roundToUnit(x * factor, next), roundToUnit(y * factor, next)] as Vertex);
     // Keep the same area on screen rather than refitting: with no outline yet the
