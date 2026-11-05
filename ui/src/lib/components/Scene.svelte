@@ -27,6 +27,7 @@
 	import { zoneValueFactor } from '$lib/utils/calculations';
 	import { zoneLabelAnchor } from '$lib/utils/planeWorld';
 	import type { ViewPreset } from './ViewSnapOverlay.svelte';
+	import { roomFrame, defaultCameraPosition, presetViewPosition } from '$lib/utils/sceneFraming';
 	import type { Surface } from '$lib/utils/surfaces';
 	import { orderSurfaceHits, type ClickItem, type SceneHover, type SurfaceHit } from './surfacePicking';
 
@@ -267,11 +268,13 @@
 		z: room.z
 	});
 
-	// Camera position based on room size
 	const maxDim = $derived(Math.max(roomDims.x, roomDims.y, roomDims.z));
-	const cameraDistance = $derived(maxDim * 1.4);
-	const defaultCamPos = $derived([-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7] as [number, number, number]);
-	const defaultTarget = $derived([roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2] as [number, number, number]);
+	// The camera centres on and fits the outline's own min..max box (the rulers
+	// still measure from the origin, and may fall partly outside the view)
+	const frame = $derived(roomFrame(room));
+	const cameraDistance = $derived(frame.distance);
+	const defaultCamPos = $derived(defaultCameraPosition(frame));
+	const defaultTarget = $derived([frame.center.x, frame.center.y, frame.center.z] as [number, number, number]);
 
 	// Camera and controls refs for view snapping
 	let cameraRefOrtho = $state<THREE.OrthographicCamera | undefined>(undefined);
@@ -299,8 +302,7 @@
 		if (!useOrtho) {
 			// Perspective → Ortho: size to room bounds
 			const cam = cameraRef as THREE.PerspectiveCamera;
-			const roomSize = Math.max(roomDims.x, roomDims.y, roomDims.z);
-			orthoHalfHeight = roomSize * 0.75;
+			orthoHalfHeight = frame.size * 0.75;
 			orthoHalfWidth = orthoHalfHeight * cam.aspect;
 		}
 
@@ -309,11 +311,7 @@
 	}
 
 	// Room center in Three.js coordinates (room Y→Three.js Z, room Z→Three.js Y)
-	const roomCenter = $derived({
-		x: roomDims.x / 2,
-		y: roomDims.z / 2, // height center
-		z: -roomDims.y / 2  // depth center (negated for Z-up→Y-up)
-	});
+	const roomCenter = $derived(frame.center);
 
 	// Animation state for smooth view transitions
 	let animationId: number | null = null;
@@ -335,30 +333,7 @@
 
 	// Compute target camera position for a preset view
 	function getViewPosition(view: ViewPreset): [number, number, number] | null {
-		const dist = cameraDistance;
-		const isoDist = dist * 0.7;
-		const isoHeight = dist * 0.6;
-
-		switch (view) {
-			case 'front':
-				return [roomCenter.x, roomCenter.y, dist];
-			case 'back':
-				return [roomCenter.x, roomCenter.y, -roomDims.y - dist];
-			case 'left':
-				return [-dist, roomCenter.y, roomCenter.z];
-			case 'right':
-				return [roomDims.x + dist, roomCenter.y, roomCenter.z];
-			case 'iso-front-left':
-				return [-isoDist, isoHeight, isoDist];
-			case 'iso-front-right':
-				return [roomDims.x + isoDist, isoHeight, isoDist];
-			case 'iso-back-left':
-				return [-isoDist, isoHeight, -roomDims.y - isoDist];
-			case 'iso-back-right':
-				return [roomDims.x + isoDist, isoHeight, -roomDims.y - isoDist];
-			default:
-				return null;
-		}
+		return view === 'top' ? null : presetViewPosition(view, frame);
 	}
 
 	// Shortest-path delta for an angle, wrapping around ±PI
