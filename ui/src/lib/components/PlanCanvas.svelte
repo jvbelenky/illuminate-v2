@@ -124,6 +124,8 @@
 		ariaLabel?: string;
 		/** Host layers: under the outline (after the grid), over it, and HTML overlays. */
 		underlay?: Snippet<[CanvasContext]>;
+		/** Results drawn over the room's fill and under its outline (the zones' heatmaps and markers). */
+		field?: Snippet<[CanvasContext]>;
 		overlay?: Snippet<[CanvasContext]>;
 		hud?: Snippet<[CanvasContext]>;
 		/** With the `custom` tool: the host owns clicks, pointer moves, leave and Enter. */
@@ -198,6 +200,7 @@
 		fitCentre = false,
 		fitInsetX = 0,
 		underlay,
+		field,
 		overlay,
 		hud,
 		onCustomClick,
@@ -1599,6 +1602,10 @@
 
 	<!-- Context outline (the room, when editing something inside it) -->
 	{#if contextPoints}
+		<polygon points={contextPoints} class="context-fill" />
+	{/if}
+	{#if field}{@render field(ctx)}{/if}
+	{#if contextPoints}
 		<polygon points={contextPoints} class="context-outline" stroke-width={px * 1.5} />
 	{/if}
 
@@ -1930,9 +1937,14 @@
 	.edge-label.editing-length {
 		visibility: hidden;
 	}
-	.context-outline {
+	.context-fill {
 		fill: var(--color-text-muted);
 		fill-opacity: 0.05;
+		stroke: none;
+		pointer-events: none;
+	}
+	.context-outline {
+		fill: none;
 		stroke: var(--color-text-muted);
 		stroke-opacity: 0.6;
 		stroke-linejoin: round;

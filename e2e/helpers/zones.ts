@@ -133,6 +133,17 @@ export async function setDisplayMode(
   await expect(btn).toHaveAttribute('aria-pressed', 'true');
 }
 
+/** Set the zone's 2D display mode (how the plan draws it). */
+export async function setDisplayMode2d(
+  page: Page,
+  mode: 'Heatmap' | 'Numeric' | 'Contours' | 'Markers' | 'None'
+): Promise<void> {
+  await openZoneFold(page, 'Display');
+  const btn = zoneEditor(page).getByRole('group', { name: '2D display mode' }).getByRole('button', { name: mode, exact: true });
+  await btn.click();
+  await expect(btn).toHaveAttribute('aria-pressed', 'true');
+}
+
 /** Enable dose mode and set time values. */
 export async function setDose(
   page: Page,

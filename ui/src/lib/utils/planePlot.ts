@@ -263,6 +263,8 @@ export interface PlaneDataOptions {
   fields?: (Float64Array | null)[];
   /** Leave holes transparent (a texture) rather than painting them the background. */
   clearHoles?: boolean;
+  /** Leave cells below the lowest level transparent rather than the floor color (a volume's bands seen from above). */
+  floorless?: boolean;
   /** A level under the pointer or being dragged: its line is drawn heavier, with a halo. */
   activeLevel?: number | null;
 }
@@ -359,9 +361,11 @@ export function drawPlaneData(ctx: CanvasRenderingContext2D, rect: Rect, view: V
   ctx.clip();
 
   const contoured = o.view === 'contours';
-  const bitmap = cellBitmap(grid, scale, palette.floor, contoured);
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(bitmap, toX(0), toY(0), grid.nU * cellW, grid.nV * cellH);
+  if (!(contoured && o.floorless)) {
+    const bitmap = cellBitmap(grid, scale, palette.floor, contoured);
+    ctx.drawImage(bitmap, toX(0), toY(0), grid.nU * cellW, grid.nV * cellH);
+  }
 
   if (contoured && scale.levels) {
     const shapes = o.shapes ?? contourShapes(grid, scale.levels, scale.colors, o.fields);
@@ -395,8 +399,12 @@ export function drawPlaneData(ctx: CanvasRenderingContext2D, rect: Rect, view: V
     });
     // Contours were traced over filled-in holes; put the holes back, cell for cell
     const lit = grid.data.some((v) => v !== 0 && Number.isFinite(v));
-    const unlit = lit ? holeBitmap(grid, palette.floor, (v) => v === 0) : null;
-    if (unlit) ctx.drawImage(unlit, toX(0), toY(0), grid.nU * cellW, grid.nV * cellH);
+    const unlit = lit ? holeBitmap(grid, o.floorless ? '#000000' : palette.floor, (v) => v === 0) : null;
+    if (unlit) {
+      if (o.floorless) ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(unlit, toX(0), toY(0), grid.nU * cellW, grid.nV * cellH);
+      ctx.globalCompositeOperation = 'source-over';
+    }
     const holes = holeBitmap(grid, o.clearHoles ? '#000000' : palette.background, (v) => !Number.isFinite(v));
     if (holes) {
       if (o.clearHoles) ctx.globalCompositeOperation = 'destination-out';

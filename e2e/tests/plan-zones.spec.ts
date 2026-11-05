@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { waitForApiIdle } from '../helpers/network';
 import { waitForSession } from '../helpers/session';
 import { attachErrorGuard } from '../helpers/errors';
-import { addZone, userZoneRows, zoneCount, zoneEditor } from '../helpers/zones';
+import { addZone, setDisplayMode2d, userZoneRows, zoneCount, zoneEditor } from '../helpers/zones';
 import { clickPlan, openStep, planSvg, planTool, showMain } from '../helpers/workspace';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
@@ -170,6 +170,46 @@ test.describe('Calc zones in the workspace', () => {
     await page.keyboard.press('Control+z');
     await waitForApiIdle(page);
     await expect.poll(async () => (await backendZones(page)).find((z) => !z.is_standard && z.type === 'plane')?.wall?.wall_id).toBe('east');
+    guard.assertClean();
+  });
+
+  test("a plane's results show on the plan as its 2D display asks: heatmap, contours, then its markers", async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    await waitForSession(page);
+    await addLampFromPreset(page);
+    await showMain(page, '2d');
+    await addZone(page, 'plane');
+    const plan = planSvg(page);
+    const id = await userZoneRows(page).first().getAttribute('data-id');
+    // Before a calculation the plane shows its grid points
+    await expect(plan.locator(`path.zone-markers[data-zone-id="${id}"]`)).toHaveCount(1);
+
+    await calculate(page);
+    await setDisplayMode2d(page, 'Heatmap');
+    const heat = plan.locator(`image.zone-field.heatmap[data-zone-id="${id}"]`);
+    await expect(heat).toHaveCount(1);
+    expect(await heat.getAttribute('href')).toMatch(/^data:image\/png/);
+    await expect(plan.locator(`path.zone-markers[data-zone-id="${id}"]`)).toHaveCount(0);
+    // Over the room's fill, under the room's outline
+    const order = await plan.evaluate((svg) => {
+      const all = [...svg.querySelectorAll('*')];
+      return [all.findIndex((e) => e.matches('.context-fill')), all.findIndex((e) => e.matches('image.zone-field')), all.findIndex((e) => e.matches('.context-outline'))];
+    });
+    expect(order[0]).toBeLessThan(order[1]);
+    expect(order[1]).toBeLessThan(order[2]);
+
+    await setDisplayMode2d(page, 'Contours');
+    await expect(plan.locator(`image.zone-field.contours[data-zone-id="${id}"]`)).toHaveCount(1);
+
+    await setDisplayMode2d(page, 'Markers');
+    await expect(plan.locator('image.zone-field')).toHaveCount(0);
+    const dots = plan.locator(`path.zone-markers[data-zone-id="${id}"]`);
+    await expect(dots).toHaveCount(1);
+    expect((await dots.getAttribute('d'))!.match(/h0/g)!.length).toBeGreaterThan(4);
+    // The 3D display is its own setting
+    const zone = await page.evaluate((zid) => (window as any).__illuminate_store__.zones.find((z: any) => z.id === zid), id);
+    expect(zone.display_mode_2d).toBe('markers');
+    expect(zone.display_mode ?? 'heatmap').toBe('heatmap');
     guard.assertClean();
   });
 
