@@ -324,3 +324,51 @@ export function globalPlaneRange(zones: CalcZone[], results: Record<string, Zone
   if (!isFinite(min) || !isFinite(max)) return null;
   return { min, max };
 }
+
+/** A plan-space affine map: x' = a x + c y + e, y' = b x + d y + f. */
+export type Affine = [a: number, b: number, c: number, d: number, e: number, f: number];
+
+/**
+ * The affine map that carries `from` onto `to` corner for corner (a move, a
+ * resize or a turn of a shape), or null when there is none: a different number
+ * of corners, a degenerate shape, or a corner edit no single map explains.
+ */
+export function fitAffine(from: Vertex[], to: Vertex[]): Affine | null {
+  const n = from.length;
+  if (n < 3 || to.length !== n) return null;
+  // The three corners spanning the largest triangle fix the map best
+  let best: [number, number, number] | null = null;
+  let bestArea = 0;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) for (let k = j + 1; k < n; k++) {
+    const [p, q, r] = [from[i], from[j], from[k]];
+    const area = Math.abs((q[0] - p[0]) * (r[1] - p[1]) - (r[0] - p[0]) * (q[1] - p[1]));
+    if (area > bestArea) [bestArea, best] = [area, [i, j, k]];
+  }
+  if (!best) return null;
+  let size = 0;
+  for (const [x, y] of from) size = Math.max(size, Math.abs(x), Math.abs(y));
+  if (bestArea <= 1e-12 * Math.max(1, size * size)) return null;
+  const [i, j, k] = best;
+  const [x1, y1] = from[i], [x2, y2] = from[j], [x3, y3] = from[k];
+  const det = (x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1);
+  // Solve the 2x2 linear part from the edge vectors, then the offset from the first corner
+  const solve = (t1: number, t2: number, t3: number): [number, number, number] => {
+    const du = t2 - t1, dv = t3 - t1;
+    const m = (du * (y3 - y1) - dv * (y2 - y1)) / det;
+    const nn = (dv * (x2 - x1) - du * (x3 - x1)) / det;
+    return [m, nn, t1 - m * x1 - nn * y1];
+  };
+  const [a, c, e] = solve(to[i][0], to[j][0], to[k][0]);
+  const [b, d, f] = solve(to[i][1], to[j][1], to[k][1]);
+  const tol = 1e-5 * Math.max(1, size);
+  for (let m = 0; m < n; m++) {
+    const [x, y] = from[m];
+    if (Math.abs(a * x + c * y + e - to[m][0]) > tol || Math.abs(b * x + d * y + f - to[m][1]) > tol) return null;
+  }
+  return [a, b, c, d, e, f];
+}
+
+/** The SVG `transform` for a plan-space map, in the canvas's flipped y (points drawn at (x, -y)). */
+export function svgMatrix([a, b, c, d, e, f]: Affine): string {
+  return `matrix(${a} ${-b} ${-c} ${d} ${e} ${-f})`;
+}

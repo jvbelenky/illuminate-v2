@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { waitForApiIdle } from '../helpers/network';
 import { waitForSession } from '../helpers/session';
 import { attachErrorGuard } from '../helpers/errors';
-import { addZone, setDisplayMode2d, userZoneRows, zoneCount, zoneEditor } from '../helpers/zones';
+import { addZone, selectZone, setDisplayMode2d, userZoneRows, zoneCount, zoneEditor } from '../helpers/zones';
 import { clickPlan, openStep, planSvg, planTool, showMain } from '../helpers/workspace';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
@@ -210,6 +210,52 @@ test.describe('Calc zones in the workspace', () => {
     const zone = await page.evaluate((zid) => (window as any).__illuminate_store__.zones.find((z: any) => z.id === zid), id);
     expect(zone.display_mode_2d).toBe('markers');
     expect(zone.display_mode ?? 'heatmap').toBe('heatmap');
+    guard.assertClean();
+  });
+
+  test('no tint covers a zone\'s results: selected it is outlined only, the room tint sits under them, and they follow a drag', async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    await waitForSession(page);
+    await addLampFromPreset(page);
+    await showMain(page, '2d');
+    await addZone(page, 'plane');
+    const plan = planSvg(page);
+    const id = await userZoneRows(page).first().getAttribute('data-id');
+    // Without results the selected zone keeps its tint
+    const draft = plan.locator('polygon.outline');
+    await expect.poll(() => draft.evaluate((p) => getComputedStyle(p).fill)).not.toBe('none');
+
+    await calculate(page);
+    await setDisplayMode2d(page, 'Heatmap');
+    const heat = plan.locator(`image.zone-field.heatmap[data-zone-id="${id}"]`);
+    await expect(heat).toHaveCount(1);
+    // Selected with results: its outline only
+    await expect.poll(() => draft.evaluate((p) => getComputedStyle(p).fill)).toBe('none');
+
+    // Editing the room: its tint goes under the results, its outline stays over them
+    await openStep(page, 'room', 'floorplan');
+    await expect(heat).toHaveCount(1);
+    const order = await plan.evaluate((svg) => {
+      const all = [...svg.querySelectorAll('*')];
+      return [all.findIndex((e) => e.matches('.draft-fill')), all.findIndex((e) => e.matches('image.zone-field')), all.findIndex((e) => e.matches('polygon.outline'))];
+    });
+    expect(order[0]).toBeGreaterThanOrEqual(0);
+    expect(order[0]).toBeLessThan(order[1]);
+    expect(order[1]).toBeLessThan(order[2]);
+    expect(await plan.locator('polygon.outline').evaluate((p) => getComputedStyle(p).fill)).toBe('none');
+
+    // A drag carries the results with the zone until it lands; then they are stale and its markers show
+    await openStep(page, 'zones');
+    await selectZone(page, 0);
+    const b = (await draft.boundingBox())!;
+    await page.mouse.move(b.x + b.width * 0.3, b.y + b.height * 0.3);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width * 0.3 + 40, b.y + b.height * 0.3 + 25, { steps: 6 });
+    await expect(heat).toHaveAttribute('transform', /^matrix\(1 0 0 1 [-\d.e]+ [-\d.e]+\)$/);
+    await page.mouse.up();
+    await expect(heat).toHaveCount(0);
+    await expect(plan.locator(`path.zone-markers[data-zone-id="${id}"]`)).toHaveCount(1);
+    await expect(plan.locator(`path.zone-markers[data-zone-id="${id}"]`)).not.toHaveAttribute('transform', /.+/);
     guard.assertClean();
   });
 

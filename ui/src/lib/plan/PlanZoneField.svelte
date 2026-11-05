@@ -30,6 +30,7 @@
 	import {
 		cellRect, columnMax, fieldGrid, fieldKind, freshValues, globalPlaneRange, gridPoints, gridRange, gridSpacing,
 		heatmapPixels, heatmapScale, markerPath, markerRadius, markerStep, type FieldGrid, type FieldKind,
+		svgMatrix, type Affine,
 	} from './zoneField';
 
 	interface Props {
@@ -42,9 +43,15 @@
 		px: number;
 		selectedId?: string | null;
 		hoveredId?: string | null;
+		/**
+		 * The zone being edited on this canvas, before the edit applies: its layer moves
+		 * with `transform` (a move, resize or turn), or it shows `zone`'s markers (a
+		 * corner edit), or nothing (an outline that is not valid yet).
+		 */
+		live?: { id: string; transform: Affine | null; zone: CalcZone | null } | null;
 	}
 
-	let { zones, allZones, room, px, selectedId = null, hoveredId = null }: Props = $props();
+	let { zones, allZones, room, px, selectedId = null, hoveredId = null, live = null }: Props = $props();
 	const clipBase = `zf${uid++}`;
 
 	const colormap = $derived(room.colormap || 'plasma');
@@ -133,11 +140,15 @@
 		const stored = $plotSettings;
 		const pal = palette;
 		const out: Item[] = [];
-		for (const z of zones) {
+		for (const stored0 of zones) {
+			// Mid-edit without one map from the stored outline: its markers where the outline is now
+			const reshaped = live?.id === stored0.id && !live.transform;
+			if (reshaped && !live!.zone) continue;
+			const z = reshaped ? live!.zone! : stored0;
 			const grid = fieldGrid(z, room);
 			if (!grid) continue;
 			const result = zoneResults?.[z.id];
-			const values = freshValues(z, result);
+			const values = reshaped ? null : freshValues(z, result);
 			const factor = zoneValueFactor(z, result);
 			const mode = zoneDisplayMode(z, '2d');
 			const decimals = room.precision ?? 1;
@@ -215,6 +226,7 @@
 	);
 	const fields = $derived(items.filter((it) => it.kind !== 'markers'));
 
+	const transform = (id: string) => (live?.id === id && live.transform ? svgMatrix(live.transform) : undefined);
 	const opacity = (id: string) => (id === hoveredId ? 0.95 : id === selectedId ? 0.9 : 0.8);
 	const polygon = (vs: [number, number][]) => vs.map(([x, y]) => `${x},${-y}`).join(' ');
 </script>
@@ -234,10 +246,11 @@
 					height={f.rect.h}
 					preserveAspectRatio="none"
 					clip-path="url(#{clipBase}-{i})"
+					transform={transform(f.id)}
 					opacity={opacity(f.id) * (f.volume ? 0.8 : 1)}
 				/>
 			{:else if f.texts}
-				<g class="zone-field numeric" data-zone-id={f.id} clip-path="url(#{clipBase}-{i})" font-size={f.fontSize} stroke-width={(f.fontSize ?? 0) * 0.18}>
+				<g class="zone-field numeric" data-zone-id={f.id} clip-path="url(#{clipBase}-{i})" transform={transform(f.id)} font-size={f.fontSize} stroke-width={(f.fontSize ?? 0) * 0.18}>
 					{#each f.texts as t, k (k)}
 						<text x={t.x} y={-t.y}>{t.text}</text>
 					{/each}
@@ -245,7 +258,7 @@
 			{/if}
 		{/each}
 		{#each markers as m (m.id)}
-			<path class="zone-markers" class:selected={m.id === selectedId} class:highlighted={m.id !== selectedId && m.id === hoveredId} class:off={!m.enabled} data-zone-id={m.id} d={m.d} stroke-width={m.r * 2} />
+			<path class="zone-markers" class:selected={m.id === selectedId} class:highlighted={m.id !== selectedId && m.id === hoveredId} class:off={!m.enabled} data-zone-id={m.id} d={m.d} stroke-width={m.r * 2} transform={transform(m.id)} />
 		{/each}
 	</g>
 {/if}
