@@ -11,7 +11,7 @@
 	import { compliance } from '$lib/stores/compliance';
 	import { auditProblems } from '$lib/stores/audit';
 	import { nextStep } from '$lib/stores/nextStep';
-	import { performCalculation } from '$lib/utils/calculate';
+	import { requestCalculation } from '$lib/stores/calculationStatus';
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
 	import { averageKineticsBySpecies, logReductionTime, eachUV, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
 	import { plotStyles, zoneLimitSet } from '$lib/stores/plotStyles';
@@ -615,7 +615,7 @@ values: result.values as number[][][],
 			{:else if $nextStep.id === 'no-zones' && onOpenZones}
 				<button type="button" class="secondary next-step-btn" data-next-step={$nextStep.id} onclick={() => onOpenZones()}>{$nextStep.title}</button>
 			{:else if $nextStep.id === 'calc-error'}
-				<button type="button" class="secondary next-step-btn" data-next-step={$nextStep.id} onclick={() => performCalculation()}>{$nextStep.title}</button>
+				<button type="button" class="secondary next-step-btn" data-next-step={$nextStep.id} onclick={requestCalculation}>{$nextStep.title}</button>
 			{:else}
 				<div class="next-hint tone-{$nextStep.tone}" data-next-step={$nextStep.id}>
 					<p class="next-hint-title">{$nextStep.title}</p>

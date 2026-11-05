@@ -6,7 +6,7 @@
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { userSettings } from '$lib/stores/settings';
 	import { isMobile } from '$lib/stores/viewport';
-	import { calculationStatus } from '$lib/stores/calculationStatus';
+	import { calculationStatus, calculateRequests } from '$lib/stores/calculationStatus';
 	import { calculationProgress } from '$lib/stores/calculationProgress';
 	import Glyph from '$lib/workspace/Glyph.svelte';
 
@@ -111,6 +111,15 @@
 			console.error('Calculation error:', e);
 		}
 	}
+
+	// Another surface asked for a calculation (the Results retry): run it as a click would
+	let seenRequests = $calculateRequests;
+	$effect(() => {
+		const n = $calculateRequests;
+		if (n === seenRequests) return;
+		seenRequests = n;
+		if (!isCalculating) calculate();
+	});
 
 	function closeBudgetModal() {
 		budgetError = null;

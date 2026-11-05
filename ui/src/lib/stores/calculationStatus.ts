@@ -32,3 +32,14 @@ function createCalculationStatusStore() {
 }
 
 export const calculationStatus = createCalculationStatusStore();
+
+/**
+ * Ask the Calculate button to run, as if clicked: it owns the budget-exceeded
+ * modal and the auto-recalculate bookkeeping, so other surfaces (the Results
+ * "Calculation failed" retry) go through it rather than calculating themselves.
+ */
+const requests = writable(0);
+export const calculateRequests = { subscribe: requests.subscribe };
+export function requestCalculation() {
+  requests.update((n) => n + 1);
+}
