@@ -11,6 +11,7 @@
 	import { compliance } from '$lib/stores/compliance';
 	import { auditProblems } from '$lib/stores/audit';
 	import { nextStep } from '$lib/stores/nextStep';
+	import { performCalculation } from '$lib/utils/calculate';
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
 	import { averageKineticsBySpecies, logReductionTime, eachUV, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
 	import { plotStyles, zoneLimitSet } from '$lib/stores/plotStyles';
@@ -41,11 +42,13 @@
 		onOpenAdvancedSettings?: (lampId: string) => void;
 		onSelectSpecies?: () => void;
 		/** Opens the editor on the Lamps step (the empty state's "Add a lamp to begin"). */
-		onOpenLamps?: () => void;
+		/** Open the Lamps step; with a lamp id, that lamp's card (and its fixture dropdown when `fixture`). */
+		onOpenLamps?: (lampId?: string, fixture?: boolean) => void;
+		onOpenZones?: () => void;
 		isoGeometryMap?: Record<string, { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }>;
 	}
 
-	let { onShowAudit, showHeader = true, onOpenReport, onLampHover, onOpenAdvancedSettings, onSelectSpecies, onOpenLamps, isoGeometryMap = {} }: Props = $props();
+	let { onShowAudit, showHeader = true, onOpenReport, onLampHover, onOpenAdvancedSettings, onSelectSpecies, onOpenLamps, onOpenZones, isoGeometryMap = {} }: Props = $props();
 
 	// Inline dose-time editing on the zone result cards (null = nothing being edited)
 	let editingDoseTimeZoneId = $state<string | null>(null);
@@ -604,7 +607,15 @@ values: result.values as number[][][],
 		<div class="empty-state">
 			<p>No results yet</p>
 			{#if $nextStep.id === 'no-lamps' && onOpenLamps}
-				<button type="button" class="secondary next-step-btn" data-next-step={$nextStep.id} onclick={onOpenLamps}>{$nextStep.title}</button>
+				<button type="button" class="secondary next-step-btn" data-next-step={$nextStep.id} onclick={() => onOpenLamps()}>{$nextStep.title}</button>
+			{:else if $nextStep.id === 'lamps-excluded' && onOpenLamps}
+				<button type="button" class="secondary next-step-btn" data-next-step={$nextStep.id} onclick={() => onOpenLamps($lamps.length === 1 ? $lamps[0].id : undefined)}>{$nextStep.title}</button>
+			{:else if $nextStep.id === 'lamp-needs-model' && onOpenLamps}
+				<button type="button" class="secondary next-step-btn" data-next-step={$nextStep.id} onclick={() => onOpenLamps($nextStep.action?.slice('open-lamp:'.length), true)}>{$nextStep.title}</button>
+			{:else if $nextStep.id === 'no-zones' && onOpenZones}
+				<button type="button" class="secondary next-step-btn" data-next-step={$nextStep.id} onclick={() => onOpenZones()}>{$nextStep.title}</button>
+			{:else if $nextStep.id === 'calc-error'}
+				<button type="button" class="secondary next-step-btn" data-next-step={$nextStep.id} onclick={() => performCalculation()}>{$nextStep.title}</button>
 			{:else}
 				<div class="next-hint tone-{$nextStep.tone}" data-next-step={$nextStep.id}>
 					<p class="next-hint-title">{$nextStep.title}</p>

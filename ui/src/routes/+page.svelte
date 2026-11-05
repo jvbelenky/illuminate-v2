@@ -1100,6 +1100,15 @@
 		return newLamp;
 	}
 
+	/** Results next-step buttons: the Lamps step, with a lamp's card open (and its fixture dropdown focused) when given. */
+	function openLampsFromResults(lampId?: string, fixture = false) {
+		openStep('lamps', undefined, lampId ? async () => {
+			plan.selectedLampIds = [lampId];
+			if (fixture) await promptForFixture(lampId);
+			else await scrollRowIntoView(lampId);
+		} : undefined);
+	}
+
 	/** Edit › Add Lamp: as the Lamps step's "+ Add lamp", a lamp on the user's defaults, its editor asking for a fixture. */
 	function addNewLamp() {
 		openStep('lamps', undefined, async () => {
@@ -1313,7 +1322,7 @@
 	{/snippet}
 
 	{#snippet resultsContent(header: boolean)}
-		<ZoneStatsPanel showHeader={header} onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onOpenReport={() => openOrRestore('Generate report', () => showReportModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} onOpenLamps={() => openStep('lamps', undefined)} {isoGeometryMap} />
+		<ZoneStatsPanel showHeader={header} onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onOpenReport={() => openOrRestore('Generate report', () => showReportModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} onOpenLamps={openLampsFromResults} onOpenZones={() => openStep('zones', undefined)} {isoGeometryMap} />
 	{/snippet}
 
 	<!-- Main Layout -->

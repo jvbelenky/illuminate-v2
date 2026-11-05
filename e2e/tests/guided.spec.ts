@@ -100,6 +100,16 @@ test.describe('Guided workspace', () => {
     await expect(page.locator('.lamps-part .editor-row')).toHaveCount(lampCountBefore);
   });
 
+  test('Results: "Choose a model for Lamp 1" opens the lamp with its fixture dropdown focused', async ({ page }) => {
+    await waitForSession(page);
+    await addLamp(page);
+    await finishEditing(page);
+    await page.getByRole('button', { name: 'Choose a model for Lamp 1' }).click();
+    await expect(page.locator('button.editor-stage[data-stage="lamps"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(lampEditor(page)).toBeVisible();
+    await expect(fixtureSelect(page)).toBeFocused();
+  });
+
   test('the main view opens on 2D (3D in the mini view) unless the user chose 3D', async ({ page }) => {
     // A stored layout whose 3D main view came from a flow, not a choice
     await page.addInitScript(() => {
