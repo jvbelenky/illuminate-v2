@@ -258,7 +258,7 @@ describe('ZonePanel', () => {
     expect(spy).toHaveBeenLastCalledWith('zone-1', { show_label_2d: false });
   });
 
-  it('point shows Position and Aim at rows with X Y Z and Place / Aim buttons', async () => {
+  it('point shows Position and Aim at rows with X Y Z, each with its pick', async () => {
     const { spy } = renderPanel(point);
     const pos = screen.getByRole('group', { name: /^Position/ });
     const aim = screen.getByRole('group', { name: /^Aim at/ });
@@ -270,8 +270,11 @@ describe('ZonePanel', () => {
     }
     await fireEvent.change(within(pos).getByLabelText('Y'), { target: { value: '3.5' } });
     expect(spy).toHaveBeenLastCalledWith('zone-5', { y: 3.5 });
-    expect(screen.getByRole('button', { name: 'Place' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Aim' })).toBeTruthy();
+    // Each row's pick beside it, as in the lamp editor (no Place / Aim buttons: the plan's Move and Aim tools)
+    expect(within(pos).getByRole('button', { name: 'Pick position' })).toBeTruthy();
+    expect(within(aim).getByRole('button', { name: 'Pick aim point' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Place' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Aim' })).toBeNull();
     expect(fold('Display').getAttribute('aria-expanded')).toBe('false');
     expect(fold('Advanced').getAttribute('aria-expanded')).toBe('false');
     // Display comes after Advanced

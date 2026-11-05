@@ -147,6 +147,33 @@ describe('PlanPane', () => {
     }
   });
 
+  it('a selected calc point has a lamp\'s tools: Move, Aim, Copy, Delete; Move and Aim arm (pressed) and drop; a wall view has no Aim', async () => {
+    const pt = { id: 'p1', name: 'Eye', type: 'point' as const, enabled: true, x: 2, y: 1, z: 1.2, aim_x: 4, aim_y: 3, aim_z: 1.2 };
+    const tools = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLButtonElement>('.plan-toolbar button'));
+    const { container, ctl } = mount({ zones: [pt] as any, context: 'zones' });
+    ctl.selectZone('p1');
+    await tick();
+    expect(tools(container).map((b) => b.getAttribute('aria-label'))).toEqual(['Move', 'Aim', 'Copy', 'Delete']);
+    expect(tools(container).every((b) => !b.disabled)).toBe(true);
+    expect(tools(container).map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'false', null, null]);
+    await fireEvent.click(tools(container)[0]);
+    expect(ctl.activeTool).toBe('move');
+    expect(tools(container)[0].getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(tools(container)[1]);
+    expect(ctl.activeTool).toBe('aim');
+    expect(tools(container).map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true', null, null]);
+    await fireEvent.click(tools(container)[1]);
+    expect(ctl.activeTool).toBeNull();
+    // The point's ring and aim dot wear the selection cyan class
+    expect(container.querySelector('circle.plan-lamp.point')!.classList.contains('selected')).toBe(true);
+    expect(container.querySelector('circle.plan-aim.point')!.classList.contains('selected')).toBe(true);
+    ctl.setSurface('wall:0');
+    ctl.selectZone('p1');
+    await tick();
+    expect(tools(container).map((b) => b.getAttribute('aria-label'))).toEqual(['Move', 'Copy', 'Delete']);
+    expect(container.querySelector('circle.plan-lamp.point.selected')).not.toBeNull();
+  });
+
   it('draws lamp markers, aim handles and labels at their minimum on-screen sizes', async () => {
     // A 333 x 801 canvas (the narrow Side by side pane): the short side shows view.size units
     class ImmediateObserver {
@@ -219,11 +246,12 @@ describe('PlanPane', () => {
     }
   });
 
-  it('outline offers Move image once an image is loaded', () => {
+  it('the outline strip has no Move image with an image loaded (Adjust image… places it)', () => {
     const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
     const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
-    render(Harness, { props: { ...baseProps, floorplan: placement, image } });
-    expect(screen.getByRole('button', { name: 'Move image' })).toBeTruthy();
+    const { container } = render(Harness, { props: { ...baseProps, floorplan: placement, image } });
+    expect(screen.queryByRole('button', { name: 'Move image' })).toBeNull();
+    expect(Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.getAttribute('aria-label'))).toEqual(['Edit vertices', 'Rotate 90°', 'Draw new outline']);
   });
 
   it('readonly draws the plan but shows no handles or toolbar and ignores drags', async () => {
@@ -2058,6 +2086,29 @@ describe('PlanPane typing on the plan', () => {
     const [, id, partial] = callsOf(calls, 'updateLamp').at(-1) as [string, string, Record<string, number>];
     expect(id).toBe('lamp-7');
     expect(partial).toEqual({ x: 2.5, y: 2, z: 3 });
+  });
+
+  it('double-click a calc point (or its aim dot) to type its X, Y and Z; the aim point stays', async () => {
+    const calls: unknown[][] = [];
+    const pt = { id: 'p1', name: 'Eye', type: 'point' as const, enabled: true, x: 2, y: 1, z: 1.2, aim_x: 4, aim_y: 3, aim_z: 1.2 };
+    mount({ calls, zones: [pt] as any, context: 'zones' });
+    await tick();
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Point Eye' }));
+    await tick();
+    expect(field('Eye X')!.value).toBe('2.0');
+    expect(field('Eye Y')!.value).toBe('1.0');
+    const z = field('Eye Z')!;
+    expect(z.value).toBe('1.2');
+    await fireEvent.input(field('Eye Y')!, { target: { value: '2' } });
+    await fireEvent.input(z, { target: { value: '1.5' } });
+    await fireEvent.keyDown(z, { key: 'Enter' });
+    expect(field('Eye Z')).toBeNull();
+    const [, id, partial] = callsOf(calls, 'updateZone').at(-1) as [string, string, Record<string, number>];
+    expect(id).toBe('p1');
+    expect(partial).toEqual({ x: 2, y: 2, z: 1.5 });
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Aim of Eye' }));
+    await tick();
+    expect(field('Eye X')).not.toBeNull();
   });
 
   it('a bad lamp value stays open, invalid; Escape cancels', async () => {

@@ -422,6 +422,29 @@ export function presetOutline(kind: OutlinePreset, w: number, h: number, step = 
 }
 
 /**
+ * The outline's own size: its bounding box's width (x) and length (y). Equal to
+ * `roomExtents` for an outline at the origin; a room moved or turned off the
+ * origin is narrower than its far edge.
+ */
+export function outlineSize(vertices: Vertex[]): { x: number; y: number } {
+  const bb = polygonBoundingBox(vertices);
+  return { x: bb.xMax - bb.xMin, y: bb.yMax - bb.yMin };
+}
+
+/**
+ * Stretch an outline so its own width becomes `x` and/or its length `y` (an
+ * omitted axis is left alone), about its bounding box's lower-left corner, so
+ * it stays where it is.
+ */
+export function resizeOutline(vertices: Vertex[], x?: number, y?: number): Vertex[] {
+  const bb = polygonBoundingBox(vertices);
+  const size = outlineSize(vertices);
+  const fx = x !== undefined && size.x > EPS ? x / size.x : 1;
+  const fy = y !== undefined && size.y > EPS ? y / size.y : 1;
+  return vertices.map(([vx, vy]) => [snapTo(bb.xMin + (vx - bb.xMin) * fx, 0), snapTo(bb.yMin + (vy - bb.yMin) * fy, 0)] as Vertex);
+}
+
+/**
  * Scale an outline so its bounding-box extents become `x` and/or `y`
  * (each axis independently; an omitted axis is left alone). Coordinates are
  * measured from the origin, so the outline stretches about (0, 0).

@@ -33,6 +33,8 @@ import {
   snapSegmentDirection,
   presetOutline,
   scaleOutlineTo,
+  outlineSize,
+  resizeOutline,
 } from './roomGeometry';
 
 const L_SHAPE: Vertex[] = [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]];
@@ -249,5 +251,19 @@ describe('scaleOutlineTo', () => {
     expect(scaleOutlineTo(l, undefined, 2)).toEqual([[0, 0], [6, 0], [6, 1], [3, 1], [3, 2], [0, 2]]);
     expect(scaleOutlineTo(l, 3, 8)).toEqual([[0, 0], [3, 0], [3, 4], [1.5, 4], [1.5, 8], [0, 8]]);
     expect(scaleOutlineTo(l)).toEqual(l);
+  });
+});
+
+describe('outlineSize and resizeOutline', () => {
+  // The 6 x 4 room turned a quarter about its centre and moved up to y >= 0
+  const turned: Vertex[] = [[5, 0], [5, 6], [1, 6], [1, 0]];
+  it('the size is the outline\'s own width and length, not its far edge', () => {
+    expect(outlineSize(RECT)).toEqual({ x: 6, y: 4 });
+    expect(outlineSize(turned)).toEqual({ x: 4, y: 6 });
+  });
+  it('resizing stretches about the lower-left corner, so the outline stays where it is', () => {
+    expect(resizeOutline(turned, 2)).toEqual([[3, 0], [3, 6], [1, 6], [1, 0]]);
+    expect(resizeOutline(turned, undefined, 3)).toEqual([[5, 0], [5, 3], [1, 3], [1, 0]]);
+    expect(outlineSize(resizeOutline(turned, 8, 2))).toEqual({ x: 8, y: 2 });
   });
 });

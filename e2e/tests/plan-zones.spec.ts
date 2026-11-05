@@ -56,6 +56,67 @@ test.describe('Calc zones in the workspace', () => {
     guard.assertClean();
   });
 
+  test('a calc point moves and aims on the plan as a lamp: Move keeps its aim target, Aim turns it; undo steps back', async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await waitForSession(page);
+    await addZone(page, 'point');
+    await showMain(page, '2d');
+    const plan = planSvg(page);
+    const marker = plan.locator('circle.plan-lamp.point');
+    await expect(marker).toHaveClass(/\bselected\b/);
+    for (const name of ['Move', 'Aim', 'Copy', 'Delete']) await expect(planTool(page, name)).toBeVisible();
+    // The zone editor's picks sit beside its rows, as a lamp's (no Place / Aim buttons)
+    await expect(zoneEditor(page).getByRole('button', { name: 'Pick position' })).toBeVisible();
+    await expect(zoneEditor(page).getByRole('button', { name: 'Place', exact: true })).toHaveCount(0);
+    const point = async () => (await backendZones(page)).find((z) => !z.is_standard && z.type === 'point')!;
+    const pos = (z: Record<string, any>) => [z.x, z.y, z.z];
+    const aim = (z: Record<string, any>) => [z.aim_x, z.aim_y, z.aim_z];
+    const start = await point();
+
+    // Move: one drag anywhere moves the point; its aim target stays, so its direction turns
+    await planTool(page, 'Move').click();
+    await expect(planTool(page, 'Move')).toHaveAttribute('aria-pressed', 'true');
+    const m = (await marker.boundingBox())!;
+    const [x0, y0] = [m.x + m.width / 2 + 60, m.y + m.height / 2 + 40];
+    await page.mouse.move(x0, y0);
+    await page.mouse.down();
+    await page.mouse.move(x0 + 40, y0 + 30, { steps: 5 });
+    await page.mouse.up();
+    await waitForApiIdle(page);
+    await expect.poll(async () => pos(await point())).not.toEqual(pos(start));
+    const moved = await point();
+    expect(aim(moved)).toEqual(aim(start));
+    await expect(planTool(page, 'Move')).toHaveAttribute('aria-pressed', 'false');
+    // The editor's fields follow
+    const xField = zoneEditor(page).getByRole('group', { name: /^Position/ }).getByLabel('X');
+    await expect.poll(async () => Math.abs(parseFloat(await xField.inputValue()) - moved.x)).toBeLessThan(0.051);
+
+    // Aim: the drag from the point ends where it now looks; its position stays
+    await planTool(page, 'Aim').click();
+    const p = (await marker.boundingBox())!;
+    const [px, py] = [p.x + p.width / 2, p.y + p.height / 2];
+    await page.mouse.move(px, py);
+    await page.mouse.down();
+    await page.mouse.move(px - 50, py + 70, { steps: 5 });
+    await page.mouse.up();
+    await waitForApiIdle(page);
+    await expect.poll(async () => aim(await point())).not.toEqual(aim(start));
+    const aimed = await point();
+    expect(pos(aimed)).toEqual(pos(moved));
+    expect(aimed.aim_z).toBe(start.aim_z);
+
+    // One undo per gesture: the aim, then the move
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+z');
+    await expect.poll(async () => aim(await point())).toEqual(aim(start));
+    expect(pos(await point())).toEqual(pos(moved));
+    await page.keyboard.press('Control+z');
+    await expect.poll(async () => pos(await point())).toEqual(pos(start));
+    expect(aim(await point())).toEqual(aim(start));
+    guard.assertClean();
+  });
+
   test("the zone editor's Copy opens the copy and Delete removes it; undo brings it back", async ({ page }) => {
     await waitForSession(page);
     await addZone(page, 'point');
