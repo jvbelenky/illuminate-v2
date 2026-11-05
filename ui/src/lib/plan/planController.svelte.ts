@@ -24,6 +24,8 @@ import {
 } from '$lib/utils/roomGeometry';
 import { imageRect, imageCorners, DEFAULT_FLOORPLAN_OPACITY } from '$lib/utils/floorplanImage';
 import { placementFromFrame, type ImportFrame } from '$lib/floorplan/importFrame';
+import { wallNames, wallObject, type WallMeters } from '$lib/floorplan/wallStructures';
+import { defaultObject } from '$lib/types/project';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
 import { fitAffine, type Affine } from './zoneField';
@@ -1955,11 +1957,12 @@ export class PlanController {
   };
 
   /** Create room: the image placed by the frame and (unless kept) the outline, in one undo step. */
-  applyImport = async (result: { frame: ImportFrame; outlineMeters: Vertex[] | null }) => {
+  applyImport = async (result: { frame: ImportFrame; outlineMeters: Vertex[] | null; walls?: WallMeters[] }) => {
     const s = this.importSession;
     if (!s) return;
     let placement = placementFromFrame(result.frame, s.imageId ?? crypto.randomUUID(), s.initial?.opacity ?? DEFAULT_FLOORPLAN_OPACITY);
     let vertices: Vertex[] | null = null;
+    let walls: WallMeters[] = [];
     if (result.outlineMeters && result.outlineMeters.length >= 3) {
       let ring = normalizeCCW(result.outlineMeters);
       // The room lives at x, y >= 0: an outline reaching below the origin moves up, its image with it
@@ -1969,6 +1972,7 @@ export class PlanController {
         ring = ring.map(([x, y]) => [x + dx, y + dy] as Vertex);
         placement = { ...placement, offsetX: placement.offsetX + dx, offsetY: placement.offsetY + dy };
       }
+      walls = (result.walls ?? []).map((w) => ({ a: [w.a[0] + dx, w.a[1] + dy], b: [w.b[0] + dx, w.b[1] + dy], thickness: w.thickness }));
       const units = this.scene().units;
       const k = this.k;
       vertices = ring.map(([x, y]) => [Math.max(0, roundToUnit(x * k, units)), Math.max(0, roundToUnit(y * k, units))] as Vertex);
@@ -1980,6 +1984,15 @@ export class PlanController {
     if (s.imageId) this.actions.setPlacement(placement);
     else this.actions.setPlacement(placement, { id: placement.imageId, mime: s.mime, src: s.src });
     if (vertices) this.actions.setOutline(vertices);
+    // Interior walls become structures, floor to ceiling, in the same step
+    if (walls.length) {
+      const scene = this.scene();
+      const base = defaultObject(scene.room, scene.units);
+      const names = wallNames(scene.objects, walls.length);
+      walls.forEach((w, i) => {
+        this.actions.addObstacle(wallObject(w, this.k, scene.roomZ, names[i], base)).catch((e) => console.error('Failed to add wall:', e));
+      });
+    }
     if (!s.imageId) {
       this.imageFileName = s.fileName;
       this.pdfFile = s.pdf?.file ?? null;

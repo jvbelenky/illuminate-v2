@@ -8,13 +8,15 @@
  *   3. thin strokes (text, furniture, door swings) go: an opening sized from the
  *      wall thickness, then small ink blobs are dropped;
  *   4. a closing bridges door gaps up to about 1 m at the given scale;
- *   5. room mode: the enclosed region holding the seed; floor mode: everything
- *      the border flood does not reach (the outer envelope);
+ *   5. room mode: the enclosed region holding the seed; floor mode: all the
+ *      enclosed space inside the exterior walls; then a closing as wide as the
+ *      thickest wall fills interior walls and stubs, so the outline follows the
+ *      INNER face of the walls around it (the air of the room);
  *   6. its outer boundary is traced along pixel edges, simplified
  *      (Douglas–Peucker) and near-right angles are snapped square.
  *
- * `buildWallMask` is exported on its own so later work (interior walls as
- * structures) can reuse the cleaned wall mask.
+ * `buildWallMask` is exported on its own, and the result carries the region,
+ * so interiorWalls.ts can read the walls inside the outline.
  */
 
 export type Pt = [number, number];
@@ -51,6 +53,8 @@ export interface DetectResult {
   /** Outline in input-raster pixels (CCW on screen is not guaranteed); null when nothing sensible was found. */
   outline: Pt[] | null;
   mask: WallMask;
+  /** The pixels inside the outline (working resolution, 1 = inside), interior walls included; null without an outline. */
+  region?: Uint8Array | null;
 }
 
 // --- 1. grey + downscale
@@ -226,6 +230,8 @@ export interface WallMaskInfo extends WallMask {
   bridge: number;
   /** Estimated wall thickness, working pixels. */
   wallThickness: number;
+  /** The cleaned ink before door gaps were bridged (1 = wall): doorways stay open in it. */
+  ink: Uint8Array;
 }
 
 /** The ink that forms walls, thin strokes and small blobs removed and door gaps bridged, at the working resolution. Null for a blank image. */
@@ -267,7 +273,7 @@ export function buildWallMask(img: RasterImage, opts: DetectOptions = {}): WallM
   bridge = Math.max(1, Math.min(bridge, Math.floor(Math.min(w, h) / 8)));
   const closed = erode(dilate(ink, w, h, bridge), w, h, bridge);
   for (let i = 0; i < closed.length; i++) closed[i] |= ink[i];
-  return { width: w, height: h, data: closed, factor, bridge, wallThickness: thickness };
+  return { width: w, height: h, data: closed, factor, bridge, wallThickness: thickness, ink };
 }
 
 // --- 5. the region
@@ -281,21 +287,14 @@ function regionFor(mask: WallMaskInfo, mode: DetectMode): Uint8Array | null {
   for (let y = 0; y < h; y++) border.push(y * w, y * w + w - 1);
   const exterior = flood(open, w, h, border);
 
+  const minArea = Math.max(16, 0.0005 * w * h);
   if (mode.mode === 'floor') {
-    const foot = new Uint8Array(w * h);
-    let any = false;
-    for (let i = 0; i < foot.length; i++) if (!exterior[i]) { foot[i] = 1; any = true; }
-    if (!any) return null;
-    const { label, stats } = components(foot, w, h);
-    let best = 0;
-    for (let k = 1; k < stats.length; k++) if (stats[k].n > (stats[best]?.n ?? 0)) best = k;
-    if (!best) return null;
-    const out = new Uint8Array(w * h);
-    let enclosed = 0;
-    for (let i = 0; i < out.length; i++) if (label[i] === best) { out[i] = 1; if (open[i]) enclosed++; }
-    // Walls alone (no enclosed space) are not a floor
-    if (enclosed < 0.05 * stats[best].n) return null;
-    return out;
+    // All the enclosed space; filling the walls between rooms joins them into one
+    const space = new Uint8Array(w * h);
+    let n = 0;
+    for (let i = 0; i < space.length; i++) if (open[i] && !exterior[i]) { space[i] = 1; n++; }
+    if (n < minArea) return null;
+    return fillWalls(space, exterior, mask);
   }
 
   // Room: the open region holding the seed (or the nearest open pixel to it)
@@ -316,8 +315,21 @@ function regionFor(mask: WallMaskInfo, mode: DetectMode): Uint8Array | null {
   const region = flood(open, w, h, [start]);
   let n = 0;
   for (let i = 0; i < region.length; i++) n += region[i];
-  if (n < Math.max(16, 0.0005 * w * h)) return null;
-  return region;
+  if (n < minArea) return null;
+  return fillWalls(region, exterior, mask);
+}
+
+/**
+ * A closing as wide as the thickest wall: interior walls, stubs and slots the
+ * walls leave in the space are filled, and the space keeps its inner faces
+ * (never grows into the exterior).
+ */
+function fillWalls(space: Uint8Array, exterior: Uint8Array, mask: WallMaskInfo): Uint8Array {
+  const { width: w, height: h } = mask;
+  const r = Math.ceil(mask.wallThickness / 2) + 1;
+  const closed = erode(dilate(space, w, h, r), w, h, r);
+  for (let i = 0; i < closed.length; i++) closed[i] = space[i] || (closed[i] && !exterior[i]) ? 1 : 0;
+  return closed;
 }
 
 /** Remove one-pixel spurs and keep the largest piece. */
@@ -389,7 +401,8 @@ function perpDist(p: Pt, a: Pt, b: Pt): number {
   return Math.abs(dy * p[0] - dx * p[1] + b[0] * a[1] - b[1] * a[0]) / len;
 }
 
-function dpOpen(pts: Pt[], eps: number): Pt[] {
+/** Douglas–Peucker on an open polyline. */
+export function dpOpen(pts: Pt[], eps: number): Pt[] {
   if (pts.length < 3) return pts.slice();
   let maxD = -1, idx = -1;
   for (let i = 1; i < pts.length - 1; i++) {
@@ -500,7 +513,7 @@ export function detectOutline(img: RasterImage, mode: DetectMode, opts: DetectOp
   let simple = squareCorners(simplifyClosed(ring, eps));
   simple = dropShortEdges(simple, eps);
   if (simple.length < 3) return { outline: null, mask };
-  return { outline: simple.map(([x, y]) => [x / factor, y / factor] as Pt), mask };
+  return { outline: simple.map(([x, y]) => [x / factor, y / factor] as Pt), mask, region };
 }
 
 /** Drop vertices that sit within `eps` of their neighbour (after squaring). */

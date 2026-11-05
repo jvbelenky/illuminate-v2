@@ -251,6 +251,26 @@ describe('Floorplan part: the import window', () => {
     expect(ctl.importSession).toBeNull();
   });
 
+  it('Create room adds one structure per interior wall (moved with the outline, display units, next free names) after the outline', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'floorplan', calls, units: 'centimeters', vertices: [[0, 0], [600, 0], [600, 400], [0, 400]], roomZ: 270, objects: [{ ...box, name: 'Wall 1' }] });
+    ctl.importSession = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null };
+    await ctl.applyImport({
+      frame: { widthPx: 400, heightPx: 200, rotation: 0, origin: [50, 150], pxPerM: 50 },
+      outlineMeters: [[-0.5, 0], [4, 0], [4, 2], [-0.5, 2]],
+      walls: [
+        { a: [1, 0], b: [1, 1.5], thickness: 0.08 },
+        { a: [2, 1], b: [3.5, 1], thickness: 0.02 },
+      ],
+    });
+    const names = calls.map((c) => c[0]);
+    expect(names.indexOf('addObstacle')).toBeGreaterThan(names.indexOf('setOutline'));
+    const added = callsOf(calls, 'addObstacle').map((c) => c[1] as Record<string, number | string>);
+    expect(added).toHaveLength(2);
+    expect(added[0]).toMatchObject({ name: 'Wall 2', shape: 'box', width: 8, length: 150, x: 150, y: 75, z: 0, yaw: 0, height: 270 });
+    expect(added[1]).toMatchObject({ name: 'Wall 3', width: 150, length: 5, x: 325, y: 100 });
+  });
+
   it('Keep current outline applies the placement alone', async () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'floorplan', calls, floorplan: placement, image });
