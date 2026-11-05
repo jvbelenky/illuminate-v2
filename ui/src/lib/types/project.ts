@@ -56,6 +56,8 @@ export interface FloorPlanPlacement {
   offsetY: number;
   /** 0..1. Used in the modal, the thumbnail and the 3D floor. */
   opacity: number;
+  /** Degrees, clockwise as seen from above, about the image's centre. Absent means 0. */
+  rotation?: number;
 }
 
 export interface RoomConfig {

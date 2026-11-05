@@ -21,6 +21,7 @@ const PlacementSchema = z.object({
   offsetX: z.number(),
   offsetY: z.number(),
   opacity: z.number().min(0).max(1),
+  rotation: z.number().finite().optional(),
 });
 
 const ReportSchema = z.object({

@@ -50,6 +50,15 @@ describe('extractSidecar', () => {
     const text = attachSidecar(envelope, { placement, image });
     expect(extractSidecar(text)).toEqual({ placement, image });
   });
+  it('round-trips the image rotation; absent stays absent', () => {
+    const rotated = { ...placement, rotation: -4.25 };
+    expect(extractSidecar(attachSidecar(envelope, { placement: rotated, image }))!.placement.rotation).toBe(-4.25);
+    expect('rotation' in extractSidecar(attachSidecar(envelope, { placement, image }))!.placement).toBe(false);
+  });
+  it('drops the floor plan when the rotation is not a number', () => {
+    const bad = attachSidecar(envelope, { placement: { ...placement, rotation: 'x' as unknown as number }, image });
+    expect(extractSidecar(bad)).toBeNull();
+  });
   it('returns null when absent', () => {
     expect(extractSidecar(envelope)).toBeNull();
   });
