@@ -182,7 +182,8 @@ test.describe('Polygon rooms', () => {
     await expect(plan.locator('text.tb-angle')).toHaveText('90°');
     await page.mouse.up();
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Y'))).toBe(6);
-    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(5);
+    // W and L are its own size (it sits at x 1..5: its far edge is not its width)
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(4);
     await expect(page.locator('.floorplan-part .plan-summary')).toHaveText(/^24\.0 m²/);
     await expect.poll(async () => (await plan.locator('text.edge-label').allTextContents()).sort()).toEqual(['4.0', '4.0', '6.0', '6.0']);
 

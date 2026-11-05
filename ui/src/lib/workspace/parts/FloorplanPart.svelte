@@ -6,7 +6,7 @@
 	import Glyph from '$lib/workspace/Glyph.svelte';
 	import FloorplanImportModal, { type FloorplanImportResult } from '$lib/floorplan/FloorplanImportModal.svelte';
 	import { frameFromPlacement, type Pt } from '$lib/floorplan/importFrame';
-	import { polygonArea } from '$lib/utils/roomGeometry';
+	import { polygonArea, polygonBoundingBox, outlineSize, resizeOutline } from '$lib/utils/roomGeometry';
 	import { displayQuantity } from '$lib/utils/formatting';
 	import { unitAbbrev, LENGTH_UNITS, roundToUnit } from '$lib/utils/unitConversion';
 	import type { PlanController } from '$lib/plan/planController.svelte';
@@ -20,8 +20,16 @@
 	const area = $derived(polygonArea(scene.vertices));
 	const volume = $derived(area * scene.roomZ);
 
+	// W and L are the outline's own width and length (a room moved or turned off the origin is narrower than its far edge)
+	const size = $derived(scene.vertices.length >= 3 ? outlineSize(scene.vertices) : { x: room.x, y: room.y });
+	const atOrigin = $derived.by(() => {
+		if (scene.vertices.length < 3) return true;
+		const bb = polygonBoundingBox(scene.vertices);
+		return Math.abs(bb.xMin) < 1e-9 && Math.abs(bb.yMin) < 1e-9;
+	});
+
 	function shown(key: 'x' | 'y' | 'z'): number {
-		return roundToUnit(room[key], units);
+		return roundToUnit(key === 'z' ? room.z : size[key], units);
 	}
 
 	function commit(key: 'x' | 'y' | 'z', event: Event) {
@@ -32,7 +40,9 @@
 			return;
 		}
 		if (v === shown(key)) return;
-		ctl.actions.updateRoom({ [key]: v });
+		// Off the origin the outline stretches about its own lower-left corner, staying put
+		if (key !== 'z' && !atOrigin) ctl.actions.setOutline(resizeOutline(scene.vertices, key === 'x' ? v : undefined, key === 'y' ? v : undefined));
+		else ctl.actions.updateRoom({ [key]: v });
 		ctl.requestFit();
 	}
 

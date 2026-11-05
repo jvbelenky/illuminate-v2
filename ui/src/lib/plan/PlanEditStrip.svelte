@@ -8,7 +8,8 @@
 	// edited, Done. Structures and zones come from their Add cards, so with nothing
 	// selected their strip is empty; keep-out areas still draw from Rectangle and Polygon.
 	// The room outline on Floorplan is always in that box: Edit vertices, Rotate 90°
-	// and Draw new outline (no Copy or Delete), then Done.
+	// and Draw new outline (no Copy or Delete), then Done. Lamps and calc points:
+	// Move, Aim, Copy and Delete.
 	import Glyph, { type GlyphName } from '$lib/workspace/Glyph.svelte';
 	import type { DrawShape, PlanController } from './planController.svelte';
 
@@ -67,15 +68,21 @@
 		];
 	}
 
+	/** A lamp's or a calc point's tools: Move and Aim (armed for the next drag), Copy and Delete. */
+	function markerTools(copy: () => void, remove: () => void, armDisabled: boolean, actDisabled: boolean): Tool[] {
+		return [
+			{ label: 'Move', glyph: 'move', title: 'Move (M)', onclick: () => ctl.inCanvas(() => ctl.toggleTool('move')), disabled: armDisabled, pressed: ctl.activeTool === 'move' },
+			{ label: 'Aim', glyph: 'aim', title: 'Aim (A)', onclick: () => ctl.inCanvas(() => ctl.toggleTool('aim')), disabled: armDisabled, pressed: ctl.activeTool === 'aim' },
+			{ label: 'Copy', glyph: 'copy', title: COPY, onclick: copy, disabled: actDisabled },
+			{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: remove, disabled: actDisabled }
+		];
+	}
+
 	const tools = $derived.by<Tool[]>(() => {
 		if (ctl.onOutline) {
 			if (ctl.outlineEditable && !ctl.drawing && ctl.shapeMode === 'corners') return [DONE];
 			const draw: Tool = { label: 'Draw new outline', glyph: 'pen', title: ctl.drawing ? 'Cancel drawing (Esc)' : 'Draw a new room outline', onclick: () => (ctl.drawing ? ctl.cancelDraw() : ctl.requestNewOutline()), pressed: ctl.drawing };
-			const list: Tool[] = ctl.outlineEditable && !ctl.drawing ? [...boxTools(), draw] : [draw];
-			if (ctl.hasImage) {
-				list.push({ label: 'Move image', glyph: 'image', title: 'Drag the floor plan image', onclick: () => ctl.inCanvas(() => ctl.toggleTool('image')), disabled: ctl.drawing, pressed: ctl.activeTool === 'image' });
-			}
-			return list;
+			return ctl.outlineEditable && !ctl.drawing ? [...boxTools(), draw] : [draw];
 		}
 		if (ctl.onObstacles) {
 			if (ctl.drawing) return newShapeTools();
@@ -84,12 +91,7 @@
 		}
 		if (ctl.onLamps) {
 			const none = !lamps.length || !ctl.liveLampIds.length;
-			return [
-				{ label: 'Move', glyph: 'move', title: 'Move (M)', onclick: () => ctl.inCanvas(() => ctl.toggleTool('move')), disabled: !lamps.length, pressed: ctl.activeTool === 'move' },
-				{ label: 'Aim', glyph: 'aim', title: 'Aim (A)', onclick: () => ctl.inCanvas(() => ctl.toggleTool('aim')), disabled: !lamps.length, pressed: ctl.activeTool === 'aim' },
-				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.copySelectedLamps, disabled: none },
-				{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelectedLamps, disabled: none }
-			];
+			return markerTools(ctl.copySelectedLamps, ctl.deleteSelectedLamps, !lamps.length, none);
 		}
 		if (ctl.onCeiling) {
 			if (!ctl.drawing && ctl.selectedCeilingItem) {
@@ -108,6 +110,11 @@
 		if (ctl.onZones) {
 			if (ctl.drawing) return newShapeTools(ctl.placing);
 			if (!ctl.selectedZone) return [];
+			// A calc point moves and aims as a lamp (a wall's view has no aim point)
+			if (ctl.selectedPoint) {
+				const list = markerTools(ctl.copySelectedZone, ctl.deleteSelectedZone, ctl.placing, ctl.placing);
+				return ctl.onWall ? list.filter((t) => t.label !== 'Aim') : list;
+			}
 			if (ctl.zoneCornersEditable) return shapeTools(ctl.copySelectedZone, ctl.deleteSelectedZone, ctl.placing);
 			return [
 				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.copySelectedZone, disabled: ctl.placing },

@@ -8,7 +8,7 @@ import type { PlanActions, PlanScene } from './planActions';
 import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry, type ObstacleDraft } from '$lib/utils/obstacleDrafts';
 import { footprintUpdate } from '$lib/utils/objectGeometry';
 import { clipToRect, normalizeYaw, rotateShapeBy } from './shapeTransform';
-import { moveLampKeepingAim } from '$lib/utils/lampMove';
+import { moveLampKeepingAim, movePointKeepingAim, pointPlacement } from '$lib/utils/lampMove';
 import { zoneHasFootprint, zoneFootprint, footprintGeometry as zoneFootprintGeometry } from '$lib/utils/zoneFootprint';
 import { displayDimension } from '$lib/utils/formatting';
 import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
@@ -44,7 +44,7 @@ const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 /** The picks the plan answers: a point's Place and Aim, a lamp's Position and Aim. */
 type PlanPickType = 'point_position' | 'aim_point' | 'lamp_position' | 'lamp_aim';
 /** A one-shot edit-strip tool: the next canvas gesture does it, then it is off. */
-export type StripTool = 'grid' | 'move' | 'aim' | 'image';
+export type StripTool = 'grid' | 'move' | 'aim';
 
 /** The image the floor plan import window is configuring: a new upload, or the current image reopened. */
 export interface FloorplanImportSession {
@@ -163,7 +163,6 @@ export class PlanController {
     switch (this.activeTool) {
       case 'grid':
       case 'move':
-      case 'image':
         return 'move';
       case 'aim':
         return 'crosshair';
@@ -179,7 +178,6 @@ export class PlanController {
     }
     if (this.drawing || (t === 'grid' && !this.tilesActive)) return;
     this.activeTool = t;
-    if (t === 'image') this.planSelected = true;
   };
   endTool = () => {
     this.activeTool = null;
@@ -196,11 +194,9 @@ export class PlanController {
     if (!t || !canvas) return false;
     if (t === 'grid') {
       this.startGridDrag(event);
-    } else if (t === 'image') {
-      const placement = this.placement;
-      if (placement && this.planInteractive) this.imageDrag = { startPointer: canvas.pointerToRoom(event), startPlacement: { ...placement } };
-    } else if ((t === 'move' || t === 'aim') && this.onLamps) {
-      const ids = this.liveLampIds;
+    } else if (t === 'move' || t === 'aim') {
+      // The selected lamps, or the selected calc point
+      const ids = this.onLamps ? this.liveLampIds : this.selectedPoint ? [this.selectedPoint.id] : [];
       if (ids.length) {
         const part = t === 'aim' && !this.onWall ? 'aimAt' : 'body';
         this.markerDrag = { id: ids[0], part, start: canvas.pointerToRoom(event), dx: 0, dy: 0, target: null, group: [...ids] };
@@ -356,6 +352,8 @@ export class PlanController {
   readonly userZones = $derived.by(() => this.scene().zones.filter((z) => !z.isStandard));
   selectedZoneId = $state<string | null>(null);
   readonly selectedZone = $derived(this.selectedZoneId ? this.userZones.find((z) => z.id === this.selectedZoneId) ?? null : null);
+  /** The selected calc point (Zones): it moves and aims as a lamp does. */
+  readonly selectedPoint = $derived(this.onZones && this.selectedZone?.type === 'point' ? this.selectedZone : null);
   readonly selectedFootprint = $derived(this.selectedZone && this.selectedZone.type !== 'point' && zoneHasFootprint(this.selectedZone) && this.zoneOnSurface(this.selectedZone) ? this.selectedZone : null);
   /** The selected plane on the wall showing: its outline is the canvas's polygon there. */
   readonly selectedWallPlane = $derived(this.onWall && this.selectedZone && zoneWallIndex(this.selectedZone) === wallIndex(this.surface) ? this.selectedZone : null);
@@ -516,10 +514,11 @@ export class PlanController {
   pendingLeave = $state<(() => void) | null>(null);
 
   // --- Lamps and calc points. Each is a ring (drag to move it; the aim point
-  // travels along) with a dot at its aim point (drag to aim). Each finished
+  // stays, so it re-aims) with a dot at its aim point (drag to aim). Each finished
   // drag is one update. Lamps live in the Lamps context, points in Zones.
-  // Lamps: one or several selected (Shift-click, or drag a box on empty space).
-  // Move drags the selection; Aim points it at where the drag ends.
+  // Lamps: one or several selected (Shift-click, or drag a box on empty space);
+  // a calc point: the selected one. Move drags the selection; Aim points it at
+  // where the drag ends.
   selectedLampIds = $state<string[]>([]);
   /** The selection minus ids that no longer exist (an undone add leaves them behind). */
   readonly liveLampIds = $derived.by(() => {
@@ -553,13 +552,27 @@ export class PlanController {
         return { id: l.id, name: l.name || l.id, x, y, ax: x, ay: y, enabled: l.enabled !== false, label: l.show_label_2d !== false };
       });
     }
+    if (seg && this.onZones) {
+      // In a wall view, as lamps: the calc points in front of it, on its canvas (no aim point)
+      const points = this.userZones.filter((z) => z.type === 'point');
+      const front = new Set(projectLamps(points.map((z) => ({ id: z.id, ...pointPlacement(z) })), seg).map((p) => p.id));
+      return points.filter((z) => front.has(z.id)).map((z) => {
+        const at = pointPlacement(z);
+        const w = toWall(at.x, at.y, at.z, seg);
+        const [x, y] = wallToCanvas(w.along, w.up, seg);
+        return { id: z.id, name: z.name || z.id, x, y, ax: x, ay: y, enabled: z.enabled !== false, label: z.show_label_2d !== false };
+      });
+    }
     return this.floorMarkers();
   });
   private floorMarkers(): Marker[] {
     return this.onLamps
       ? this.scene().lamps.map((l) => ({ id: l.id, name: l.name || l.id, x: l.x, y: l.y, ax: l.aimx, ay: l.aimy, enabled: l.enabled !== false, label: l.show_label_2d !== false }))
       : this.onZones
-        ? this.userZones.filter((z) => z.type === 'point').map((z) => ({ id: z.id, name: z.name || z.id, x: z.x ?? 0, y: z.y ?? 0, ax: z.aim_x ?? z.x ?? 0, ay: z.aim_y ?? z.y ?? 0, enabled: z.enabled !== false, label: z.show_label_2d !== false }))
+        ? this.userZones.filter((z) => z.type === 'point').map((z) => {
+            const p = pointPlacement(z);
+            return { id: z.id, name: z.name || z.id, x: p.x, y: p.y, ax: p.aimx, ay: p.aimy, enabled: z.enabled !== false, label: z.show_label_2d !== false };
+          })
         : [];
   }
   readonly selectedMarkerId = $derived(this.onZones ? this.selectedZoneId : null);
@@ -1162,9 +1175,14 @@ export class PlanController {
       }
       return;
     }
-    const markerSel = this.onZones && this.selectedZone?.type === 'point' ? this.selectedZoneId : null;
+    const markerSel = this.selectedPoint?.id ?? null;
     if (this.onZones && !this.placing && !this.drawing && (markerSel || this.selectedZone)) {
       const st = this.snapStep;
+      const key = event.key.toLowerCase();
+      if (markerSel && !event.ctrlKey && !event.metaKey && !event.altKey && (key === 'm' || key === 'a')) {
+        this.toggleTool(key === 'm' ? 'move' : 'aim');
+        return;
+      }
       if (event.key === 'Delete' || event.key === 'Backspace') {
         if (this.selectedIndex >= 0) return; // the canvas removes a corner
         event.preventDefault();
@@ -1325,9 +1343,8 @@ export class PlanController {
     if (!d || !d.group.includes(m.id)) return { x: m.x, y: m.y, ax: m.ax, ay: m.ay };
     if (d.part === 'aimAt') return d.target ? { x: m.x, y: m.y, ax: d.target[0], ay: d.target[1] } : { x: m.x, y: m.y, ax: m.ax, ay: m.ay };
     if (d.part === 'aim') return { x: m.x, y: m.y, ax: m.ax + d.dx, ay: m.ay + d.dy };
-    // A lamp moves alone (its aim point stays); a calc point carries its aim along
-    if (this.onLamps) return { x: m.x + d.dx, y: m.y + d.dy, ax: m.ax, ay: m.ay };
-    return { x: m.x + d.dx, y: m.y + d.dy, ax: m.ax + d.dx, ay: m.ay + d.dy };
+    // A lamp or a calc point moves alone: its aim point stays (on a wall's canvas the aim is the marker itself)
+    return this.onWall ? { x: m.x + d.dx, y: m.y + d.dy, ax: m.ax + d.dx, ay: m.ay + d.dy } : { x: m.x + d.dx, y: m.y + d.dy, ax: m.ax, ay: m.ay };
   };
 
   selectLamp = (id: string | null) => {
@@ -1344,6 +1361,8 @@ export class PlanController {
     this.shapeMode = 'select';
     this.draftYaw = 0;
     const z = id ? this.userZones.find((x) => x.id === id) : null;
+    // Move and Aim are a calc point's tools
+    if (z?.type !== 'point' && (this.activeTool === 'move' || this.activeTool === 'aim')) this.endTool();
     // A plane opens on its surface and a volume on the floor; a point stays on the surface showing
     if (z) {
       const next = z.type === 'plane' ? planSurface(zoneSurface(z, this.scene().roomZ)) : z.type === 'point' ? this.surface : 'floor';
@@ -1529,18 +1548,36 @@ export class PlanController {
       this.actions.updateLamp(m.id, unprojectLampMove(lamp, seg, at.along - dx, at.up + dy, w));
       return;
     }
-    const x = r6(m.x + dx), y = r6(m.y + dy), ax = r6(m.ax + dx), ay = r6(m.ay + dy);
     if (this.onLamps) {
       // Only the lamp moves: its aim point stays, so it re-aims at it
       const lamp = this.scene().lamps.find((l) => l.id === m.id);
-      if (lamp) this.actions.updateLamp(m.id, moveLampKeepingAim(lamp, x, y));
-    } else this.actions.updateZone(m.id, { x, y, aim_x: ax, aim_y: ay });
+      if (lamp) this.actions.updateLamp(m.id, moveLampKeepingAim(lamp, r6(m.x + dx), r6(m.y + dy)));
+      return;
+    }
+    // A calc point as a lamp: only it moves, its aim point stays
+    const z = this.userZones.find((p) => p.id === m.id && p.type === 'point');
+    if (!z) return;
+    if (seg) {
+      // On a wall's canvas: along and up, at the point's depth from that wall
+      const at = pointPlacement(z);
+      const w = toWall(at.x, at.y, at.z, seg);
+      const p = fromWall(w.along - dx, w.up + dy, w.depth, seg);
+      this.actions.updateZone(m.id, movePointKeepingAim(z, p.x, p.y, Math.max(0, p.z)));
+    } else this.actions.updateZone(m.id, movePointKeepingAim(z, m.x + dx, m.y + dy));
   };
   aimMarker = (m: Marker, dx: number, dy: number) => {
     const ax = r6(m.ax + dx), ay = r6(m.ay + dy);
     if (this.onLamps) this.actions.updateLamp(m.id, { aimx: ax, aimy: ay });
-    else this.actions.updateZone(m.id, { aim_x: ax, aim_y: ay });
+    else this.aimPointAt(m.id, ax, ay);
   };
+  /** A calc point aimed at (ax, ay), its aim height kept; not onto the point itself (it would have no direction). */
+  private aimPointAt(id: string, ax: number, ay: number) {
+    const z = this.userZones.find((p) => p.id === id && p.type === 'point');
+    if (!z) return;
+    const p = pointPlacement(z);
+    if (Math.abs(ax - p.x) < 1e-9 && Math.abs(ay - p.y) < 1e-9 && Math.abs(p.aimz - p.z) < 1e-9) return;
+    this.actions.updateZone(id, { aim_x: ax, aim_y: ay });
+  }
   onMarkerPointerDown = (event: PointerEvent, id: string, part: 'body' | 'aim') => {
     const canvas = this.canvas;
     if (this.placing || this.pointPick || this.drawing || event.button !== 0 || !canvas || canvas.isSpaceHeld()) return;
@@ -1557,8 +1594,8 @@ export class PlanController {
     this.onItemSelected?.(id);
     (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
     const group = this.onLamps ? [...this.selectedLampIds] : [id];
-    const kind = this.onLamps && !this.onWall && part === 'body' && this.activeTool === 'aim' ? 'aimAt' : part;
-    if (this.onLamps && (this.activeTool === 'move' || this.activeTool === 'aim')) this.#toolGesture = true;
+    const kind = !this.onWall && part === 'body' && this.activeTool === 'aim' ? 'aimAt' : part;
+    if (this.activeTool === 'move' || this.activeTool === 'aim') this.#toolGesture = true;
     this.markerDrag = { id, part: kind, start: canvas.pointerToRoom(event), dx: 0, dy: 0, target: null, group: kind === 'aim' ? [id] : group };
   };
   /** Drag a marker or its aim point; the dragged point lands on the grid (Alt: free). */
@@ -1611,8 +1648,13 @@ export class PlanController {
     this.markerDrag = null;
     if (!d) return;
     if (d.part === 'aimAt') {
-      // Every selected lamp points at where the drag ended (one undo step)
-      if (d.target) for (const id of d.group) this.actions.updateLamp(id, { aimx: r6(d.target[0]), aimy: r6(d.target[1]) });
+      // Every selected lamp (or the calc point) points at where the drag ended (one undo step)
+      if (!d.target) return;
+      const [ax, ay] = [r6(d.target[0]), r6(d.target[1])];
+      for (const id of d.group) {
+        if (this.onLamps) this.actions.updateLamp(id, { aimx: ax, aimy: ay });
+        else this.aimPointAt(id, ax, ay);
+      }
       return;
     }
     if (d.dx === 0 && d.dy === 0) return;
@@ -1974,18 +2016,17 @@ export class PlanController {
 
   onPlanPointerDown = (event: PointerEvent) => {
     // Another tool takes the press as a canvas press
-    if (this.activeTool && this.activeTool !== 'image') return;
+    if (this.activeTool) return;
     const placement = this.placement;
     if (!placement || !this.planInteractive || event.button !== 0 || this.canvas?.isSpaceHeld()) return;
-    // Inside the room its box takes the press (moves the room), unless the image is selected or Move image is on
-    if (!this.activeTool && !this.planSelected && this.transformable && this.outlineEditable && this.canvas) {
+    // Inside the room its box takes the press (moves the room), unless the image is selected
+    if (!this.planSelected && this.transformable && this.outlineEditable && this.canvas) {
       const [x, y] = this.canvas.pointerToRoom(event);
       if (pointInPolygon(this.draft, x, y)) return;
     }
     event.preventDefault();
     event.stopPropagation();
     this.selectedIndex = -1;
-    if (this.activeTool === 'image') this.#toolGesture = true;
     if (!this.planSelected) {
       this.planSelected = true;
       return;

@@ -5,7 +5,7 @@ import { resizeByHandle, rotateByDrag } from './shapeTransform';
 import type { PlanActions, PlanScene } from './planActions';
 import { DEFAULT_CEILING_LAYOUT } from '$lib/ceiling/ceilingLayout';
 import { defaultProject, type CalcZone, type LampInstance, type SceneObject } from '$lib/types/project';
-import type { Vertex } from '$lib/utils/roomGeometry';
+import { outlineSize, polygonArea, type Vertex } from '$lib/utils/roomGeometry';
 import { get } from 'svelte/store';
 import { pickMode } from '$lib/stores/pickMode';
 import { clipboard, clearClipboard } from './clipboard';
@@ -897,19 +897,16 @@ describe('one-shot edit-strip tools', () => {
   const placement = { imageId: 'img', widthPx: 100, heightPx: 50, scale: 0.01, offsetX: 0, offsetY: 0, opacity: 0.5 };
   const image = { src: 'data:image/png;base64,AAAA', mime: 'image/png', widthPx: 100, heightPx: 50 } as any;
 
-  test('Move image: a drag anywhere moves the image once, then the tool is off', () => {
+  test('no Move image tool: a selected image is dragged by pressing on it (Adjust image… places it)', () => {
     const { ctl, actions } = make({ floorplan: placement, image });
     ctl.canvas = canvas();
-    ctl.toggleTool('image');
-    expect(ctl.activeTool).toBe('image');
-    expect(ctl.toolCursor).toBe('move');
-    expect(ctl.onBackgroundDragStart(ptr(5, 5))).toBe(true);
-    ctl.onHostMove(ptr(6, 5));
-    ctl.onHostPointerUp();
-    expect(vi.mocked(actions.setPlacement).mock.calls[0][0]!.offsetX).toBeCloseTo(1);
-    expect(ctl.activeTool).toBeNull();
-    expect(ctl.toolCursor).toBeNull();
     expect(ctl.onBackgroundDragStart(ptr(5, 5))).toBe(false);
+    ctl.planSelected = true;
+    ctl.onPlanPointerDown(ptr(0.5, 0.2));
+    ctl.onHostMove(ptr(1.5, 0.2));
+    ctl.onHostPointerUp();
+    expect(actions.setPlacement).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(actions.setPlacement).mock.calls[0][0]!.offsetX).toBeCloseTo(1);
   });
 
   test('Draw has the crosshair cursor while drawing; switching context drops a tool', () => {
@@ -1013,6 +1010,9 @@ describe('the room outline on Floorplan: transform mode unless Edit vertices', (
     // 6 x 4 about (3, 2) reaches x = 1..5, y = -1..5: moved up by 1
     expect(bbox(lastOutline(actions))).toEqual({ x0: 1, x1: 5, y0: 0, y1: 6 });
     expect(lastOutline(actions).every(([x, y]) => x >= 0 && y >= 0)).toBe(true);
+    // The shift back to y >= 0 only moves it: 4 wide, 6 long, the same area
+    expect(outlineSize(lastOutline(actions))).toEqual({ x: 4, y: 6 });
+    expect(polygonArea(lastOutline(actions))).toBeCloseTo(24, 9);
   });
 
   test('intoFirstQuadrant moves a polygon just enough, and leaves one already there alone', () => {
@@ -1038,7 +1038,7 @@ describe('the room outline on Floorplan: transform mode unless Edit vertices', (
     ctl.onPlanPointerDown(inside);
     expect(inside.stopPropagation).not.toHaveBeenCalled();
     expect(ctl.planSelected).toBe(false);
-    // In Edit vertices (or with Move image) the image takes the press
+    // In Edit vertices the image takes the press
     ctl.editCorners();
     ctl.onPlanPointerDown(ev(2, 1));
     expect(ctl.planSelected).toBe(true);
@@ -1355,5 +1355,120 @@ describe('Ctrl+C / Ctrl+V', () => {
     expect(ev.defaultPrevented).toBe(false);
     expect(actions.pasteLamps).not.toHaveBeenCalled();
     el.remove();
+  });
+});
+
+describe('a calc point moves and aims as a lamp', () => {
+  const canvas = () => ({ pointerToRoom: (e: any) => [e.clientX, e.clientY], snapValue: (v: number) => v, isSpaceHeld: () => false, focus() {}, nudge: vi.fn() }) as any;
+  const ptr = (x: number, y: number) => ({ button: 0, shiftKey: false, altKey: false, clientX: x, clientY: y, pointerId: 1, currentTarget: {}, preventDefault() {}, stopPropagation() {} }) as any;
+  const point = { id: 'p1', type: 'point', name: 'Point', x: 2, y: 1, z: 1.2, aim_x: 4, aim_y: 3, aim_z: 1.2, isStandard: false } as unknown as CalcZone;
+  const plane = { id: 'zf', type: 'plane', name: 'F', surface: 'floor', height: 1, fit_room: false, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
+  function setup() {
+    const r = make({ zones: [point, plane] });
+    r.ctl.setContext('zones');
+    r.ctl.canvas = canvas();
+    r.ctl.selectZone('p1');
+    return r;
+  }
+
+  test('dragging the point moves it alone: its aim target stays, so it re-aims (one update)', () => {
+    const { ctl, actions } = setup();
+    ctl.onMarkerPointerDown(ptr(2, 1), 'p1', 'body');
+    ctl.onHostMove(ptr(3, 1.5));
+    // The preview keeps the aim dot still
+    expect(ctl.markerView(ctl.markers[0])).toEqual({ x: 3, y: 1.5, ax: 4, ay: 3 });
+    ctl.onHostPointerUp();
+    expect(actions.updateZone).toHaveBeenCalledTimes(1);
+    expect(actions.updateZone).toHaveBeenCalledWith('p1', { x: 3, y: 1.5, z: 1.2 });
+  });
+
+  test('dragging the aim dot aims it (aim height kept)', () => {
+    const { ctl, actions } = setup();
+    ctl.onMarkerPointerDown(ptr(4, 3), 'p1', 'aim');
+    ctl.onHostMove(ptr(5, 2));
+    ctl.onHostPointerUp();
+    expect(actions.updateZone).toHaveBeenCalledTimes(1);
+    expect(actions.updateZone).toHaveBeenCalledWith('p1', { aim_x: 5, aim_y: 2 });
+  });
+
+  test('Move armed: a drag anywhere moves the selected point, then the tool is off', () => {
+    const { ctl, actions } = setup();
+    ctl.toggleTool('move');
+    expect(ctl.toolCursor).toBe('move');
+    expect(ctl.onBackgroundDragStart(ptr(5, 3))).toBe(true);
+    ctl.onHostMove(ptr(4, 3.5));
+    ctl.onHostPointerUp();
+    expect(actions.updateZone).toHaveBeenCalledWith('p1', { x: 1, y: 1.5, z: 1.2 });
+    expect(ctl.activeTool).toBeNull();
+  });
+
+  test('Aim armed: the point aims where the drag ends, from anywhere or from the point itself', () => {
+    const { ctl, actions } = setup();
+    ctl.toggleTool('aim');
+    expect(ctl.toolCursor).toBe('crosshair');
+    expect(ctl.onBackgroundDragStart(ptr(1, 1))).toBe(true);
+    ctl.onHostMove(ptr(0.5, 3.5));
+    expect(ctl.markerView(ctl.markers[0])).toEqual({ x: 2, y: 1, ax: 0.5, ay: 3.5 });
+    ctl.onHostPointerUp();
+    expect(actions.updateZone).toHaveBeenLastCalledWith('p1', { aim_x: 0.5, aim_y: 3.5 });
+    expect(ctl.activeTool).toBeNull();
+    ctl.toggleTool('aim');
+    ctl.onMarkerPointerDown(ptr(2, 1), 'p1', 'body');
+    ctl.onHostMove(ptr(6, 1));
+    ctl.onHostPointerUp();
+    expect(actions.updateZone).toHaveBeenLastCalledWith('p1', { aim_x: 6, aim_y: 1 });
+    expect(actions.updateZone).toHaveBeenCalledTimes(2);
+    expect(ctl.activeTool).toBeNull();
+  });
+
+  test('aiming a point at itself (same height) is refused', () => {
+    const { ctl, actions } = setup();
+    ctl.onMarkerPointerDown(ptr(4, 3), 'p1', 'aim');
+    ctl.onHostMove(ptr(2, 1));
+    ctl.onHostPointerUp();
+    expect(actions.updateZone).not.toHaveBeenCalled();
+  });
+
+  test('M and A arm Move and Aim; arrows nudge the point, its aim staying', () => {
+    const { ctl, actions } = setup();
+    press(ctl, 'm');
+    expect(ctl.activeTool).toBe('move');
+    press(ctl, 'a');
+    expect(ctl.activeTool).toBe('aim');
+    ctl.endTool();
+    press(ctl, 'ArrowRight');
+    expect(actions.updateZone).toHaveBeenCalledWith('p1', { x: 2.1, y: 1, z: 1.2 });
+  });
+
+  test('selecting a plane drops an armed Move or Aim', () => {
+    const { ctl } = setup();
+    ctl.toggleTool('move');
+    ctl.selectZone('zf');
+    expect(ctl.activeTool).toBeNull();
+    expect(ctl.selectedPoint).toBeNull();
+  });
+
+  test('a point never aimed reads as aimed straight up: its aim dot sits on it', () => {
+    const { ctl } = make({ zones: [{ id: 'p2', type: 'point', name: 'Q', x: 1, y: 2, z: 1, isStandard: false } as unknown as CalcZone] });
+    ctl.setContext('zones');
+    expect(ctl.markers[0]).toMatchObject({ x: 1, y: 2, ax: 1, ay: 2 });
+  });
+
+  test('on a wall view the point is a marker in front of it; a drag slides it along and up at its depth, its aim staying', () => {
+    const { ctl, actions } = setup();
+    ctl.setSurface('wall:0');
+    ctl.selectZone('p1');
+    ctl.canvas = canvas();
+    // wall:0 runs (0,0) to (6,0): canvas x = 6 - along, y = up; the point is along 2, up 1.2, depth 1
+    expect(ctl.markers).toEqual([expect.objectContaining({ id: 'p1', x: 4, y: 1.2, ax: 4, ay: 1.2 })]);
+    ctl.onMarkerPointerDown(ptr(4, 1.2), 'p1', 'body');
+    ctl.onHostMove(ptr(3, 2));
+    ctl.onHostPointerUp();
+    const [id, partial] = vi.mocked(actions.updateZone).mock.calls[0] as [string, Partial<CalcZone>];
+    expect(id).toBe('p1');
+    expect(partial.x).toBeCloseTo(3, 9);
+    expect(partial.y).toBeCloseTo(1, 9);
+    expect(partial.z).toBeCloseTo(2, 9);
+    expect(partial).not.toHaveProperty('aim_x');
   });
 });

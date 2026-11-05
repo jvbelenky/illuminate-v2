@@ -24,7 +24,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { pickMode } from '$lib/stores/pickMode';
 	import { surfaceName } from '$lib/utils/surfaces';
-	import { moveLampKeepingAim } from '$lib/utils/lampMove';
+	import { moveLampKeepingAim, movePointKeepingAim, pointPlacement } from '$lib/utils/lampMove';
 	import { planShouldHandleKey, type PlanController } from './planController.svelte';
 
 	interface Props {
@@ -98,6 +98,8 @@
 	/** A zone outline picked on the canvas (not mid-draw or mid-place): selected, and a drag from there moves it. */
 	function zoneDown(e: PointerEvent, id: string) {
 		if (ctl.drawing || ctl.placing || ctl.pointPick || e.button !== 0) return;
+		// A calc point's Move or Aim armed: the press is the tool's, as on empty canvas
+		if (ctl.selectedPoint && (ctl.activeTool === 'move' || ctl.activeTool === 'aim')) return;
 		e.stopPropagation();
 		const surface = ctl.surface;
 		ctl.clickZone(id);
@@ -118,10 +120,10 @@
 		if (handleEscape && event.key === 'Escape') ctl.onEscapeKey();
 	}
 
-	// Typing on the plan: a lamp's X / Y / Z (double-click the lamp), or a lamp's,
-	// point's or zone's name (double-click its label)
+	// Typing on the plan: a lamp's or a calc point's X / Y / Z (double-click it or its
+	// aim dot), or a lamp's, point's or zone's name (double-click its label)
 	type PaneInline =
-		| { kind: 'position'; id: string }
+		| { kind: 'position'; target: 'lamp' | 'point'; id: string }
 		| { kind: 'rename'; target: 'lamp' | 'zone'; id: string; name: string; at: Vertex };
 	let paneInline = $state<PaneInline | null>(null);
 	const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
@@ -136,10 +138,23 @@
 		ctl.canvas?.focus();
 	}
 	function onLampDblClick(e: MouseEvent, id: string) {
-		if (!ctl.onLamps || ctl.drawing || ctl.placing || ctl.pointPick) return;
+		if (!(ctl.onLamps || ctl.onZones) || ctl.onWall || ctl.drawing || ctl.placing || ctl.pointPick) return;
 		e.preventDefault();
 		e.stopPropagation();
-		paneInline = { kind: 'position', id };
+		paneInline = { kind: 'position', target: ctl.onLamps ? 'lamp' : 'point', id };
+	}
+	/** Move the calc point to the typed position; its aim point stays, as a lamp's. */
+	function applyPointPosition(id: string, [a, b, c]: string[]): boolean {
+		const zone = ctl.userZones.find((z) => z.id === id && z.type === 'point');
+		const x = parseCoordinateInput(a, units);
+		const y = parseCoordinateInput(b, units);
+		const z = parseCoordinateInput(c, units);
+		if (!zone || x === null || y === null || z === null) return false;
+		closePaneInline();
+		const at = pointPlacement(zone);
+		if (x === at.x && y === at.y && z === at.z) return true;
+		ctl.actions.updateZone(id, movePointKeepingAim(zone, x, y, z));
+		return true;
 	}
 	/** A press on a name label stays there, so its double-click reaches it. */
 	function onNameLabelDown(e: PointerEvent) {
@@ -337,6 +352,18 @@
 							<polygon class="plan-zone" class:off={!z.enabled} class:results={resultZoneIds.has(z.id)} class:highlighted={hovered('zones') === z.id} points={points(z.vertices)} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name}" onpointerdown={(e) => zoneDown(e, z.id)} />
 						{/each}
 					{/if}
+					{#if ctl.onZones}
+						<!-- Calc points in front of the wall, as its lamps: drag to move (no aim point here) -->
+						{#each ctl.markers as m (m.id)}
+							{@const v = ctl.markerView(m)}
+							{@const sel = m.id === ctl.selectedMarkerId}
+							{#if c.hitPx > c.px * 1.001}<!-- svelte-ignore a11y_no_static_element_interactions --><circle class="plan-hit" cx={v.x} cy={-v.y} r={c.hitPx * 11.7} onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} />{/if}
+							<circle class="plan-lamp point" class:selected={sel} class:highlighted={!sel && hovered('zones') === m.id} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="Point {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} />
+							{#if m.label !== false}
+								<text class="plan-lamp-label" x={v.x + c.handleR * 2.3} y={-v.y + c.px * 4} font-size={c.px * 11}>{m.name}</text>
+							{/if}
+						{/each}
+					{/if}
 					{#if ctl.onLamps}
 						{#each wv.lamps as l (l.id)}
 							<circle class="plan-hit" cx={l.x} cy={-l.y} r={Math.max(c.handleR * 1.5, c.hitPx * 11.7)} role="button" tabindex="-1" aria-label="Lamp {l.name || l.id}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, l.id, 'body')} />
@@ -514,8 +541,8 @@
 						{#if Math.hypot(v.ax - v.x, v.ay - v.y) > c.px * 2}
 							<line class="aim-line" class:selected={sel} class:highlighted={!sel && hovered(ctl.onLamps ? 'lamps' : 'zones') === m.id} class:point={ctl.onZones} x1={v.x} y1={-v.y} x2={v.ax} y2={-v.ay} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
 						{/if}
-						{#if c.hitPx > c.px * 1.001}<!-- svelte-ignore a11y_no_static_element_interactions --><circle class="plan-hit" class:aiming={ctl.onLamps && ctl.activeTool === 'aim'} cx={v.x} cy={-v.y} r={c.hitPx * 11.7} onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} ondblclick={(e) => onLampDblClick(e, m.id)} />{/if}
-						<circle class="plan-lamp" class:point={ctl.onZones} class:aiming={ctl.onLamps && ctl.activeTool === 'aim'} class:selected={sel} class:highlighted={!sel && hovered(ctl.onLamps ? 'lamps' : 'zones') === m.id} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="{ctl.onLamps ? 'Lamp' : 'Point'} {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} ondblclick={(e) => onLampDblClick(e, m.id)} />
+						{#if c.hitPx > c.px * 1.001}<!-- svelte-ignore a11y_no_static_element_interactions --><circle class="plan-hit" class:aiming={ctl.activeTool === 'aim'} cx={v.x} cy={-v.y} r={c.hitPx * 11.7} onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} ondblclick={(e) => onLampDblClick(e, m.id)} />{/if}
+						<circle class="plan-lamp" class:point={ctl.onZones} class:aiming={ctl.activeTool === 'aim'} class:selected={sel} class:highlighted={!sel && hovered(ctl.onLamps ? 'lamps' : 'zones') === m.id} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="{ctl.onLamps ? 'Lamp' : 'Point'} {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} ondblclick={(e) => onLampDblClick(e, m.id)} />
 						{#if c.hitPx > c.px * 1.001}<!-- svelte-ignore a11y_no_static_element_interactions --><circle class="plan-hit aim" cx={v.ax} cy={-v.ay} r={c.hitPx * 4.5} onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} ondblclick={(e) => onLampDblClick(e, m.id)} />{/if}
 						<circle class="plan-aim" class:point={ctl.onZones} class:selected={sel} class:highlighted={!sel && hovered(ctl.onLamps ? 'lamps' : 'zones') === m.id} cx={v.ax} cy={-v.ay} r={c.handleR * 0.75} role="button" tabindex="-1" aria-label="Aim of {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} ondblclick={(e) => onLampDblClick(e, m.id)} />
 						{#if m.label !== false}
@@ -540,7 +567,23 @@
 			{#snippet hud(c)}
 				{#if paneInline}
 					{@const pi = paneInline}
-					{#if pi.kind === 'position'}
+					{#if pi.kind === 'position' && pi.target === 'point'}
+						{@const zone = ctl.userZones.find((z) => z.id === pi.id)}
+						{#if zone}
+							{@const at = pointPlacement(zone)}
+							{@const [sx, sy] = c.toScreen(at.x, at.y)}
+							{#key pi}
+								<InlineValueInput
+									x={sx}
+									y={sy - 34}
+									ariaLabel={zone.name || zone.id}
+									fields={[{ label: 'X', value: fmtLen(at.x) }, { label: 'Y', value: fmtLen(at.y) }, { label: 'Z', value: fmtLen(at.z) }]}
+									onApply={(v) => applyPointPosition(pi.id, v)}
+									onCancel={closePaneInline}
+								/>
+							{/key}
+						{/if}
+					{:else if pi.kind === 'position'}
 						{@const lamp = lamps.find((l) => l.id === pi.id)}
 						{#if lamp}
 							{@const [sx, sy] = c.toScreen(lamp.x, lamp.y)}

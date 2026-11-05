@@ -59,6 +59,18 @@ describe('Floorplan part', () => {
     expect(screen.getByLabelText('Units')).toBeTruthy();
   });
 
+  it('a room turned off the origin reads its own width and length; typing W stretches it in place', async () => {
+    // The 6 x 4 room turned a quarter about its centre, moved up to y >= 0: x 1..5, y 0..6 (its far edge is at x = 5)
+    const calls: unknown[][] = [];
+    const turned = [[5, 0], [5, 6], [1, 6], [1, 0]];
+    mount({ part: 'floorplan', calls, vertices: turned, room: { shape: 'polygon', x: 5, y: 6 } });
+    expect((screen.getByLabelText('Width') as HTMLInputElement).value).toBe('4');
+    expect((screen.getByLabelText('Length') as HTMLInputElement).value).toBe('6');
+    await fireEvent.change(screen.getByLabelText('Width'), { target: { value: '2' } });
+    expect(callsOf(calls, 'updateRoom')).toEqual([]);
+    expect(callsOf(calls, 'setOutline')).toEqual([['setOutline', [[3, 0], [3, 6], [1, 6], [1, 0]]]]);
+  });
+
   it('no Start from heading and no 3D model button', () => {
     mount({ part: 'floorplan' });
     expect(screen.queryByText('Start from')).toBeNull();
