@@ -33,7 +33,7 @@
 	import { pushState } from '$app/navigation';
 	import { page } from '$app/state';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
-	import EditorDone from '$lib/workspace/EditorDone.svelte';
+	import EditorModeSwitch from '$lib/workspace/EditorModeSwitch.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
 	import { scrollRowIntoView, promptForFixture } from '$lib/workspace/parts/scrollRowIntoView';
 	import { DEFAULT_DOCK, chooseMain, sanitizeDock, swapMain, toggleMinimized, withMain, type DockLayout, type DockPanelId, type FloatBox, type MainView } from '$lib/workspace/dockLayout';
@@ -313,6 +313,13 @@
 	function finishEditing() {
 		workspaceUi.showSummary();
 		syncPlanContext();
+	}
+
+	/** Summary | Editor's Editor: back where the user last was (Room › Floorplan the first time). */
+	function openEditor() {
+		workspaceUi.showEditor();
+		syncPlanContext();
+		revealEditor();
 	}
 
 	function editFromSummary(stage: EditorStage, part?: RoomPart) {
@@ -1274,7 +1281,6 @@
 			<div class="editor-host" data-plan-scope>
 				<EditorPanel
 					controller={plan}
-					onDone={isMobile ? finishEditing : undefined}
 					onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
 					lampPanel={planLampPanel}
 					zonePanel={planZonePanel}
@@ -1312,10 +1318,8 @@
 		</button>
 	{/snippet}
 
-	{#snippet dockEditorTools()}
-		{#if $workspaceUi.mode === 'editor'}
-			<EditorDone controller={plan} onDone={finishEditing} />
-		{/if}
+	{#snippet dockEditorHeading()}
+		<EditorModeSwitch mode={$workspaceUi.mode} controller={plan} onSummary={finishEditing} onEditor={openEditor} />
 	{/snippet}
 
 	{#snippet dockMain()}
@@ -1341,6 +1345,9 @@
 					<MainViewControls main={mobileMain} onSelectMain={(v) => (mobileMain = v)} controller={plan} editing={$workspaceUi.mode === 'editor'} touch onFit={fitMobileView} fullScreen={fullView.on} onToggleFullScreen={() => setFullView(toggleFullScreen(fullView))} />
 				</div>
 				<div class="mobile-editor">
+					<div class="mobile-mode">
+						<EditorModeSwitch mode={$workspaceUi.mode} controller={plan} onSummary={finishEditing} onEditor={openEditor} placement="phone" />
+					</div>
 					<div class="mobile-panel-scroll" class:editor={$workspaceUi.mode === 'editor'}>
 						{@render editorColumn()}
 					</div>
@@ -1374,7 +1381,7 @@
 		</div>
 	{:else}
 		<div class="app-layout desktop">
-			<DockArea layout={dock} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} resultsTools={dockResultsTools} editorTools={dockEditorTools} onMiniFloat={(m) => (miniFloat = m)} />
+			<DockArea layout={dock} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} resultsTools={dockResultsTools} editorHeading={dockEditorHeading} onMiniFloat={(m) => (miniFloat = m)} />
 			<ViewHost main={dock.main} {mainAnchor} {miniAnchor} miniVisible={!dock.minimized.includes('mini')} miniFloating={!!dock.floats?.mini} miniZ={miniFloat?.z} {view2d} {view3d} layoutKey={[dock, miniFloat]} />
 		</div>
 	{/if}
@@ -1703,6 +1710,12 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
+	}
+
+	/* Summary | Editor heads the Design tab, as the 2D | 3D switch heads the view */
+	.mobile-mode {
+		flex: none;
+		padding: var(--spacing-sm) var(--spacing-md) 0;
 	}
 
 	.mobile-panel {

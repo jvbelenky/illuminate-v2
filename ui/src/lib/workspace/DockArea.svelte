@@ -36,17 +36,18 @@
 		main: Snippet;
 		/** Icon buttons in the Results title bar. */
 		resultsTools?: Snippet;
-		/** Controls in the Editor title bar (its Done). */
-		editorTools?: Snippet;
+		/** The Editor panel's title (Summary | Editor), in place of its name. */
+		editorHeading?: Snippet;
 		/** Defaults to swapping the main view in the layout. */
 		onSwap?: () => void;
 		/** Where the floating mini view shows right now (live while dragged or resized) and its stacking order. */
 		onMiniFloat?: (m: { box: FloatBox; z: number } | null) => void;
 	}
 
-	let { layout, onChange, titles, panel, main, onSwap, resultsTools, editorTools, onMiniFloat }: Props = $props();
+	let { layout, onChange, titles, panel, main, onSwap, resultsTools, editorHeading, onMiniFloat }: Props = $props();
 
-	const toolsFor = (id: DockPanelId) => (id === 'results' ? resultsTools : id === 'editor' ? editorTools : undefined);
+	const toolsFor = (id: DockPanelId) => (id === 'results' ? resultsTools : undefined);
+	const headingFor = (id: DockPanelId) => (id === 'editor' ? editorHeading : undefined);
 
 	const THRESHOLD = 4;
 	const STEP = 16;
@@ -443,6 +444,7 @@
 					onSwap={id === 'mini' ? swap : undefined}
 					onBarPointerDown={(e) => barDown(id, e)}
 					tools={toolsFor(id)}
+					heading={headingFor(id)}
 				>
 					{@render panel(id)}
 				</DockPanel>
@@ -494,6 +496,7 @@
 					onSwap={id === 'mini' ? swap : undefined}
 					onBarPointerDown={(e) => barDown(id, e)}
 					tools={toolsFor(id)}
+					heading={headingFor(id)}
 				>
 					{@render panel(id)}
 				</DockPanel>

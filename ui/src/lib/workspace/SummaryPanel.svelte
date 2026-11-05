@@ -331,6 +331,16 @@
 		align-self: flex-start;
 		text-transform: none;
 		letter-spacing: normal;
+		font-size: var(--font-size-base);
+	}
+	/* Body text at the rows' size: None reads as a value, not a footnote; a lamp's
+	   fixture line under its name no smaller than 13 px */
+	.ep-chip {
+		padding: 1px 10px;
+		font-size: var(--font-size-base);
+	}
+	.summary-panel :global(.editor-row .subtitle) {
+		font-size: var(--font-size-sm);
 	}
 	.dot {
 		width: 9px;

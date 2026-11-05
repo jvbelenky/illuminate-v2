@@ -213,9 +213,10 @@ test.describe('Lamps on the plan', () => {
     const fixture = fixtureSelect(page);
     await expect(fixture).toBeFocused();
     await expect(fixture.locator('option:checked')).toHaveText('Choose a fixture…');
-    // No Lamp Type / Select Lamp pair; the placements wait for a fixture
+    // No Lamp Type / Select Lamp pair; no placements until a fixture, and Details... disabled
     await expect(lampEditor(page).locator('select#lamp-type, select#preset')).toHaveCount(0);
-    await expect(lampEditor(page).locator('button.placement').first()).toBeDisabled();
+    await expect(lampEditor(page).locator('button.placement')).toHaveCount(0);
+    await expect(lampEditor(page).locator('button.details-btn')).toHaveAttribute('aria-disabled', 'true');
 
     await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
     await fixture.selectOption({ label: 'Beacon' });

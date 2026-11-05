@@ -119,14 +119,18 @@ describe('LampEditor', () => {
     expect(select.parentElement?.querySelector('button')?.textContent?.trim()).toBe('Details...');
   });
 
-  it('a lamp with no fixture prompts "Choose a fixture…"; its placements show, disabled, and the rest waits', () => {
+  it('a lamp with no fixture prompts "Choose a fixture…"; no placements, Details... disabled, and the rest waits', async () => {
     const { container } = renderEditor({ ...mockLamp, preset_id: undefined, has_ies_file: false });
     const select = screen.getByLabelText('Fixture') as HTMLSelectElement;
     expect(select.value).toBe('');
     expect(select.selectedOptions[0].textContent).toBe('Choose a fixture…');
-    const placements = Array.from(container.querySelectorAll('button.placement')) as HTMLButtonElement[];
-    expect(placements).toHaveLength(4);
-    for (const b of placements) expect(b.disabled).toBe(true);
+    expect(container.querySelectorAll('button.placement')).toHaveLength(0);
+    expect(screen.queryByRole('group', { name: 'Placement' })).toBeNull();
+    const details = screen.getByText('Details...').closest('button')!;
+    expect(details.getAttribute('aria-disabled')).toBe('true');
+    expect(details.title).toBe('Choose a fixture first');
+    await fireEvent.click(details);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(screen.queryByLabelText('Dimmer')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Geometry' })).toBeNull();
   });
@@ -258,6 +262,18 @@ describe('LampEditor', () => {
       expect(container.querySelector('.fixture-select')).toBeTruthy();
       expect(container.querySelector('#lamp-wavelength')).toBeNull();
     });
+  });
+
+  it('with a fixture, the placements show, enabled, and Details... is enabled', async () => {
+    const { container, rerender } = renderEditor({ ...mockLamp, preset_id: undefined, has_ies_file: false });
+    expect(container.querySelectorAll('button.placement')).toHaveLength(0);
+    await rerender({ lamp: { ...mockLamp } });
+    const placements = Array.from(container.querySelectorAll('button.placement')) as HTMLButtonElement[];
+    expect(placements).toHaveLength(4);
+    for (const b of placements) expect(b.disabled).toBe(false);
+    const details = screen.getByText('Details...').closest('button')!;
+    expect(details.getAttribute('aria-disabled')).toBe('false');
+    expect(details.hasAttribute('title')).toBe(false);
   });
 
   it('renders placement buttons', async () => {

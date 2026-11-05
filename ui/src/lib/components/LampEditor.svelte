@@ -142,9 +142,19 @@
 		return [];
 	});
 
-	// The rest of the panel waits for the lamp's photometry, so a new lamp asks
-	// for its fixture first; the placements show, usable once it has one.
+	// A new lamp asks for its fixture first: Details... waits for one and the
+	// placements appear with it (usable once its photometry is in); the rest
+	// of the panel waits for the photometry.
 	const showPlacement = $derived(lampHasPhotometry(lamp));
+	const hasFixture = $derived(!!fixtureValue || showPlacement);
+
+	function openDetails() {
+		if (!hasFixture) return;
+		if (!restoreByTitle('Advanced Lamp Settings')) {
+			detailsInitialTab = 'info';
+			showDetailsModal = true;
+		}
+	}
 
 	// Modal states
 	let showDetailsModal = $state(false);
@@ -392,7 +402,7 @@
 		<div class="form-group fixture-row">
 			<div class="select-with-button">
 				<FixtureSelect {fixtures} value={fixtureValue} extra={fixtureExtra} onChoose={chooseFixture} onAddCustom={() => onOpenLampManager(lamp_type, lamp.id)} />
-				<button type="button" class="secondary" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
+				<button type="button" class="secondary details-btn" aria-disabled={!hasFixture} title={hasFixture ? undefined : 'Choose a fixture first'} onclick={openDetails}>
 					Details...
 				</button>
 			</div>
@@ -437,6 +447,7 @@
 		</div>
 		{/if}
 
+		{#if hasFixture}
 		<div class="ep-grid ep-addbtns placements" role="group" aria-label="Placement" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
 			{#each PLACEMENT_MODES as pl (pl.mode)}
 				<button type="button" class="secondary placement" data-mode={pl.mode} disabled={!showPlacement || placingMode !== null} aria-busy={placingMode === pl.mode} title={PLACEMENT_TITLES[pl.mode]} onclick={() => applyPlacement(pl.mode)}>
@@ -445,6 +456,7 @@
 				</button>
 			{/each}
 		</div>
+		{/if}
 
 		{#if showPlacement}
 
@@ -674,8 +686,13 @@
 		background: var(--color-btn-fill-raised);
 		border-color: transparent;
 	}
-	.select-with-button button.secondary:hover:not(:disabled) {
+	.select-with-button button.secondary:hover:not(:disabled):not([aria-disabled='true']) {
 		background: var(--color-btn-fill-raised-hover);
+	}
+	/* Details... before a fixture: the disabled look, still focusable for its title */
+	.select-with-button button.details-btn[aria-disabled='true'] {
+		opacity: 0.45;
+		cursor: not-allowed;
 	}
 
 	.select-with-button :global(select),

@@ -5,7 +5,6 @@
 	import { workspaceUi } from '$lib/stores/workspaceUi';
 	import { STAGES, ROOM_PARTS, planContext, stageDone, type EditorStage, type RoomPart } from '$lib/workspace/editorNav';
 	import ReflectanceStep from '$lib/components/ReflectanceStep.svelte';
-	import EditorDone from './EditorDone.svelte';
 	import FloorplanPart from './parts/FloorplanPart.svelte';
 	import StructuresPart from './parts/StructuresPart.svelte';
 	import LampsPart from './parts/LampsPart.svelte';
@@ -13,15 +12,13 @@
 
 	interface Props {
 		controller: PlanController;
-		/** Given on a phone, where there is no panel bar: Done then sits at the end of the stage tabs. */
-		onDone?: () => void;
 		onShowReflectanceSettings: () => void;
 		lampPanel?: Snippet<[LampInstance, () => void]>;
 		zonePanel?: Snippet<[CalcZone, () => void]>;
 		objectPanel?: Snippet<[SceneObject]>;
 	}
 
-	let { controller, onDone, onShowReflectanceSettings, lampPanel, zonePanel, objectPanel }: Props = $props();
+	let { controller, onShowReflectanceSettings, lampPanel, zonePanel, objectPanel }: Props = $props();
 	const ctl = $derived(controller);
 
 	const stage = $derived($workspaceUi.stage);
@@ -66,7 +63,7 @@
 {/snippet}
 
 <div class="editor-panel">
-	<div class="editor-stages" class:with-done={!!onDone}>
+	<div class="editor-stages">
 		<div class="editor-stage-tabs" role="tablist" aria-label="Stages">
 			{#each STAGES as s (s.id)}
 				<button
@@ -87,9 +84,6 @@
 				</button>
 			{/each}
 		</div>
-		{#if onDone}
-			<EditorDone controller={ctl} {onDone} placement="tabs" />
-		{/if}
 	</div>
 	<div class="editor-stagebody">
 		{#if stage === 'room'}
@@ -158,11 +152,6 @@
 		display: flex;
 		gap: 4px;
 	}
-	/* On a phone Done closes the row, centred on the tabs */
-	.editor-stages.with-done :global(.editor-done) {
-		align-self: center;
-		margin: 0 6px 0 2px;
-	}
 	/* Number and label on one line at every width */
 	.editor-stage {
 		flex: 1 1 0;
@@ -186,7 +175,7 @@
 		border-left-width: 0;
 		border-top-left-radius: 0;
 	}
-	.editor-stages:not(.with-done) .editor-stage:last-child {
+	.editor-stage:last-child {
 		border-right-width: 0;
 		border-top-right-radius: 0;
 	}

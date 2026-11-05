@@ -13,6 +13,7 @@
 	import LampsPart from '$lib/workspace/parts/LampsPart.svelte';
 	import ZonesPart from '$lib/workspace/parts/ZonesPart.svelte';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
+	import EditorModeSwitch from '$lib/workspace/EditorModeSwitch.svelte';
 	import CeilingDesignerModal from '$lib/ceiling/CeilingDesignerModal.svelte';
 	import MainViewControls from '$lib/workspace/MainViewControls.svelte';
 	import type { MainView } from '$lib/workspace/dockLayout';
@@ -58,7 +59,7 @@
 		onItemSelected?: (id: string) => void;
 		/** Render the full EditorPanel beside the pane, driven by workspaceUi. */
 		editor?: boolean;
-		/** Given: Done at the end of the stage tabs, as on a phone. */
+		/** Given: the Summary | Editor switch over the editor; its Summary calls this. */
 		onDone?: () => void;
 		onShowReflectanceSettings?: () => void;
 		/** Render the desktop's main view controls with this main view (the pane then shows no toolbar of its own). */
@@ -307,7 +308,10 @@
 	{/if}
 	<PlanPane controller={ctl} {readonly} {mini} toolbar={!controls} viewTools={!touch} imageTools={!!controls} />
 	{#if editor}
-		<EditorPanel controller={ctl} {onDone} {onShowReflectanceSettings}>
+		{#if onDone}
+			<EditorModeSwitch mode="editor" controller={ctl} onSummary={onDone} onEditor={() => {}} />
+		{/if}
+		<EditorPanel controller={ctl} {onShowReflectanceSettings}>
 			{#snippet lampPanel(lamp, close)}
 				<div class="stub-lamp-panel">{lamp.name}<select aria-label="Fixture"><option value="">Choose a fixture…</option></select><button type="button" onclick={close}>Close lamp</button></div>
 			{/snippet}
