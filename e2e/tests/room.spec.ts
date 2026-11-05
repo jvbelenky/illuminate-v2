@@ -86,8 +86,8 @@ test.describe('Polygon rooms', () => {
     await expect(rows).toHaveCount(4);
 
     // Draw a triangle by clicking on the canvas
-    await planTool(page, 'Draw').click();
-    await expect(planTool(page, 'Draw')).toHaveAttribute('aria-pressed', 'true');
+    await planTool(page, 'Draw new outline').click();
+    await expect(planTool(page, 'Draw new outline')).toHaveAttribute('aria-pressed', 'true');
     const plan = planSvg(page);
     const box = await plan.boundingBox();
     if (!box) throw new Error('plan canvas not visible');
@@ -138,11 +138,71 @@ test.describe('Polygon rooms', () => {
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Y'))).toBe(4);
   });
 
+  test('the outline sits in a box: a corner handle widens the room (undo restores it), the rotate handle turns it a quarter, a double-click edits its vertices', async ({ page }) => {
+    await waitForSession(page);
+    await expandRoomPanel(page);
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(6);
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Y'))).toBe(4);
+    const plan = planSvg(page);
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
+    await expect(plan.getByRole('button', { name: 'Vertex 1', exact: true })).toHaveCount(0);
+    for (const name of ['Edit vertices', 'Rotate 90°', 'Draw new outline']) await expect(planTool(page, name)).toBeVisible();
+    await expect(planTool(page, 'Copy')).toHaveCount(0);
+    await expect(planTool(page, 'Delete')).toHaveCount(0);
+
+    // The top-right corner handle dragged right: wider, as one undo step; the height stays
+    const handle = (await plan.getByRole('button', { name: 'Resize top-right' }).boundingBox())!;
+    const hx = handle.x + handle.width / 2, hy = handle.y + handle.height / 2;
+    await page.mouse.move(hx, hy);
+    await page.mouse.down();
+    await page.mouse.move(hx + 20, hy, { steps: 4 });
+    await page.mouse.move(hx + 40, hy, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBeGreaterThan(6.1);
+    expect(parseFloat(await getRoomDimension(page, 'Y'))).toBe(4);
+    expect(parseFloat(await getRoomDimension(page, 'Z'))).toBe(2.7);
+    await page.locator('.app-status-bar').click();
+    await page.keyboard.press('Control+z');
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(6);
+
+    // The rotate handle, a quarter turn about the centre: 6 x 4 becomes 4 x 6 (moved up to stay at y >= 0)
+    const room = (await plan.locator('polygon.outline').boundingBox())!;
+    const cx = room.x + room.width / 2, cy = room.y + room.height / 2;
+    const knob = (await plan.getByRole('button', { name: 'Rotate' }).boundingBox())!;
+    const kx = knob.x + knob.width / 2, ky = knob.y + knob.height / 2;
+    const r = Math.hypot(kx - cx, ky - cy);
+    await page.mouse.move(kx, ky);
+    await page.mouse.down();
+    for (const deg of [20, 45, 70, 90]) {
+      const a = -Math.PI / 2 - (deg * Math.PI) / 180;
+      await page.mouse.move(cx + r * Math.cos(a), cy + r * Math.sin(a), { steps: 3 });
+    }
+    await expect(plan.locator('text.tb-angle')).toHaveText('90°');
+    await page.mouse.up();
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Y'))).toBe(6);
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(5);
+    await expect(page.locator('.floorplan-part .plan-summary')).toHaveText(/^24\.0 m²/);
+    await expect.poll(async () => (await plan.locator('text.edge-label').allTextContents()).sort()).toEqual(['4.0', '4.0', '6.0', '6.0']);
+
+    // A double-click inside: the vertex handles, Done in the strip; Esc goes back to the box
+    const turned = (await plan.locator('polygon.outline').boundingBox())!;
+    await page.mouse.dblclick(turned.x + turned.width / 2, turned.y + turned.height * 0.4);
+    await expect(plan.getByRole('button', { name: 'Vertex 1', exact: true })).toBeVisible();
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toHaveCount(0);
+    await expect(planTool(page, 'Done')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.floorplan-part .plan-actions').getByRole('button', { name: 'Edit vertices' })).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+    await expect(plan.getByRole('button', { name: 'Rotate' })).toBeVisible();
+    await expect(plan.getByRole('button', { name: 'Vertex 1', exact: true })).toHaveCount(0);
+  });
+
   test('double-click a wall to type its length; undo restores it', async ({ page }) => {
     await waitForSession(page);
     await expandRoomPanel(page);
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(6);
     const plan = planSvg(page);
+    // Walls and vertices are edited in Edit vertices (the outline otherwise sits in its box)
+    await planTool(page, 'Edit vertices').click();
     // Off the wall's centre, where the "+" handle sits
     const wall = await plan.getByRole('button', { name: 'Wall 1', exact: true }).boundingBox();
     if (!wall) throw new Error('bottom wall not visible');
@@ -163,7 +223,7 @@ test.describe('Polygon rooms', () => {
   test('draw an outline by typing wall lengths, then type a corner position', async ({ page }) => {
     await waitForSession(page);
     await expandRoomPanel(page);
-    await planTool(page, 'Draw').click();
+    await planTool(page, 'Draw new outline').click();
     const plan = planSvg(page);
     const box = (await plan.boundingBox())!;
     await plan.click({ position: { x: box.width * 0.2, y: box.height * 0.8 } });
@@ -190,8 +250,9 @@ test.describe('Polygon rooms', () => {
     await expect(page.locator('.floorplan-part .plan-summary')).toHaveText(/^20\.0 m²/);
     await expect(plan.locator('text.edge-label')).toHaveText(['5.0', '4.0', '5.0', '4.0']);
 
-    // Double-click a vertex: X and Y, in place
+    // Double-click a vertex: X and Y, in place (in Edit vertices)
     await openGeometry(page);
+    await planTool(page, 'Edit vertices').click();
     const row = page.locator('.floorplan-part .vertex-row').nth(1).locator('input');
     const x0 = parseFloat(await row.nth(0).inputValue());
     await plan.getByRole('button', { name: 'Vertex 2', exact: true }).dblclick();

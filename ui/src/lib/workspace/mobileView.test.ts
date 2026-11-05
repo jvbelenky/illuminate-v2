@@ -4,10 +4,9 @@ import { FULL_SCREEN_OFF, followCanvasTool, toggleFullScreen, wantsFullScreen } 
 describe('mobile full-screen view', () => {
 	it('a drawing or Edit vertices wants the full screen; other tools do not', () => {
 		expect(wantsFullScreen({ drawing: true, activeTool: null })).toBe(true);
-		expect(wantsFullScreen({ drawing: false, activeTool: 'corners' })).toBe(true);
 		expect(wantsFullScreen({ drawing: false, activeTool: 'move' })).toBe(false);
 		expect(wantsFullScreen({ drawing: false, activeTool: null })).toBe(false);
-		// A shape's corners being edited
+		// The outline's or a shape's corners being edited
 		expect(wantsFullScreen({ drawing: false, activeTool: null, shapeMode: 'corners' })).toBe(true);
 		expect(wantsFullScreen({ drawing: false, activeTool: null, shapeMode: 'select' })).toBe(false);
 	});

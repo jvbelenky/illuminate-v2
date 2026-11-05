@@ -7,6 +7,8 @@
 	// selected, Edit vertices, Rotate 90°, Copy and Delete; while its vertices are
 	// edited, Done. Structures and zones come from their Add cards, so with nothing
 	// selected their strip is empty; keep-out areas still draw from Rectangle and Polygon.
+	// The room outline on Floorplan is always in that box: Edit vertices, Rotate 90°
+	// and Draw new outline (no Copy or Delete), then Done.
 	import Glyph, { type GlyphName } from '$lib/workspace/Glyph.svelte';
 	import type { DrawShape, PlanController } from './planController.svelte';
 
@@ -47,14 +49,19 @@
 		});
 		return [draw('rect', 'Rectangle', 'rect'), draw('polygon', 'Polygon', 'polygon')];
 	}
-	/** A selected shape's tools, or Done while its vertices are edited. */
-	function shapeTools(copy: () => void, remove: () => void, disabled = false): Tool[] {
-		if (ctl.shapeMode === 'corners') {
-			return [{ label: 'Done', glyph: 'check', title: 'Done editing vertices (Esc)', onclick: ctl.endCorners, pressed: true }];
-		}
+	const DONE: Tool = { label: 'Done', glyph: 'check', title: 'Done editing vertices (Esc)', onclick: () => ctl.endCorners(), pressed: true };
+	/** Edit vertices and Rotate 90° for the shape in the box. */
+	function boxTools(disabled = false): Tool[] {
 		return [
 			{ label: 'Edit vertices', glyph: 'corners', title: 'Drag, add or remove vertices', onclick: () => ctl.inCanvas(ctl.editCorners), disabled },
-			{ label: 'Rotate 90°', glyph: 'rotate', title: 'Rotate 90° counter-clockwise', onclick: ctl.rotateSelected90, disabled },
+			{ label: 'Rotate 90°', glyph: 'rotate', title: 'Rotate 90° counter-clockwise', onclick: ctl.rotateSelected90, disabled }
+		];
+	}
+	/** A selected shape's tools, or Done while its vertices are edited. */
+	function shapeTools(copy: () => void, remove: () => void, disabled = false): Tool[] {
+		if (ctl.shapeMode === 'corners') return [DONE];
+		return [
+			...boxTools(disabled),
 			{ label: 'Copy', glyph: 'copy', title: COPY, onclick: copy, disabled },
 			{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: remove, disabled }
 		];
@@ -62,10 +69,9 @@
 
 	const tools = $derived.by<Tool[]>(() => {
 		if (ctl.onOutline) {
-			const list: Tool[] = [
-				{ label: 'Draw', glyph: 'pen', title: ctl.drawing ? 'Cancel drawing (Esc)' : 'Draw a new room outline', onclick: () => (ctl.drawing ? ctl.cancelDraw() : ctl.requestNewOutline()), pressed: ctl.drawing },
-				{ label: 'Edit vertices', glyph: 'corners', title: 'Drag, add or remove the outline\'s vertices', onclick: () => ctl.inCanvas(() => ctl.toggleTool('corners')), disabled: ctl.drawing, pressed: ctl.activeTool === 'corners' }
-			];
+			if (ctl.outlineEditable && !ctl.drawing && ctl.shapeMode === 'corners') return [DONE];
+			const draw: Tool = { label: 'Draw new outline', glyph: 'pen', title: ctl.drawing ? 'Cancel drawing (Esc)' : 'Draw a new room outline', onclick: () => (ctl.drawing ? ctl.cancelDraw() : ctl.requestNewOutline()), pressed: ctl.drawing };
+			const list: Tool[] = ctl.outlineEditable && !ctl.drawing ? [...boxTools(), draw] : [draw];
 			if (ctl.hasImage) {
 				list.push({ label: 'Move image', glyph: 'image', title: 'Drag the floor plan image', onclick: () => ctl.inCanvas(() => ctl.toggleTool('image')), disabled: ctl.drawing, pressed: ctl.activeTool === 'image' });
 			}

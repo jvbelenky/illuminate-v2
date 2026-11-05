@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  pixelToRoom, roomToPixel, initialPlacement, rescaleAboutPoint,
-  scaleFromMeasurement, imageRect, imageCorners, DEFAULT_FLOORPLAN_OPACITY,
+  pixelToRoom, roomToPixel, imageRect, imageCorners,
 } from './floorplanImage';
 import type { FloorPlanPlacement } from '$lib/types/project';
 
@@ -50,45 +49,6 @@ describe('rotated placement', () => {
     expect(corners[0][0]).toBeCloseTo(8.5, 9);
     expect(corners[0][1]).toBeCloseTo(9.5, 9);
     expect(imageCorners(base, 2)[1]).toEqual([22, 14]);
-  });
-});
-
-describe('initialPlacement', () => {
-  it('fits the long edge to the room long edge at the origin', () => {
-    const p = initialPlacement('id', 400, 100, 6, 4);
-    expect(p.scale).toBeCloseTo(6 / 400, 12);
-    expect(p.offsetX).toBe(0);
-    expect(p.offsetY).toBe(0);
-    expect(p.opacity).toBe(DEFAULT_FLOORPLAN_OPACITY);
-    expect(p.imageId).toBe('id');
-  });
-  it('uses the image height when it is the long edge', () => {
-    const p = initialPlacement('id', 100, 400, 6, 4);
-    expect(p.scale).toBeCloseTo(6 / 400, 12);
-  });
-});
-
-describe('rescaleAboutPoint', () => {
-  it('keeps the anchor fixed in room space', () => {
-    const anchor = pixelToRoom(base, 50, 25);
-    const next = rescaleAboutPoint(base, anchor, base.scale * 3);
-    expect(next.scale).toBeCloseTo(base.scale * 3, 12);
-    expect(pixelToRoom(next, 50, 25)[0]).toBeCloseTo(anchor[0], 9);
-    expect(pixelToRoom(next, 50, 25)[1]).toBeCloseTo(anchor[1], 9);
-  });
-});
-
-describe('scaleFromMeasurement', () => {
-  it('derives meters per pixel from two room points and a known distance', () => {
-    const a = pixelToRoom(base, 0, 50);
-    const b = pixelToRoom(base, 100, 50); // 100 px apart
-    expect(scaleFromMeasurement(base, a, b, 2.5)).toBeCloseTo(0.025, 12);
-  });
-  it('returns null for coincident points or a non-positive distance', () => {
-    const a = pixelToRoom(base, 10, 10);
-    expect(scaleFromMeasurement(base, a, a, 2)).toBeNull();
-    const b = pixelToRoom(base, 20, 10);
-    expect(scaleFromMeasurement(base, a, b, 0)).toBeNull();
   });
 });
 
