@@ -11,7 +11,7 @@ vi.mock('$lib/stores/nextStep', async () => {
   step.current = writable({ id: 'no-lamps', tone: 'info', title: 'x', detail: '', step: 2 });
   return { nextStep: step.current };
 });
-vi.mock('$lib/utils/calculate', () => ({ performCalculation }));
+vi.mock('$lib/stores/calculationStatus', () => ({ requestCalculation: performCalculation }));
 
 import ZoneStatsPanel from './ZoneStatsPanel.svelte';
 
@@ -48,7 +48,7 @@ describe('Results next-step buttons', () => {
     expect(onOpenZones).toHaveBeenCalledTimes(1);
   });
 
-  it('"Calculation failed" retries the calculation', async () => {
+  it('"Calculation failed" asks the Calculate button to run again', async () => {
     step.current.set({ id: 'calc-error', tone: 'danger', title: 'Calculation failed', detail: 'boom', step: 3 });
     render(ZoneStatsPanel);
     await fireEvent.click(screen.getByRole('button', { name: 'Calculation failed' }));
