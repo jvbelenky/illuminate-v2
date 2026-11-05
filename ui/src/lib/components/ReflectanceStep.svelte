@@ -5,7 +5,7 @@
 	import { commonReflectance, commonTransmittance, objectFaceIds, faceOptics } from '$lib/utils/objectFaces';
 	import QuicksetInput from './QuicksetInput.svelte';
 	import EnableReflectionsDialog from './EnableReflectionsDialog.svelte';
-	import { userSettings } from '$lib/stores/settings';
+	import { ReflectionsToggle } from './reflectionsToggle.svelte';
 
 	interface Props {
 		/** Open the per-plane reflectance modal. */
@@ -33,23 +33,12 @@
 		return { R: sameR ? all[0].R : null, T: sameT ? all[0].T : null };
 	}
 
-	let confirming = $state(false);
+	const reflections = new ReflectionsToggle((on) => project.updateRoom({ enable_reflectance: on }));
 
 	function toggle(event: Event) {
 		const box = event.target as HTMLInputElement;
-		if (box.checked && $userSettings.warnEnableReflections) {
-			// Hold the box off until the warning is answered
-			box.checked = false;
-			confirming = true;
-			return;
-		}
-		project.updateRoom({ enable_reflectance: box.checked });
-	}
-
-	function enable(dontShowAgain: boolean) {
-		confirming = false;
-		if (dontShowAgain) userSettings.update((s) => ({ ...s, warnEnableReflections: false }));
-		project.updateRoom({ enable_reflectance: true });
+		// Held off until the warning is answered
+		if (!reflections.set(box.checked)) box.checked = false;
 	}
 
 	function setWalls(value: number) {
@@ -66,8 +55,8 @@
 	}
 </script>
 
-{#if confirming}
-	<EnableReflectionsDialog onEnable={enable} onCancel={() => (confirming = false)} />
+{#if reflections.confirming}
+	<EnableReflectionsDialog onEnable={reflections.enable} onCancel={reflections.cancel} />
 {/if}
 
 <div class="reflectance-step">

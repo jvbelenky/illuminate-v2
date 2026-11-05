@@ -3,6 +3,8 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/svelte';
 import SummaryPanel from './SummaryPanel.svelte';
 import { defaultRoom, type CalcZone, type LampInstance, type SceneObject } from '$lib/types/project';
 import type { PlanScene, PlanActions } from '$lib/plan/planActions';
+import { get } from 'svelte/store';
+import { userSettings } from '$lib/stores/settings';
 
 afterEach(cleanup);
 
@@ -13,7 +15,7 @@ const zone = { id: 'zone-1', name: 'Floor', type: 'plane', ref_surface: 'xy', en
 const std = { id: 'WholeRoomFluence', name: 'Whole room fluence', type: 'volume', isStandard: true, enabled: true } as unknown as CalcZone;
 
 function setup(over: Partial<PlanScene> = {}, room: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
-  const actions = { updateLamp: vi.fn(), updateZone: vi.fn(), updateObstacle: vi.fn(), setHidden: vi.fn() } as unknown as PlanActions;
+  const actions = { updateLamp: vi.fn(), updateZone: vi.fn(), updateObstacle: vi.fn(), setHidden: vi.fn(), updateRoom: vi.fn() } as unknown as PlanActions;
   const onEdit = vi.fn();
   const onHover = vi.fn();
   const scene = {
@@ -130,5 +132,61 @@ describe('SummaryPanel', () => {
     expect(onHover).toHaveBeenLastCalledWith('lamps', 'lamp-1', true);
     await fireEvent.mouseLeave(r);
     expect(onHover).toHaveBeenLastCalledWith('lamps', 'lamp-1', false);
+  });
+
+  describe('Reflections switch', () => {
+    const toggle = () => screen.getByRole('switch', { name: 'Reflections' }) as HTMLInputElement;
+    afterEach(() => userSettings.update((s) => ({ ...s, warnEnableReflections: true })));
+
+    it('turning on asks first; Enable applies it once', async () => {
+      userSettings.update((s) => ({ ...s, warnEnableReflections: true }));
+      const { actions } = setup({}, { enable_reflectance: false });
+      expect(toggle().checked).toBe(false);
+      expect(toggle().title).toBe('Turn reflections on');
+      await fireEvent.click(toggle());
+      expect(screen.getByText('Enable reflections?')).toBeTruthy();
+      expect(actions.updateRoom).not.toHaveBeenCalled();
+      expect(toggle().checked).toBe(false);
+      await fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+      expect(actions.updateRoom).toHaveBeenCalledTimes(1);
+      expect(actions.updateRoom).toHaveBeenCalledWith({ enable_reflectance: true });
+      expect(screen.queryByText('Enable reflections?')).toBeNull();
+      expect(get(userSettings).warnEnableReflections).toBe(true);
+    });
+
+    it('Cancel keeps reflections off', async () => {
+      userSettings.update((s) => ({ ...s, warnEnableReflections: true }));
+      const { actions } = setup({}, { enable_reflectance: false });
+      await fireEvent.click(toggle());
+      await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByText('Enable reflections?')).toBeNull();
+      expect(actions.updateRoom).not.toHaveBeenCalled();
+      expect(toggle().checked).toBe(false);
+    });
+
+    it('"Don\'t show this again" is saved on Enable; with it off, on applies at once', async () => {
+      userSettings.update((s) => ({ ...s, warnEnableReflections: true }));
+      setup({}, { enable_reflectance: false });
+      await fireEvent.click(toggle());
+      await fireEvent.click(screen.getByLabelText("Don't show this again"));
+      await fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+      expect(get(userSettings).warnEnableReflections).toBe(false);
+      cleanup();
+      const { actions } = setup({}, { enable_reflectance: false });
+      await fireEvent.click(toggle());
+      expect(screen.queryByText('Enable reflections?')).toBeNull();
+      expect(actions.updateRoom).toHaveBeenCalledWith({ enable_reflectance: true });
+    });
+
+    it('turning off needs no dialog', async () => {
+      userSettings.update((s) => ({ ...s, warnEnableReflections: true }));
+      const { actions } = setup({}, { enable_reflectance: true });
+      expect(toggle().checked).toBe(true);
+      expect(toggle().title).toBe('Turn reflections off');
+      await fireEvent.click(toggle());
+      expect(screen.queryByText('Enable reflections?')).toBeNull();
+      expect(actions.updateRoom).toHaveBeenCalledTimes(1);
+      expect(actions.updateRoom).toHaveBeenCalledWith({ enable_reflectance: false });
+    });
   });
 });

@@ -21,6 +21,8 @@ vi.mock('$lib/stores/lampLibrary', async () => {
 
 import { project, room, objects } from '$lib/stores/project';
 import { userSettings } from '$lib/stores/settings';
+import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
+import type { PlanScene, PlanActions } from '$lib/plan/planActions';
 
 function input(): HTMLInputElement {
   return document.getElementById('reflectance-all') as HTMLInputElement;
@@ -166,6 +168,30 @@ describe('ReflectanceStep', () => {
       await project.history.undo(); // back on
       expect(get(room).enable_reflectance).toBe(true);
       expect(screen.queryByText('Enable reflections?')).toBeNull();
+    });
+
+    it("the summary's switch asks the same way and shares \"Don't show this again\" with the tick box", async () => {
+      const scene = {
+        vertices: [[0, 0], [4, 0], [4, 6], [0, 6]], units: 'meters', precision: 1, lamps: [], objects: [], zones: [],
+        floorplan: null, image: null, roomZ: 2.7, fixtures: [], room: get(room),
+        hidden: { lamps: new Set<string>(), zones: new Set<string>(), objects: new Set<string>() },
+      } as unknown as PlanScene;
+      const actions = { updateRoom: (p: Parameters<typeof project.updateRoom>[0]) => project.updateRoom(p) } as unknown as PlanActions;
+      const summary = render(SummaryPanel, { props: { scene, actions, onEdit: vi.fn() } });
+      await fireEvent.click(screen.getByRole('switch', { name: 'Reflections' }));
+      expect(screen.getByText('Enable reflections?')).toBeTruthy();
+      await fireEvent.click(screen.getByLabelText("Don't show this again"));
+      await fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+      expect(get(room).enable_reflectance).toBe(true);
+      expect(get(userSettings).warnEnableReflections).toBe(false);
+      summary.unmount();
+
+      // The tick box no longer asks either
+      project.updateRoom({ enable_reflectance: false });
+      render(ReflectanceStep, { props: { onShowReflectanceSettings: vi.fn() } });
+      await fireEvent.click(box());
+      expect(screen.queryByText('Enable reflections?')).toBeNull();
+      expect(get(room).enable_reflectance).toBe(true);
     });
   });
 });
