@@ -145,6 +145,7 @@ describe('SummaryPanel', () => {
       expect(toggle().title).toBe('Turn reflections on');
       await fireEvent.click(toggle());
       expect(screen.getByText('Enable reflections?')).toBeTruthy();
+      expect(screen.getByText('Reflections make calculations significantly slower and usually change the results by about 5–10%.')).toBeTruthy();
       expect(actions.updateRoom).not.toHaveBeenCalled();
       expect(toggle().checked).toBe(false);
       await fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
