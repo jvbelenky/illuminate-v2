@@ -42,6 +42,20 @@
 	import { displayDimension } from '$lib/utils/formatting';
 	import { lampColor } from '$lib/utils/wavelengthColor';
 	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
+	import { theme } from '$lib/stores/theme';
+	import {
+		gridSpacing,
+		gridColors,
+		planGridLines,
+		formatTick,
+		rulerColors,
+		GRID_CELL_THICKNESS,
+		GRID_SECTION_THICKNESS,
+		GRID_CELL_OPACITY,
+		GRID_SECTION_OPACITY,
+		type PlanRulers,
+		type PlanAxesMarker,
+	} from '$lib/utils/viewGrid';
 	import Glyph from '$lib/workspace/Glyph.svelte';
 	import UnitsSelect from '$lib/workspace/UnitsSelect.svelte';
 	import UndoRedo from '$lib/workspace/UndoRedo.svelte';
@@ -170,6 +184,14 @@
 		onUnitsChange?: (event: Event) => void;
 		/** The host's armed tool's cursor, over the Pan or Zoom one ('default' keeps the handles' own). */
 		toolCursor?: 'move' | 'crosshair' | 'default' | null;
+		/** The view grid (View › Show Grid, shared with 3D). */
+		showGrid?: boolean;
+		/** The grid fades out to nothing this far from the view's centre (room units), as 3D's does; null: no fade. */
+		gridFade?: number | null;
+		/** Dimension rulers along the room's edges (View › Show Dimensions, shared with 3D). */
+		rulers?: PlanRulers | null;
+		/** The XYZ marker (View › Show XYZ Marker, shared with 3D). */
+		axesMarker?: PlanAxesMarker | null;
 	}
 
 	let {
@@ -225,6 +247,10 @@
 		onEdit,
 		onUnitsChange,
 		toolCursor = null,
+		showGrid = true,
+		gridFade = null,
+		rulers = null,
+		axesMarker = null,
 	}: Props = $props();
 
 	let beforeDraw: Vertex[] | null = null;
@@ -343,19 +369,10 @@
 		const nice = norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10;
 		return nice * mag;
 	});
-	const isMajor = (v: number) => Math.round(v / gridStep) % 5 === 0;
-	function gridRange(from: number, to: number): number[] {
-		const out: number[] = [];
-		const start = Math.floor(from / gridStep) * gridStep;
-		for (let v = start; v <= to + 1e-9; v += gridStep) out.push(Math.round(v * 1e6) / 1e6);
-		return out;
-	}
 	// Draw the grid generously past the view (a resize before the aspect is
 	// measured, or one mid-gesture, can show a little more) so the axes never
 	// stop partway across.
 	const span = $derived(Math.max(viewW, viewH));
-	const gridX = $derived(gridRange(view.x - span, view.x + span * 4));
-	const gridY = $derived(gridRange(view.y - span, view.y + span * 4));
 	const gridLo = $derived({ x: view.x - span, y: view.y - span });
 	const gridHi = $derived({ x: view.x + span * 4, y: view.y + span * 4 });
 	const viewBox = $derived(`${view.x} ${-(view.y + viewH)} ${viewW} ${viewH}`);
@@ -416,6 +433,18 @@
 	// Sizes in room units so they stay constant on screen: px is one CSS pixel at
 	// the canvas's current size and zoom (the short side shows view.size units).
 	const px = $derived(view.size / shortSide);
+
+	// The view grid, as 3D draws it (viewGrid): one cell per metre or foot, a
+	// section every 5, the 3D colours and weights, fading with distance from the
+	// view's centre. (The snap step, gridStep, still follows the zoom.)
+	const spacing = $derived(gridSpacing(units));
+	const gridCol = $derived(gridColors($theme));
+	const gridX = $derived(showGrid ? planGridLines(gridLo.x, gridHi.x, spacing, px) : { cells: [], sections: [] });
+	const gridY = $derived(showGrid ? planGridLines(gridLo.y, gridHi.y, spacing, px) : { cells: [], sections: [] });
+	const fadeId = `plan-grid-fade-${Math.random().toString(36).slice(2, 9)}`;
+	const rulerCol = $derived(rulerColors($theme));
+	/** A ruler's tick length on screen (3D's tickSize): the line sits one out, ticks reach two, labels three. */
+	const RULER_TICK_PX = 6;
 	/**
 	 * The dash of a dimmed or disabled footprint, in screen pixels. Drawn in world
 	 * units (as a CSS dasharray would be) a 4 m dash with 3 m gaps left outlines
@@ -1600,15 +1629,34 @@
 	onpointerleave={onPointerLeave}
 	onkeydown={onKeyDown}
 >
-	<!-- Plain grid (follows the viewport): minor lines, a stronger line every 5 steps -->
-	{#each gridX as g}
-		{@const [gx] = toSvg(g, 0)}
-		<line x1={gx} y1={-gridHi.y} x2={gx} y2={-gridLo.y} class="grid-line" class:major={isMajor(g)} stroke-width={px} />
-	{/each}
-	{#each gridY as g}
-		{@const [, gy] = toSvg(0, g)}
-		<line x1={gridLo.x} y1={gy} x2={gridHi.x} y2={gy} class="grid-line" class:major={isMajor(g)} stroke-width={px} />
-	{/each}
+	<!-- The view grid (follows the viewport): cell lines, a section line every 5 cells, faded with distance as in 3D -->
+	{#if showGrid}
+		{#if gridFade}
+			<defs>
+				<radialGradient id="{fadeId}-g" gradientUnits="userSpaceOnUse" cx={view.x + viewW / 2} cy={-(view.y + viewH / 2)} r={gridFade}>
+					<stop offset="0" stop-color="#ffffff" stop-opacity="1" />
+					<stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+				</radialGradient>
+				<mask id={fadeId} maskUnits="userSpaceOnUse" x={gridLo.x} y={-gridHi.y} width={gridHi.x - gridLo.x} height={gridHi.y - gridLo.y}>
+					<rect x={gridLo.x} y={-gridHi.y} width={gridHi.x - gridLo.x} height={gridHi.y - gridLo.y} fill="url(#{fadeId}-g)" />
+				</mask>
+			</defs>
+		{/if}
+		<g class="view-grid" mask={gridFade ? `url(#${fadeId})` : undefined}>
+			{#each gridX.cells as g (g)}
+				<line x1={g} y1={-gridHi.y} x2={g} y2={-gridLo.y} class="grid-line" stroke={gridCol.cell} stroke-opacity={GRID_CELL_OPACITY} stroke-width={px * GRID_CELL_THICKNESS} />
+			{/each}
+			{#each gridY.cells as g (g)}
+				<line x1={gridLo.x} y1={-g} x2={gridHi.x} y2={-g} class="grid-line" stroke={gridCol.cell} stroke-opacity={GRID_CELL_OPACITY} stroke-width={px * GRID_CELL_THICKNESS} />
+			{/each}
+			{#each gridX.sections as g (g)}
+				<line x1={g} y1={-gridHi.y} x2={g} y2={-gridLo.y} class="grid-line major" stroke={gridCol.section} stroke-opacity={GRID_SECTION_OPACITY} stroke-width={px * GRID_SECTION_THICKNESS} />
+			{/each}
+			{#each gridY.sections as g (g)}
+				<line x1={gridLo.x} y1={-g} x2={gridHi.x} y2={-g} class="grid-line major" stroke={gridCol.section} stroke-opacity={GRID_SECTION_OPACITY} stroke-width={px * GRID_SECTION_THICKNESS} />
+			{/each}
+		</g>
+	{/if}
 
 	{#if underlay}{@render underlay(ctx)}{/if}
 
@@ -1622,6 +1670,37 @@
 	{#if field}{@render field(ctx)}{/if}
 	{#if contextPoints}
 		<polygon points={contextPoints} class="context-outline" stroke-width={px * 1.5} />
+	{/if}
+
+	<!-- Dimension rulers, as 3D's: along the bottom (0 included) and the left edge, ticks and labels outside -->
+	{#if rulers}
+		{@const t = px * RULER_TICK_PX}
+		<g class="rulers" stroke={rulerCol.line} stroke-width={px}>
+			<line class="ruler" x1={0} y1={t} x2={rulers.h.length} y2={t} />
+			{#each rulers.h.ticks as v (v)}
+				<line class="ruler-tick" x1={v} y1={t} x2={v} y2={2 * t} />
+				<text class="ruler-label" x={v} y={2 * t + px * 12} font-size={px * 11} text-anchor="middle" fill={rulerCol.text} stroke="none">{formatTick(v, precision)}</text>
+			{/each}
+			<line class="ruler" x1={-t} y1={0} x2={-t} y2={-rulers.v.length} />
+			{#each rulers.v.ticks as v (v)}
+				<line class="ruler-tick" x1={-t} y1={-v} x2={-2 * t} y2={-v} />
+				<text class="ruler-label" x={-2 * t - px * 3} y={-v + px * 3.5} font-size={px * 11} text-anchor="end" fill={rulerCol.text} stroke="none">{formatTick(v, precision)}</text>
+			{/each}
+		</g>
+	{/if}
+
+	<!-- The XYZ marker, as 3D's projected: an axis pointing at the viewer is a dot -->
+	{#if axesMarker}
+		{@const [ox, oy] = axesMarker.origin}
+		<g class="xyz-marker">
+			{#each [...axesMarker.axes].sort((a, b) => Math.hypot(a.end[0] - ox, a.end[1] - oy) - Math.hypot(b.end[0] - ox, b.end[1] - oy)) as a (a.axis)}
+				{#if Math.hypot(a.end[0] - ox, a.end[1] - oy) > px * 0.5}
+					<line x1={ox} y1={-oy} x2={a.end[0]} y2={-a.end[1]} stroke={a.color} stroke-width={px * 2} data-axis={a.axis} />
+				{:else}
+					<circle cx={ox} cy={-oy} r={px * 3} fill={a.color} data-axis={a.axis} />
+				{/if}
+			{/each}
+		</g>
 	{/if}
 
 	<!-- Guidelines through the corner the cursor is aligned with -->
@@ -1728,7 +1807,9 @@
 		{@const sel = selectedLampIds.includes(lamp.id)}
 		{@const lit = !sel && highlightedLampIds.includes(lamp.id)}
 		<circle cx={lx} cy={ly} r={lampR} stroke-width={px * (sel || lit ? 3 : 1.5)} class="lamp" class:selected={sel} class:highlighted={lit} style:fill={lamp.enabled === false ? DISABLED_COLOR : lampColor(lamp)} style:opacity={lampOpacity[lamp.id]} />
-		<text x={lx + lampR + px * 4} y={ly + px * 4} class="lamp-label" style:opacity={lampOpacity[lamp.id]} font-size={px * 11}>{lamp.name || lamp.id}</text>
+		{#if lamp.show_label_2d !== false}
+			<text x={lx + lampR + px * 4} y={ly + px * 4} class="lamp-label" style:opacity={lampOpacity[lamp.id]} font-size={px * 11}>{lamp.name || lamp.id}</text>
+		{/if}
 	{/each}
 
 	<!-- Midpoint handles: click to insert a vertex -->
@@ -1926,14 +2007,15 @@
 	.plan:focus-visible {
 		border-color: var(--color-focus);
 	}
-	.grid-line {
-		stroke: var(--color-text-muted);
-		opacity: 0.14;
-		/* Presses on the grid are presses on empty space */
+	/* Colours and weights come from viewGrid (shared with 3D); presses on the grid,
+	   the rulers and the marker are presses on empty space */
+	.grid-line,
+	.rulers,
+	.xyz-marker {
 		pointer-events: none;
 	}
-	.grid-line.major {
-		opacity: 0.3;
+	.ruler-label {
+		font-family: var(--font-mono, monospace);
 	}
 	.vertex-label,
 	.edge-label,

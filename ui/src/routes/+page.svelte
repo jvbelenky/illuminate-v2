@@ -485,7 +485,8 @@
 	const commonZoneDisplayMode = $derived.by<ZoneDisplayMode | null>(() => {
 		if ($zones.length === 0) return null;
 		const first = $zones[0].display_mode ?? 'heatmap';
-		return $zones.every(z => (z.display_mode ?? 'heatmap') === first) ? first : null;
+		// Ticked only when both views show it
+		return $zones.every(z => (z.display_mode ?? 'heatmap') === first && (z.display_mode_2d ?? z.display_mode ?? 'heatmap') === first) ? first : null;
 	});
 
 	// Global value range across plane zones only (for global heatmap normalization; the 2D plan uses the same)
@@ -1247,14 +1248,14 @@
 			showCalcPointLabels={$room.showCalcPointLabels ?? false}
 		colormap={$room.colormap}
 		precision={$room.precision}
-		onToggleShowPhotometricWebs={() => { const v = !($room.showPhotometricWebs ?? true); project.updateRoom({ showPhotometricWebs: v }); userSettings.update(s => ({ ...s, showPhotometricWebs: v })); for (const lamp of $lamps) { project.updateLamp(lamp.id, { show_photometric_web: v }); } }}
+		onToggleShowPhotometricWebs={() => { const v = !($room.showPhotometricWebs ?? true); project.updateRoom({ showPhotometricWebs: v }); userSettings.update(s => ({ ...s, showPhotometricWebs: v })); for (const lamp of $lamps) { project.updateLamp(lamp.id, { show_photometric_web: v, show_photometric_web_2d: v }); } }}
 		onToggleShowGrid={() => { const v = !($room.showGrid ?? true); project.updateRoom({ showGrid: v }); userSettings.update(s => ({ ...s, showGrid: v })); }}
 		showFloorPlanImage={$room.showFloorPlanImage ?? true}
 		hasFloorPlanImage={!!$room.floorplan && $floorplanImage?.id === $room.floorplan.imageId}
 		onToggleShowFloorPlanImage={() => { const v = !($room.showFloorPlanImage ?? true); project.updateRoom({ showFloorPlanImage: v }); userSettings.update(s => ({ ...s, showFloorPlanImage: v })); }}
 		onToggleShowXYZMarker={() => { const v = !($room.showXYZMarker ?? true); project.updateRoom({ showXYZMarker: v }); userSettings.update(s => ({ ...s, showXYZMarker: v })); }}
-		onToggleShowLampLabels={() => { const v = !($room.showLampLabels ?? false); project.updateRoom({ showLampLabels: v }); userSettings.update(s => ({ ...s, showLampLabels: v })); for (const lamp of $lamps) { project.updateLamp(lamp.id, { show_label: v }); } }}
-			onToggleShowCalcPointLabels={() => { const v = !($room.showCalcPointLabels ?? false); project.updateRoom({ showCalcPointLabels: v }); userSettings.update(s => ({ ...s, showCalcPointLabels: v })); for (const z of $zones.filter(z => z.type === 'point')) { project.updateZone(z.id, { show_label: v }); } }}
+		onToggleShowLampLabels={() => { const v = !($room.showLampLabels ?? false); project.updateRoom({ showLampLabels: v }); userSettings.update(s => ({ ...s, showLampLabels: v })); for (const lamp of $lamps) { project.updateLamp(lamp.id, { show_label: v, show_label_2d: v }); } }}
+			onToggleShowCalcPointLabels={() => { const v = !($room.showCalcPointLabels ?? false); project.updateRoom({ showCalcPointLabels: v }); userSettings.update(s => ({ ...s, showCalcPointLabels: v })); for (const z of $zones.filter(z => z.type === 'point')) { project.updateZone(z.id, { show_label: v, show_label_2d: v }); } }}
 		onSetColormap={(cm) => { project.updateRoom({ colormap: cm }); userSettings.update(s => ({ ...s, colormap: cm })); }}
 		onSetPrecision={(p) => { project.updateRoom({ precision: p }); userSettings.update(s => ({ ...s, precision: p })); }}
 		globalHeatmapNormalization={$room.globalHeatmapNormalization ?? false}
@@ -1262,7 +1263,8 @@
 		currentZoneDisplayMode={commonZoneDisplayMode}
 		onSetAllZonesDisplayMode={(mode: ZoneDisplayMode) => {
 			for (const z of $zones) {
-				project.updateZone(z.id, { display_mode: mode });
+				// A view option: both views (each zone's 2D and 3D modes stay its own afterwards)
+				project.updateZone(z.id, { display_mode: mode, display_mode_2d: mode });
 			}
 		}}
 		onOpenSettingsDisplay={() => { settingsInitialTab = 'display'; openOrRestore('Default Settings', () => { settingsInitialTab = 'display'; showSettingsModal = true; }); }}

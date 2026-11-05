@@ -21,7 +21,7 @@
 	import BillboardGroup from './BillboardGroup.svelte';
 	import { theme } from '$lib/stores/theme';
 	import { userSettings } from '$lib/stores/settings';
-	import { gridCellSize } from '$lib/utils/unitConversion';
+	import { gridSpacing, gridColors, gridFadeDistance, xyzMarker, GRID_CELL_THICKNESS, GRID_SECTION_THICKNESS } from '$lib/utils/viewGrid';
 	import { pickMode, pickResult } from '$lib/stores/pickMode';
 	import { guardedClick } from '$lib/utils/sceneClick';
 	import { zoneValueFactor } from '$lib/utils/calculations';
@@ -89,14 +89,11 @@
 	);
 
 	// Theme-based colors
-	const colors = $derived($theme === 'light' ? {
-		gridCell: '#b0b0b0',
-		gridSection: '#909090',
-		sceneBg: '#d0d7de'
-	} : {
-		gridCell: '#4a4a6a',
-		gridSection: '#6a6a8a',
-		sceneBg: '#1a1a2e'
+	// Grid colours are shared with the 2D plan (viewGrid)
+	const colors = $derived({
+		gridCell: gridColors($theme).cell,
+		gridSection: gridColors($theme).section,
+		sceneBg: $theme === 'light' ? '#d0d7de' : '#1a1a2e'
 	});
 
 	// Set scene background color
@@ -260,8 +257,8 @@
 	// those units too, so physical sizes (lifts, markers) convert with fromMeters
 	const scale = 1;
 	const units = $derived($userSettings.units);
-	// One floor-grid cell per metre or foot (100 cm, 1000 mm, 12 in), sections every 5
-	const gridCell = $derived(gridCellSize(units));
+	// One floor-grid cell per metre or foot (100 cm, 1000 mm, 12 in), sections every 5 (shared with the 2D plan)
+	const spacing = $derived(gridSpacing(units));
 	const roomDims = $derived({
 		x: room.x,
 		y: room.y,
@@ -665,12 +662,12 @@
 		<Grid
 			cellColor={colors.gridCell}
 			sectionColor={colors.gridSection}
-			cellSize={gridCell}
-			sectionSize={gridCell * 5}
-			fadeDistance={maxDim * 5}
+			cellSize={spacing.cell}
+			sectionSize={spacing.section}
+			fadeDistance={gridFadeDistance(maxDim)}
 			infiniteGrid={true}
-			cellThickness={1}
-			sectionThickness={1.5}
+			cellThickness={GRID_CELL_THICKNESS}
+			sectionThickness={GRID_SECTION_THICKNESS}
 		/>
 	</T.Group>
 {/if}
@@ -763,5 +760,6 @@
 
 <!-- Axes helper (small, in corner) -->
 {#if room.showXYZMarker ?? true}
-	<RoomAxes axisLength={gridCell} offset={maxDim * 0.1} />
+	{@const marker = xyzMarker(maxDim, units)}
+	<RoomAxes axisLength={marker.length} offset={marker.offset} />
 {/if}
