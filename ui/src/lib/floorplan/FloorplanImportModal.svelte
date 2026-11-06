@@ -1259,9 +1259,18 @@
 		background: var(--color-btn-fill);
 		overflow: hidden;
 	}
+	/* The open card keeps the closed cards' fill; the blue ring marks it */
 	.fi-card.open {
-		background: var(--color-bg);
 		box-shadow: inset 0 0 0 1.5px var(--color-highlight);
+	}
+	/* Secondary buttons in a card take the stronger fill, off the card's own */
+	.fi-card .fi-b:not(.on),
+	.fi-card .fi-del {
+		background: var(--color-btn-fill-raised);
+	}
+	.fi-card .fi-b:not(.on):hover:not(:disabled),
+	.fi-card .fi-del:hover {
+		background: var(--color-btn-fill-raised-hover);
 	}
 	.fi-ch {
 		display: flex;
