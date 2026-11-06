@@ -284,13 +284,14 @@ test.describe('Polygon rooms', () => {
       }, p);
       await page.mouse.click(x, y);
     };
-    // Already aligned; origin; a 3 m scale; trace four corners and close on the first
-    await win.getByRole('button', { name: 'Already aligned' }).click();
+    // Looks good; origin; a 3 m scale typed into the popup; trace four corners and close on the first
+    await win.getByRole('button', { name: 'Looks good' }).click();
     await clickImage([10, 50]);
     await win.getByRole('button', { name: 'Next →' }).click();
     await clickImage([10, 50]);
     await clickImage([110, 50]);
-    await page.locator('#fi-distance').fill('3');
+    await win.getByLabel('Distance between the points').fill('3');
+    await page.keyboard.press('Enter');
     await win.getByRole('button', { name: 'Next →' }).click();
     await win.getByRole('button', { name: 'Trace', exact: true }).click();
     for (const p of [[10, 50], [110, 50], [110, 10], [10, 10], [10, 50]] as [number, number][]) await clickImage(p);

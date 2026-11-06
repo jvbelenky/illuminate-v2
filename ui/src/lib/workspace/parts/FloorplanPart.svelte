@@ -172,17 +172,23 @@
 </div>
 
 {#if session}
-	<FloorplanImportModal
-		src={session.src}
-		widthPx={session.widthPx}
-		heightPx={session.heightPx}
-		{units}
-		precision={scene.precision}
-		initial={importInitial}
-		currentOutline={importOutline}
-		onApply={applyImport}
-		onClose={ctl.closeImport}
-	/>
+	<!-- Change image… opens a new session: the window starts over on it -->
+	{#key session}
+		<FloorplanImportModal
+			src={session.src}
+			widthPx={session.widthPx}
+			heightPx={session.heightPx}
+			{units}
+			precision={scene.precision}
+			initial={importInitial}
+			currentOutline={importOutline}
+			onUnitsChange={ctl.handleUnitsChange}
+			onChangeImage={(file) => void ctl.openImport(file)}
+			decoding={ctl.decoding}
+			onApply={applyImport}
+			onClose={ctl.closeImport}
+		/>
+	{/key}
 {/if}
 
 <style>

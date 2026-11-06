@@ -348,6 +348,17 @@
 		view = { x: ax - (ax - view.x) * k, y: ay - (ay - view.y) * k, size: newSize };
 		userMoved = true;
 	}
+	/** Zoom about the view centre so that one CSS pixel shows `upp` room units (the floor plan import's 100%). */
+	export function zoomToUnitsPerPixel(upp: number) {
+		if (!(upp > 0)) return;
+		zoomAbout(view.x + viewW / 2, view.y + viewH / 2, (upp * shortSide) / view.size);
+	}
+	/** Pan the view by a pointer delta in CSS pixels (a host's own Pan tool). */
+	export function panBy(dxPx: number, dyPx: number) {
+		const upp = unitsPerPixel();
+		view = { x: view.x - dxPx * upp, y: view.y + dyPx * upp, size: view.size };
+		userMoved = true;
+	}
 	/** One-click zoom step about the view centre: dir 1 zooms in, -1 out. */
 	export function zoomStep(dir: 1 | -1) {
 		zoomAbout(view.x + viewW / 2, view.y + viewH / 2, dir > 0 ? 1 / 1.25 : 1.25);

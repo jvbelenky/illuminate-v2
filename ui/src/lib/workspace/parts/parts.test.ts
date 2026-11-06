@@ -185,21 +185,23 @@ describe('Floorplan part: the import window', () => {
   const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
   const windowOpen = () => screen.queryByRole('dialog', { name: 'Floor plan from image' });
 
-  it('Adjust image… reopens the window on Align axes with the current alignment, origin and scale done', async () => {
+  it('Adjust image… reopens the window on Check axes with the current alignment, origin and scale done', async () => {
     mount({ part: 'floorplan', floorplan: placement, image });
     expect(windowOpen()).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Adjust image…' }));
     const dlg = windowOpen()!;
     expect(dlg).toBeTruthy();
-    expect(dlg.querySelector('.fi-msg')!.textContent).toBe('Click two points along a wall that should line up with the grid.');
-    const steps = Array.from(dlg.querySelectorAll('.fi-step'));
-    expect(steps.map((s) => s.classList.contains('done'))).toEqual([true, true, true, false]);
-    expect(steps[2].textContent).toMatch(/Set scale\s*67 px\/m/);
+    expect(dlg.querySelector('.fi-card.open .fi-instr')!.textContent).toBe('Do the walls line up with the grid?');
+    const cards = Array.from(dlg.querySelectorAll('.fi-card'));
+    expect(cards.map((s) => s.classList.contains('done'))).toEqual([true, true, true, false]);
+    expect(cards[2].textContent).toMatch(/Set scale\s*67 px\/m/);
     expect(dlg.querySelector('svg.fi-svg')!.getAttribute('data-rotation')).toBe('-3');
+    // Already aligned: Redo and Next in the card
+    expect(within(cards[0] as HTMLElement).getByRole('button', { name: 'Redo' })).toBeTruthy();
     // Step 4 offers to keep the current outline, which finishes the step
-    await fireEvent.click(steps[3]);
+    await fireEvent.click(cards[3].querySelector('.fi-ch')!);
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Keep current outline' }));
-    expect(dlg.querySelectorAll('.fi-step')[3].classList.contains('done')).toBe(true);
+    expect(dlg.querySelectorAll('.fi-card')[3].classList.contains('done')).toBe(true);
     expect(dlg.querySelectorAll('.vertex-row')).toHaveLength(4);
   });
 
@@ -215,8 +217,11 @@ describe('Floorplan part: the import window', () => {
     ctl.importSession = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null };
     await tick();
     const dlg = windowOpen()!;
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Next →' }));
-    expect(dlg.querySelector('.fi-msg')!.textContent).toBe('Click or drag to place the origin (0, 0).');
+    // Check axes asks; Looks good moves on and marks it done
+    expect(dlg.querySelector('.fi-card.open .fi-instr')!.textContent).toBe('Do the walls line up with the grid?');
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Looks good' }));
+    expect(dlg.querySelectorAll('.fi-card')[0].classList.contains('done')).toBe(true);
+    expect(dlg.querySelector('.fi-card.open .fi-instr')!.textContent).toBe('Click to place the origin (0, 0).');
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Next →' }));
     const prompt = within(dlg).getByRole('alertdialog');
     expect(prompt.textContent).toMatch(/Set the origin first/);

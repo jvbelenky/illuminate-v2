@@ -23,13 +23,22 @@ function dialog(page: Page) {
   return page.getByRole('dialog', { name: 'Floor plan from image' });
 }
 
-/** Click an image pixel of the window's image, wherever the view puts it (rotation included). */
-async function clickImage(page: Page, p: [number, number]) {
-  const [x, y] = await page.locator('.fi-image').evaluate((el, [px, py]) => {
-    const m = (el as SVGGraphicsElement).getScreenCTM()!;
-    const q = new DOMPoint(px, py).matrixTransform(m);
-    return [q.x, q.y];
+/** The open step card. */
+function card(page: Page) {
+  return dialog(page).locator('.fi-card.open');
+}
+
+/** Image pixel -> screen point, wherever the view (or the outline canvas) puts it, rotation included. */
+async function screenOf(page: Page, p: [number, number]): Promise<[number, number]> {
+  return page.locator('.fi-image').evaluate((el, [px, py]) => {
+    const q = new DOMPoint(px, py).matrixTransform((el as SVGGraphicsElement).getScreenCTM()!);
+    return [q.x, q.y] as [number, number];
   }, p);
+}
+
+/** Click an image pixel of the window's image. */
+async function clickImage(page: Page, p: [number, number]) {
+  const [x, y] = await screenOf(page, p);
   await page.mouse.click(x, y);
 }
 
@@ -40,29 +49,61 @@ async function upload(page: Page) {
   await expect(dialog(page)).toBeVisible();
 }
 
-/** Steps 1-3 (straighten, origin, scale), then Auto-detect on the room; ends with the four vertex rows shown. */
+/** Set scale: two clicks, the distance typed into the popup beside the cursor, Enter. */
+async function scaleBy(page: Page, a: [number, number], b: [number, number], text: string) {
+  await clickImage(page, a);
+  await clickImage(page, b);
+  const pop = dialog(page).getByLabel('Distance between the points');
+  await expect(pop).toBeFocused();
+  await page.keyboard.type(text);
+  await page.keyboard.press('Enter');
+  await expect(pop).toHaveCount(0);
+}
+
+/** Looks good, the origin on the bottom-left inner corner and a 5 m scale along the bottom wall (the plan stays tilted). */
+async function quickSetup(page: Page) {
+  await dialog(page).getByRole('button', { name: 'Looks good' }).click();
+  await clickImage(page, tilted([150, 450]));
+  await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+  await scaleBy(page, tilted([150, 450]), tilted([650, 450]), '5');
+  await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(card(page)).toContainText('Trace outline');
+}
+
+/** Steps 1-3 (straighten, origin by drag, scale by the popup), then Auto-detect on one room; ends with the four vertex rows shown. */
 async function detectRoom(page: Page) {
-  // 1. Straighten: two clicks along the top wall's inner face
+  // 1. Check axes: Align axes, then two clicks along the top wall's inner face
+  await expect(card(page).getByRole('status')).toHaveText('Do the walls line up with the grid?');
+  await card(page).getByRole('button', { name: 'Align axes' }).click();
+  await expect(card(page).getByRole('status')).toHaveText('Click two points along a wall to align it to an axis.');
   await clickImage(page, tilted([170, 150]));
   await clickImage(page, tilted([630, 150]));
   await expect.poll(async () => Number(await page.locator('svg.fi-svg').getAttribute('data-rotation'))).toBeCloseTo(-4, 3);
-  await page.getByRole('button', { name: 'Next →' }).click();
+  await expect(card(page).getByRole('button', { name: 'Redo' })).toBeVisible();
+  await card(page).getByRole('button', { name: 'Done' }).click();
+  await expect(dialog(page).locator('.fi-card').first()).toHaveClass(/done/);
+  await card(page).getByRole('button', { name: 'Next', exact: true }).click();
 
-  // 2. The origin on the bottom-left inner corner
-  await clickImage(page, tilted([150, 450]));
-  await expect(dialog(page).getByRole('status')).toHaveText('Origin placed. Drag it to adjust, or press Next.');
-  await page.getByRole('button', { name: 'Next →' }).click();
+  // 2. The origin: press beside the bottom-left inner corner and drag it there
+  const [ox, oy] = await screenOf(page, tilted([150, 450]));
+  await page.mouse.move(ox + 30, oy - 20);
+  await page.mouse.down();
+  await page.mouse.move(ox + 10, oy - 5, { steps: 3 });
+  await page.mouse.move(ox, oy, { steps: 3 });
+  await page.mouse.up();
+  await expect(card(page).getByRole('status')).toHaveText('Click to place the origin (0, 0).');
+  await card(page).getByRole('button', { name: 'Next', exact: true }).click();
 
   // 3. Scale: the bottom wall, 5 m
-  await clickImage(page, tilted([150, 450]));
-  await clickImage(page, tilted([650, 450]));
-  await page.locator('#fi-distance').fill('5');
-  await expect(dialog(page).getByRole('button', { name: /Set scale\s*100 px\/m/ })).toBeVisible();
+  await scaleBy(page, tilted([150, 450]), tilted([650, 450]), '5');
+  await expect(card(page).getByLabel('Distance', { exact: true })).toHaveValue('5');
   await page.getByRole('button', { name: 'Next →' }).click();
+  await expect(dialog(page).getByRole('button', { name: /Set scale\s*5 m/ })).toBeVisible();
 
-  // 4. Auto-detect: click inside the room
-  await dialog(page).getByRole('button', { name: 'Auto-detect', exact: true }).click();
-  await expect(dialog(page).getByRole('status')).toHaveText('Click inside the room to detect it.');
+  // 4. Auto-detect: One room, then click inside it
+  await card(page).getByRole('button', { name: 'Auto-detect' }).click();
+  await dialog(page).getByRole('alertdialog', { name: 'Detect the outline of…' }).getByRole('button', { name: 'One room' }).click();
+  await expect(card(page).getByRole('status')).toHaveText('Click inside the room to detect it.');
   await clickImage(page, tilted([450, 220]));
   await expect(dialog(page).locator('.vertex-row')).toHaveCount(4);
 }
@@ -78,7 +119,7 @@ test.describe('Floor plan import window', () => {
 
     // The partition is found, outlined on the image and listed, ticked
     await expect(dialog(page).getByRole('button', { name: 'Interior walls (1)' })).toBeVisible();
-    await expect(dialog(page).locator('svg.fi-svg polygon.fi-iwall')).toHaveCount(1);
+    await expect(dialog(page).locator('polygon.fi-iwall')).toHaveCount(1);
     await expect(dialog(page).getByRole('checkbox', { name: 'Wall 1' })).toBeChecked();
     await expect(dialog(page).getByRole('checkbox', { name: 'Include interior walls' })).toBeChecked();
 
@@ -127,7 +168,7 @@ test.describe('Floor plan import window', () => {
     const objectsBefore = (await getObjectsFromStore(page)).length;
     await detectRoom(page);
     // Clicking the wall on the image unticks it
-    await dialog(page).locator('svg.fi-svg polygon.fi-iwall').click();
+    await dialog(page).locator('polygon.fi-iwall').click();
     await expect(dialog(page).getByRole('checkbox', { name: 'Wall 1' })).not.toBeChecked();
     await expect(dialog(page).getByRole('checkbox', { name: 'Include interior walls' })).not.toBeChecked();
     await page.getByRole('button', { name: 'Create room' }).click();
@@ -140,15 +181,117 @@ test.describe('Floor plan import window', () => {
   test('Next without an origin asks for it, and OK stays on Set origin', async ({ page }) => {
     await upload(page);
     await page.getByRole('button', { name: 'Next →' }).click();
-    await expect(dialog(page).getByRole('status')).toHaveText('Click or drag to place the origin (0, 0).');
+    await expect(card(page).getByRole('status')).toHaveText('Click to place the origin (0, 0).');
     await page.getByRole('button', { name: 'Next →' }).click();
     const prompt = page.getByRole('alertdialog', { name: 'Set the origin first' });
     await expect(prompt).toBeVisible();
     await prompt.getByRole('button', { name: 'OK' }).click();
     await expect(prompt).toHaveCount(0);
-    await expect(dialog(page).locator('.fi-step.on')).toContainText('Set origin');
+    await expect(card(page)).toContainText('Set origin');
     // A later step card asks the same
     await dialog(page).getByRole('button', { name: /Trace outline/ }).click();
     await expect(page.getByRole('alertdialog', { name: 'Set the origin first' })).toBeVisible();
+  });
+
+  test('the scale: the popup, edited on the card, its line hidden, Redo sets it again; the popup closes on Esc or a click away', async ({ page }) => {
+    await upload(page);
+    await dialog(page).getByRole('button', { name: 'Looks good' }).click();
+    await clickImage(page, tilted([150, 450]));
+    await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+    await scaleBy(page, tilted([150, 450]), tilted([650, 450]), '5');
+    const label = dialog(page).locator('.fi-scale-label');
+    await expect(label).toHaveText('5 m');
+    // Edited on the card
+    const field = card(page).getByLabel('Distance', { exact: true });
+    await field.fill('10');
+    await expect(label).toHaveText('10 m');
+    // The line hides and shows again
+    await card(page).getByRole('button', { name: 'Hide the scale line' }).click();
+    await expect(dialog(page).locator('line.fi-scale')).toHaveCount(0);
+    await card(page).getByRole('button', { name: 'Show the scale line' }).click();
+    await expect(dialog(page).locator('line.fi-scale')).toHaveCount(1);
+    // Redo: the next two clicks set it again; Esc closes the popup and keeps the value
+    await card(page).getByRole('button', { name: 'Redo' }).click();
+    await expect(card(page).getByRole('status')).toHaveText('Click two points a known distance apart.');
+    await clickImage(page, tilted([150, 150]));
+    await clickImage(page, tilted([150, 450]));
+    const pop = dialog(page).getByLabel('Distance between the points');
+    await expect(pop).toBeFocused();
+    await expect(pop).toHaveValue('10');
+    await page.keyboard.type('3');
+    await page.keyboard.press('Escape');
+    await expect(pop).toHaveCount(0);
+    await expect(dialog(page)).toBeVisible();
+    await expect(card(page).getByLabel('Distance', { exact: true })).toHaveValue('3');
+    // A click away (here on the card) confirms what is typed and closes it
+    await card(page).getByRole('button', { name: 'Redo' }).click();
+    await clickImage(page, tilted([150, 150]));
+    await clickImage(page, tilted([150, 450]));
+    await expect(pop).toBeFocused();
+    await page.keyboard.type('2.5');
+    await card(page).locator('.fi-ch').click();
+    await expect(pop).toHaveCount(0);
+    await expect(card(page).getByLabel('Distance', { exact: true })).toHaveValue('2.5');
+  });
+
+  test('tracing snaps like the 2D view: near-square clicks make an exact rectangle', async ({ page }) => {
+    await upload(page);
+    await quickSetup(page);
+    await card(page).getByRole('button', { name: 'Trace', exact: true }).click();
+    await expect(card(page).getByRole('status')).toHaveText('Click each vertex; click the first one to close.');
+    const canvas = dialog(page).getByRole('application', { name: 'Outline canvas' });
+    const box = (await canvas.boundingBox())!;
+    const x0 = box.x + box.width * 0.3, y0 = box.y + box.height * 0.7;
+    // Each wall a pixel or two off square
+    for (const [dx, dy] of [[0, 0], [260, 2], [262, -180], [1, -182]] as [number, number][]) {
+      await page.mouse.move(x0 + dx, y0 + dy, { steps: 2 });
+      await page.mouse.click(x0 + dx, y0 + dy);
+    }
+    await page.keyboard.press('Enter');
+    const rows = dialog(page).locator('.vertex-row');
+    await expect(rows).toHaveCount(4);
+    const pts = await rows.evaluateAll((els) => els.map((r) => Array.from(r.querySelectorAll('input')).slice(0, 2).map((i) => Number((i as HTMLInputElement).value))));
+    expect(new Set(pts.map((p) => p[0])).size).toBe(2);
+    expect(new Set(pts.map((p) => p[1])).size).toBe(2);
+    // Redo clears it back to the choice
+    await card(page).getByRole('button', { name: 'Redo' }).click();
+    await expect(rows).toHaveCount(0);
+  });
+
+  test('a failed detection says so and leaves you tracing', async ({ page }) => {
+    await upload(page);
+    await quickSetup(page);
+    await card(page).getByRole('button', { name: 'Auto-detect' }).click();
+    await dialog(page).getByRole('button', { name: 'One room' }).click();
+    // Outside the building: nothing to find
+    await clickImage(page, tilted([40, 40]));
+    await expect(dialog(page).getByRole('alert')).toHaveText('No outline found there — trace it instead.');
+    await expect(card(page).getByRole('status')).toHaveText('Click each vertex; click the first one to close.');
+    await expect(card(page).getByRole('button', { name: 'Trace', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('the units select changes the vertex table', async ({ page }) => {
+    await upload(page);
+    await detectRoom(page);
+    const xs = () => dialog(page).locator('.vertex-row').evaluateAll((els) => els.map((r) => Number((r.querySelector('input') as HTMLInputElement).value)));
+    expect(Math.max(...(await xs()))).toBeCloseTo(5, 1);
+    await dialog(page).getByTitle('Units').selectOption('centimeters');
+    await expect.poll(async () => Math.max(...(await xs()))).toBeGreaterThan(490);
+    expect(Math.max(...(await xs()))).toBeLessThan(510);
+  });
+
+  test('Change image… starts over on Check axes', async ({ page }) => {
+    await upload(page);
+    await dialog(page).getByRole('button', { name: 'Looks good' }).click();
+    await clickImage(page, tilted([150, 450]));
+    await expect(dialog(page).locator('.fi-card').nth(1)).toHaveClass(/done/);
+    await dialog(page).getByRole('button', { name: 'Change image…' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Start over with a new image?' });
+    await expect(confirm).toBeVisible();
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), confirm.getByRole('button', { name: 'Choose image' }).click()]);
+    await chooser.setFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
+    await expect(card(page)).toContainText('Check axes');
+    await expect(dialog(page).locator('.fi-card.done')).toHaveCount(0);
+    await expect(card(page).getByRole('status')).toHaveText('Do the walls line up with the grid?');
   });
 });
