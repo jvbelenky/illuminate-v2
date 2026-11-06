@@ -192,6 +192,8 @@
 		rulers?: PlanRulers | null;
 		/** The XYZ marker (View › Show XYZ Marker, shared with 3D). */
 		axesMarker?: PlanAxesMarker | null;
+		/** Length, vertex and cursor labels on backed chips, placed inside the outline (over a busy plan image). */
+		labelChips?: boolean;
 	}
 
 	let {
@@ -251,6 +253,7 @@
 		gridFade = null,
 		rulers = null,
 		axesMarker = null,
+		labelChips = false,
 	}: Props = $props();
 
 	let beforeDraw: Vertex[] | null = null;
@@ -1780,6 +1783,11 @@
 		{/if}
 	{/if}
 
+	{#snippet chip(x: number, y: number, label: string, anchor: 'start' | 'middle', fs: number)}
+		{@const w = (label.length * 0.62 + 0.7) * fs}
+		<rect class="label-chip" x={anchor === 'middle' ? x - w / 2 : x - 0.35 * fs} y={y - fs * 1.02} width={w} height={fs * 1.4} rx={fs * 0.3} stroke-width={px} />
+	{/snippet}
+
 	<!-- Outline (closed polygon in edit mode, open polyline while drawing) -->
 	{#if draft.length >= 3 && !drawing}
 		<polygon points={outlinePoints} class="outline" class:selected-area={selectedDraft} class:unfilled={draftFill !== 'over'} stroke-width={px * 2} stroke-dasharray={selectedDraft ? `${px * 6} ${px * 4}` : undefined} />
@@ -1788,7 +1796,8 @@
 	{/if}
 	{#if rubberBand}
 		<line x1={rubberBand.x1} y1={rubberBand.y1} x2={rubberBand.x2} y2={rubberBand.y2} class="rubber-band" stroke-width={px * 1.5} stroke-dasharray="{px * 3} {px * 2}" />
-		<text x={rubberBand.mid[0]} y={rubberBand.mid[1] - px * 8} class="edge-label" font-size={px * 11} text-anchor="middle">{fmt(rubberBand.length)} {unit}</text>
+		{#if labelChips}{@render chip(rubberBand.mid[0], rubberBand.mid[1] - px * 8, `${fmt(rubberBand.length)} ${unit}`, 'middle', px * 11)}{/if}
+		<text x={rubberBand.mid[0]} y={rubberBand.mid[1] - px * 8} class="edge-label" class:chipped={labelChips} font-size={px * 11} text-anchor="middle">{fmt(rubberBand.length)} {unit}</text>
 	{/if}
 
 	{#if overlay}{@render overlay(ctx)}{/if}
@@ -1806,14 +1815,16 @@
 			{@const [x2, y2] = toSvg(next[0], next[1])}
 			{@const [mx, my] = midpoints[i]}
 			{@const [nx, ny] = inwardNormals[i]}
-			{@const [lx, ly] = toSvg(mx + nx * px * 20, my + ny * px * 20)}
+			{@const inset = labelChips ? 30 : 20}
+			{@const [lx, ly] = toSvg(mx + nx * px * inset, my + ny * px * inset)}
 			{#if !transformBox}
 				<line x1={x1} y1={y1} x2={x2} y2={y2} class="edge-hit" stroke-width={hitPx * 10}
 					role="button" tabindex="-1" aria-label="Wall {i + 1}"
 					onpointerdown={(e) => beginDrag(e, 'edge', i)} ondblclick={(e) => onEdgeDblClick(e, i)} />
 			{/if}
+			{#if labelChips}{@render chip(lx, ly + px * 4, fmt(edgeLengths[i]), 'middle', px * 11)}{/if}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<text x={lx} y={ly + px * 4} class="edge-label" class:typeable={lengthTyping} class:editing-length={inline?.kind === 'length' && inline.index === i}
+			<text x={lx} y={ly + px * 4} class="edge-label" class:chipped={labelChips} class:typeable={lengthTyping} class:editing-length={inline?.kind === 'length' && inline.index === i}
 				font-size={px * 11} text-anchor="middle"
 				onpointerdown={onLabelPointerDown} ondblclick={(e) => onEdgeDblClick(e, i)}>{fmt(edgeLengths[i])}</text>
 		{/each}
@@ -1900,7 +1911,18 @@
 			onpointerdown={(e) => beginDrag(e, 'vertex', i)}
 			ondblclick={(e) => onVertexDblClick(e, i)}
 		/>
-		<text x={sx + handleR * 1.6} y={sy - handleR * 1.2} class="vertex-label" font-size={px * 11}>{i + 1}</text>
+		{#if labelChips && !drawing && inwardNormals.length === draft.length}
+			<!-- Inside the outline, along the corner's bisector -->
+			{@const na = inwardNormals[(i - 1 + draft.length) % draft.length]}
+			{@const nb = inwardNormals[i]}
+			{@const dl = Math.hypot(na[0] + nb[0], na[1] + nb[1]) || 1}
+			{@const [tx, ty] = toSvg(vx + ((na[0] + nb[0]) / dl) * px * 22, vy + ((na[1] + nb[1]) / dl) * px * 22)}
+			{@render chip(tx, ty + px * 4, String(i + 1), 'middle', px * 11)}
+			<text x={tx} y={ty + px * 4} class="vertex-label chipped" font-size={px * 11} text-anchor="middle">{i + 1}</text>
+		{:else}
+			{#if labelChips}{@render chip(sx + handleR * 1.6, sy - handleR * 1.2, String(i + 1), 'start', px * 11)}{/if}
+			<text x={sx + handleR * 1.6} y={sy - handleR * 1.2} class="vertex-label" class:chipped={labelChips} font-size={px * 11}>{i + 1}</text>
+		{/if}
 	{/each}
 
 	{#if transformBox}
@@ -1917,7 +1939,8 @@
 	{#if drawing && cursor}
 		{@const [cx, cy] = toSvg(cursor[0], cursor[1])}
 		<circle {cx} {cy} r={handleR * 0.8} class="cursor-dot" stroke-width={px * 1.5} />
-		<text x={cx + handleR * 1.6} y={cy + handleR * 2.6} class="cursor-label" font-size={px * 11}>{fmt(cursor[0])}, {fmt(cursor[1])}</text>
+		{#if labelChips}{@render chip(cx + handleR * 1.6, cy + handleR * 2.6, `${fmt(cursor[0])}, ${fmt(cursor[1])}`, 'start', px * 11)}{/if}
+		<text x={cx + handleR * 1.6} y={cy + handleR * 2.6} class="cursor-label" class:chipped={labelChips} font-size={px * 11}>{fmt(cursor[0])}, {fmt(cursor[1])}</text>
 	{/if}
 
 	<!-- Zoom mode's box -->
@@ -2081,6 +2104,19 @@
 	}
 	.edge-label {
 		fill: var(--color-text);
+	}
+	/* On a chip: the view's background, a thin border, full-contrast text */
+	.label-chip {
+		fill: var(--color-bg);
+		fill-opacity: 0.92;
+		stroke: var(--color-border);
+		pointer-events: none;
+	}
+	.vertex-label.chipped,
+	.edge-label.chipped,
+	.cursor-label.chipped {
+		fill: var(--color-text);
+		font-weight: 600;
 	}
 	.edge-label.typeable {
 		pointer-events: auto;

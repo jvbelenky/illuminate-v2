@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import Harness from '$lib/workspace/test/WorkspaceHarness.svelte';
 import { interceptUndo } from '$lib/utils/undoKeys';
@@ -1192,11 +1192,12 @@ describe('PlanPane reference image', () => {
     expect(container.querySelectorAll('circle.lamp')).toHaveLength(2);
   });
 
-  it('Remove takes the image away', async () => {
+  it('Remove (once confirmed) takes the image away', async () => {
     const calls: unknown[][] = [];
     mount({ part: 'floorplan', calls, floorplan: placement, image });
     expect(screen.getByLabelText('Floor plan reference image')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Remove the floor plan file?' })).getByRole('button', { name: 'Remove' }));
     expect(screen.queryByLabelText('Floor plan reference image')).toBeNull();
     expect(calls).toEqual([['setPlacement', null, undefined]]);
   });
@@ -1240,7 +1241,7 @@ describe('PlanPane reference image', () => {
   it('shows the re-upload state when a placement has no image, and mounting changes nothing', () => {
     const calls: unknown[][] = [];
     mount({ part: 'floorplan', calls, floorplan: placement, image: null });
-    expect(screen.getByText('Image missing')).toBeTruthy();
+    expect(screen.getByText('File missing')).toBeTruthy();
     expect(calls).toEqual([]);
   });
 

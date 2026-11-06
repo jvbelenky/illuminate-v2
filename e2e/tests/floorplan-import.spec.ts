@@ -24,7 +24,7 @@ function tilted([x, y]: [number, number]): [number, number] {
 }
 
 function dialog(page: Page) {
-  return page.getByRole('dialog', { name: 'Floor plan from image' });
+  return page.getByRole('dialog', { name: 'Floor plan from file' });
 }
 
 /** The open step card. */
@@ -46,11 +46,27 @@ async function clickImage(page: Page, p: [number, number]) {
   await page.mouse.click(x, y);
 }
 
-async function upload(page: Page, file = FIXTURE) {
+/** Upload floor plan file: the window opens and asks for the file at once. */
+async function openWindow(page: Page) {
   await waitForSession(page);
   await expandRoomPanel(page);
-  await page.locator('.floorplan-part input[type="file"]').setInputFiles(file);
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.locator('.floorplan-part').getByRole('button', { name: /Upload floor plan file/ }).click(),
+  ]);
   await expect(dialog(page)).toBeVisible();
+  return chooser;
+}
+
+async function upload(page: Page, file = FIXTURE) {
+  const chooser = await openWindow(page);
+  await chooser.setFiles(file);
+  await expect(card(page)).toContainText('Check axes');
+}
+
+/** The One room prompt over the image. */
+function pickPrompt(page: Page) {
+  return dialog(page).getByRole('status', { name: 'Pick a room' });
 }
 
 /** Set scale: two clicks, the distance typed into the popup beside the cursor, Enter. */
@@ -108,7 +124,7 @@ async function alignedSetup(page: Page) {
   await expect.poll(async () => Number(await page.locator('svg.fi-svg').getAttribute('data-rotation'))).toBeCloseTo(-4, 3);
   await expect(card(page).getByRole('button', { name: 'Redo' })).toBeVisible();
   await card(page).getByRole('button', { name: 'Done' }).click();
-  await expect(dialog(page).locator('.fi-card').first()).toHaveClass(/done/);
+  await expect(dialog(page).locator('.fi-card').nth(1)).toHaveClass(/done/);
   await card(page).getByRole('button', { name: 'Next', exact: true }).click();
 
   // 2. The origin: press beside the bottom-left inner corner and drag it there
@@ -135,7 +151,7 @@ async function detectRoom(page: Page) {
   // 4. Auto-detect: One room, then click inside it
   await card(page).getByRole('button', { name: 'Auto-detect' }).click();
   await dialog(page).getByRole('alertdialog', { name: 'Detect the outline of…' }).getByRole('button', { name: 'One room' }).click();
-  await expect(card(page).getByRole('status')).toHaveText('Click inside the room to detect it.');
+  await expect(pickPrompt(page)).toContainText('Click inside a room to detect it');
   await clickImage(page, tilted([450, 220]));
   await expect(dialog(page).locator('.vertex-row')).toHaveCount(4);
 }
@@ -269,20 +285,25 @@ test.describe('Floor plan import window', () => {
   test('tracing snaps like the 2D view: near-square clicks make an exact rectangle', async ({ page }) => {
     await upload(page);
     await quickSetup(page);
-    await card(page).getByRole('button', { name: 'Trace', exact: true }).click();
-    await expect(card(page).getByRole('status')).toHaveText('Click each vertex; click the first one to close.');
+    await card(page).getByRole('button', { name: 'Manual trace' }).click();
+    await expect(card(page).getByRole('status')).toHaveText('Click on the image to place the first vertex.');
     const canvas = dialog(page).getByRole('application', { name: 'Outline canvas' });
     const box = (await canvas.boundingBox())!;
     const x0 = box.x + box.width * 0.3, y0 = box.y + box.height * 0.7;
+    const rows = dialog(page).locator('.vertex-row');
     // Short walls, each a few pixels off square (past a 3° angle snap): every
-    // corner lines up with the previous one, the last with the first too
+    // corner lines up with the previous one, the last with the first too.
+    // The table grows with each vertex, Redo | Finish under it
+    let n = 0;
     for (const [dx, dy] of [[0, 0], [90, 6], [95, -70], [-5, -66]] as [number, number][]) {
       await page.mouse.move(x0 + dx, y0 + dy, { steps: 2 });
       await page.mouse.click(x0 + dx, y0 + dy);
+      await expect(rows).toHaveCount(++n);
     }
+    await expect(card(page).locator('.fi-pair button')).toHaveText(['Redo', 'Finish']);
     await page.keyboard.press('Enter');
-    const rows = dialog(page).locator('.vertex-row');
     await expect(rows).toHaveCount(4);
+    await expect(card(page).locator('.fi-pair button')).toHaveText(['+ Add vertex', 'Redo']);
     const pts = await rows.evaluateAll((els) => els.map((r) => Array.from(r.querySelectorAll('input')).slice(0, 2).map((i) => Number((i as HTMLInputElement).value))));
     expect(new Set(pts.map((p) => p[0])).size).toBe(2);
     expect(new Set(pts.map((p) => p[1])).size).toBe(2);
@@ -290,9 +311,173 @@ test.describe('Floor plan import window', () => {
     const exact = await canvas.locator('circle.vertex').evaluateAll((els) => els.map((c) => [c.getAttribute('cx'), c.getAttribute('cy')]));
     expect(new Set(exact.map((p) => p[0])).size).toBe(2);
     expect(new Set(exact.map((p) => p[1])).size).toBe(2);
-    // Redo clears it back to the choice
+    // Redo clears it back to the switch's choice: Manual trace, drawing again
     await card(page).getByRole('button', { name: 'Redo' }).click();
     await expect(rows).toHaveCount(0);
+    await expect(card(page).getByRole('status')).toHaveText('Click on the image to place the first vertex.');
+  });
+
+  test('tracing: Finish closes the outline; Undo and Redo step through the traced vertices', async ({ page }) => {
+    await upload(page);
+    await quickSetup(page);
+    await card(page).getByRole('button', { name: 'Manual trace' }).click();
+    const canvas = dialog(page).getByRole('application', { name: 'Outline canvas' });
+    const box = (await canvas.boundingBox())!;
+    const x0 = box.x + box.width * 0.3, y0 = box.y + box.height * 0.7;
+    const rows = dialog(page).locator('.vertex-row');
+    const finish = card(page).getByRole('button', { name: 'Finish' });
+    for (const [dx, dy] of [[0, 0], [120, 0], [120, -90]] as [number, number][]) await page.mouse.click(x0 + dx, y0 + dy);
+    await expect(rows).toHaveCount(3);
+    // Undo twice: one vertex left; Redo brings one back (Ctrl+Y and the button alike)
+    const undo = dialog(page).getByRole('button', { name: 'Undo', exact: true });
+    const redo = dialog(page).locator('.fi-tools').getByRole('button', { name: 'Redo', exact: true });
+    await undo.click();
+    await expect(rows).toHaveCount(2);
+    await page.keyboard.press('Control+z');
+    await expect(rows).toHaveCount(1);
+    await expect(finish).toBeDisabled();
+    await page.keyboard.press('Control+y');
+    await expect(rows).toHaveCount(2);
+    await redo.click();
+    await expect(rows).toHaveCount(3);
+    await expect(redo).toBeDisabled();
+    // Still drawing: a fourth vertex, then Finish closes it back to the first
+    await page.mouse.click(x0, y0 - 90);
+    await expect(rows).toHaveCount(4);
+    await finish.click();
+    await expect(card(page).locator('.fi-pair button')).toHaveText(['+ Add vertex', 'Redo']);
+    await expect(canvas.locator('polygon.outline')).toHaveCount(1);
+    await expect(dialog(page).locator('.fi-card').nth(4)).toHaveClass(/done/);
+    // Undo the Finish: drawing again with the same four
+    await undo.click();
+    await expect(card(page).locator('.fi-pair button')).toHaveText(['Redo', 'Finish']);
+    await expect(rows).toHaveCount(4);
+    // The labels sit on chips
+    await expect(canvas.locator('rect.label-chip').first()).toBeVisible();
+  });
+
+  test('opening the window asks for the file; cancelled, step 1 stays open; chosen, Check axes; Change file… starts over', async ({ page }) => {
+    await openWindow(page);
+    // The picker was dismissed: all five steps not done, step 1 open
+    const cards = dialog(page).locator('.fi-card');
+    await expect(cards).toHaveCount(5);
+    await expect(dialog(page).locator('.fi-card.done')).toHaveCount(0);
+    await expect(card(page)).toContainText('Select floor plan file');
+    await expect(card(page).getByRole('status')).toHaveText('Choose a floor plan file (PNG, JPEG, SVG or PDF).');
+    await expect(dialog(page).getByText('No file chosen')).toBeVisible();
+    await expect(dialog(page).getByRole('button', { name: /Change image/ })).toHaveCount(0);
+    // Next asks for the file first
+    await page.getByRole('button', { name: 'Next →' }).click();
+    const need = page.getByRole('alertdialog', { name: 'Choose a floor plan file first' });
+    await expect(need).toBeVisible();
+    await need.getByRole('button', { name: 'OK' }).click();
+    // Choose file…
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), card(page).getByRole('button', { name: 'Choose file…' }).click()]);
+    await chooser.setFiles(FIXTURE);
+    await expect(card(page)).toContainText('Check axes');
+    await expect(cards.nth(0)).toHaveClass(/done/);
+    await expect(cards.nth(0)).toContainText('floorplan-tilted.png');
+    // Some work, then Change file… on step 1: it asks, then starts over on Check axes
+    await dialog(page).getByRole('button', { name: 'Looks good' }).click();
+    await clickImage(page, tilted([150, 450]));
+    await expect(cards.nth(2)).toHaveClass(/done/);
+    await cards.nth(0).locator('.fi-ch').click();
+    await expect(card(page).getByRole('button', { name: 'Next', exact: true })).toBeVisible();
+    await card(page).getByRole('button', { name: 'Change file…' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Start over with a new file?' });
+    await expect(confirm).toBeVisible();
+    const [chooser2] = await Promise.all([page.waitForEvent('filechooser'), confirm.getByRole('button', { name: 'Choose file' }).click()]);
+    await chooser2.setFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
+    await expect(card(page)).toContainText('Check axes');
+    await expect(dialog(page).locator('.fi-card.done')).toHaveCount(1);
+    await expect(cards.nth(0)).toContainText('floorplan.png');
+    await expect(card(page).getByRole('status')).toHaveText('Do the walls line up with the grid?');
+  });
+
+  test('Undo and Redo across steps: the origin placed, undone, redone; the opacity slider sets the plan\'s opacity', async ({ page }) => {
+    await upload(page);
+    const undo = dialog(page).getByRole('button', { name: 'Undo', exact: true });
+    const redo = dialog(page).locator('.fi-tools').getByRole('button', { name: 'Redo', exact: true });
+    await expect(undo).toBeDisabled();
+    await expect(redo).toBeDisabled();
+    await dialog(page).getByRole('button', { name: 'Looks good' }).click();
+    await clickImage(page, tilted([150, 450]));
+    const originCard = dialog(page).locator('.fi-card').nth(2);
+    await expect(originCard).toHaveClass(/done/);
+    await expect(dialog(page).locator('svg.fi-svg .fi-origin')).toHaveCount(1);
+    await undo.click();
+    await expect(originCard).not.toHaveClass(/done/);
+    await expect(dialog(page).locator('svg.fi-svg .fi-origin')).toHaveCount(0);
+    await page.keyboard.press('Control+Shift+z');
+    await expect(originCard).toHaveClass(/done/);
+    await expect(dialog(page).locator('svg.fi-svg .fi-origin')).toHaveCount(1);
+
+    // The opacity slider: the image shows at it, and the plan view uses it afterwards
+    const slider = dialog(page).getByLabel('Floor plan opacity');
+    await expect(slider).toHaveValue('1');
+    await slider.fill('0.4');
+    await expect(dialog(page).locator('svg.fi-svg g[opacity]').first()).toHaveAttribute('opacity', '0.4');
+    await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+    await scaleBy(page, tilted([150, 450]), tilted([650, 450]), '5');
+    await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+    await card(page).getByRole('button', { name: 'Auto-detect' }).click();
+    await dialog(page).getByRole('alertdialog', { name: 'Detect the outline of…' }).getByRole('button', { name: 'Whole space' }).click();
+    // The tilted plan's whole space may or may not close; Keep tracing instead if not
+    const ask = dialog(page).getByRole('alertdialog', { name: 'Detect the outline of…' });
+    const rows = dialog(page).locator('.vertex-row');
+    await expect(rows.or(ask.getByRole('alert'))).not.toHaveCount(0);
+    if (await ask.isVisible()) {
+      await ask.getByRole('button', { name: 'Trace instead' }).click();
+      const canvas = dialog(page).getByRole('application', { name: 'Outline canvas' });
+      const box = (await canvas.boundingBox())!;
+      const x0 = box.x + box.width * 0.3, y0 = box.y + box.height * 0.7;
+      for (const [dx, dy] of [[0, 0], [120, 0], [120, -90], [0, -90]] as [number, number][]) await page.mouse.click(x0 + dx, y0 + dy);
+      await card(page).getByRole('button', { name: 'Finish' }).click();
+    }
+    await expect(dialog(page).locator('g.fi-plan-image')).toHaveAttribute('opacity', '0.4');
+    await page.getByRole('button', { name: 'Create room' }).click();
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(planSvg(page).locator('image.plan-image')).toHaveAttribute('opacity', '0.4');
+  });
+
+  test('the main editor shows the floor plan file as the lamp files are: its name, Edit and Remove', async ({ page }) => {
+    await upload(page);
+    await quickSetup(page);
+    await card(page).getByRole('button', { name: 'Auto-detect' }).click();
+    await dialog(page).getByRole('alertdialog', { name: 'Detect the outline of…' }).getByRole('button', { name: 'One room' }).click();
+    await expect(pickPrompt(page)).toBeVisible();
+    // Not in the left column
+    await expect(card(page).getByText('Click inside a room')).toHaveCount(0);
+    // Cancel on the prompt: no pick
+    await pickPrompt(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(pickPrompt(page)).toHaveCount(0);
+    await card(page).getByRole('button', { name: 'Manual trace' }).click();
+    const canvas = dialog(page).getByRole('application', { name: 'Outline canvas' });
+    const box = (await canvas.boundingBox())!;
+    const x0 = box.x + box.width * 0.3, y0 = box.y + box.height * 0.7;
+    for (const [dx, dy] of [[0, 0], [120, 0], [120, -90], [0, -90]] as [number, number][]) await page.mouse.click(x0 + dx, y0 + dy);
+    await card(page).getByRole('button', { name: 'Finish' }).click();
+    await page.getByRole('button', { name: 'Create room' }).click();
+    await expect(dialog(page)).toHaveCount(0);
+
+    const box2 = page.locator('.floorplan-part').getByRole('group', { name: 'Floor plan file' });
+    await expect(box2.locator('.file-box')).toBeVisible();
+    await expect(box2).toContainText('floorplan-tilted.png');
+    await expect(box2.getByRole('button', { name: /Upload/ })).toHaveCount(0);
+    await expect(page.locator('.floorplan-part').getByRole('slider')).toHaveCount(0);
+    // Edit reopens the window on it
+    await box2.getByRole('button', { name: 'Edit' }).click();
+    await expect(dialog(page)).toBeVisible();
+    await expect(dialog(page).locator('.fi-card').nth(0)).toHaveClass(/done/);
+    await expect(card(page)).toContainText('Check axes');
+    await dialog(page).getByTitle('Close').click();
+    await expect(dialog(page)).toHaveCount(0);
+    // Remove asks first
+    await box2.getByRole('button', { name: 'Remove' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Remove the floor plan file?' });
+    await confirm.getByRole('button', { name: 'Remove' }).click();
+    await expect(planSvg(page).locator('image.plan-image')).toHaveCount(0);
+    await expect(box2.getByRole('button', { name: /Upload floor plan file/ })).toBeVisible();
   });
 
   test('a failed detection says so in the Auto-detect dialog: another spot, the other mode, trace instead, or cancel', async ({ page }) => {
@@ -303,7 +488,7 @@ test.describe('Floor plan import window', () => {
     const miss = async (spot: [number, number]) => {
       // The dialog is out of the way while a spot is picked
       await expect(ask).toHaveCount(0);
-      await expect(card(page).getByRole('status')).toHaveText('Click inside the room to detect it.');
+      await expect(pickPrompt(page)).toContainText('Click inside a room to detect it');
       await clickImage(page, tilted(spot));
       await expect(ask.getByRole('alert')).toHaveText('No room found there.');
     };
@@ -327,8 +512,8 @@ test.describe('Floor plan import window', () => {
     // Trace instead: drawing starts
     await ask.getByRole('button', { name: 'Trace instead' }).click();
     await expect(ask).toHaveCount(0);
-    await expect(card(page).getByRole('status')).toHaveText('Click each vertex; click the first one to close.');
-    await expect(card(page).getByRole('button', { name: 'Trace', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(card(page).getByRole('status')).toHaveText('Click on the image to place the first vertex.');
+    await expect(card(page).getByRole('button', { name: 'Manual trace' })).toHaveAttribute('aria-pressed', 'true');
 
     // Cancel after a miss: back to the choice
     await page.keyboard.press('Escape');
@@ -338,7 +523,7 @@ test.describe('Floor plan import window', () => {
     await ask.getByRole('button', { name: 'Cancel' }).click();
     await expect(ask).toHaveCount(0);
     await expect(card(page).getByRole('button', { name: 'Auto-detect' })).toHaveAttribute('aria-pressed', 'false');
-    await expect(card(page).getByRole('button', { name: 'Trace', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await expect(card(page).getByRole('button', { name: 'Manual trace' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   // The user's bedroom plan (a consumer floor-plan export, dimensions in inches): user report "auto-detect still fails"
@@ -371,20 +556,5 @@ test.describe('Floor plan import window', () => {
     await dialog(page).getByTitle('Units').selectOption('centimeters');
     await expect.poll(async () => Math.max(...(await xs()))).toBeGreaterThan(490);
     expect(Math.max(...(await xs()))).toBeLessThan(510);
-  });
-
-  test('Change image… starts over on Check axes', async ({ page }) => {
-    await upload(page);
-    await dialog(page).getByRole('button', { name: 'Looks good' }).click();
-    await clickImage(page, tilted([150, 450]));
-    await expect(dialog(page).locator('.fi-card').nth(1)).toHaveClass(/done/);
-    await dialog(page).getByRole('button', { name: 'Change image…' }).click();
-    const confirm = page.getByRole('dialog', { name: 'Start over with a new image?' });
-    await expect(confirm).toBeVisible();
-    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), confirm.getByRole('button', { name: 'Choose image' }).click()]);
-    await chooser.setFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
-    await expect(card(page)).toContainText('Check axes');
-    await expect(dialog(page).locator('.fi-card.done')).toHaveCount(0);
-    await expect(card(page).getByRole('status')).toHaveText('Do the walls line up with the grid?');
   });
 });

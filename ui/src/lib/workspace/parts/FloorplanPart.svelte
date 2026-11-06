@@ -1,9 +1,11 @@
 <script lang="ts">
 	// Room › Floorplan: the room's size and units, its area and volume, the
-	// reference image to trace over; the vertex table is folded under Vertices, below the image card.
+	// floor plan file to trace over (a file box, as the lamp files are); the vertex table is folded under Vertices.
 	import './parts.css';
 	import VertexTable from '$lib/components/VertexTable.svelte';
 	import Glyph from '$lib/workspace/Glyph.svelte';
+	import FileBox from '$lib/components/FileBox.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FloorplanImportModal, { type FloorplanImportResult } from '$lib/floorplan/FloorplanImportModal.svelte';
 	import { frameFromPlacement, type Pt } from '$lib/floorplan/importFrame';
 	import { polygonArea, polygonBoundingBox, outlineSize, resizeOutline } from '$lib/utils/roomGeometry';
@@ -46,14 +48,15 @@
 		ctl.requestFit();
 	}
 
-	// --- Reference image
-	let fileInput = $state<HTMLInputElement | undefined>(undefined);
-	function onFileInput(event: Event) {
-		const input = event.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
-		input.value = '';
-		if (file) ctl.openImport(file);
-	}
+	// --- The floor plan file: Upload opens the window (it asks for the file); Edit reopens it; Remove asks first
+	const fileName = $derived(ctl.placement ? (ctl.imageFileName ?? 'Floor plan file') : null);
+	const fileBadge = $derived.by(() => {
+		const ext = ctl.imageFileName?.split('.').pop();
+		if (ext && ext !== ctl.imageFileName) return ext.toUpperCase();
+		const mime = scene.image?.mime ?? '';
+		return (mime.split('/').pop()?.replace('svg+xml', 'svg').replace('jpeg', 'jpg') || 'file').toUpperCase();
+	});
+	let confirmRemove = $state(false);
 
 	// The import window: reopened on the current image, its frame and outline come along
 	const session = $derived(ctl.importSession);
@@ -65,6 +68,10 @@
 	const importOutline = $derived<Pt[] | null>(session?.imageId && scene.vertices.length >= 3 ? scene.vertices.map(([x, y]) => [x / ctl.k, y / ctl.k] as Pt) : null);
 	function applyImport(result: FloorplanImportResult) {
 		void ctl.applyImport(result);
+	}
+	/** The file chosen in the window (first, or Change file…): the window starts over on it. */
+	function chooseFile(file: File) {
+		void ctl.openImport(file);
 	}
 
 	let geometryOpen = $state(false);
@@ -112,44 +119,36 @@
 		</div>
 	</div>
 
-	<section class="ep-addcard image-card" aria-label="Floor plan image">
-		<button type="button" class="secondary plan-btn" disabled={ctl.decoding} onclick={() => fileInput?.click()}>{ctl.decoding ? 'Reading…' : 'Upload floor plan image'}</button>
-		<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileInput} hidden />
-		{#if ctl.placement || ctl.imageError}
-			<div class="reference-panel">
-				{#if ctl.imageError}
-					<p class="ep-error" role="alert">{ctl.imageError}</p>
-				{/if}
-				{#if ctl.imageMissing}
-					<span class="ep-chip">Image missing</span>
-				{:else if ctl.placement}
-					<div class="reference-meta">{ctl.imageFileName ?? 'Saved image'} · {ctl.placement.widthPx}×{ctl.placement.heightPx} px</div>
-					{#if ctl.pdfPageCount > 1}
-						<label class="reference-row">
-							<span>Page</span>
-							<select value={ctl.pdfPage} onchange={(e) => ctl.changePdfPage(Number((e.currentTarget as HTMLSelectElement).value))} aria-label="PDF page">
-								{#each Array.from({ length: ctl.pdfPageCount }, (_, i) => i + 1) as n}
-									<option value={n}>{n} of {ctl.pdfPageCount}</option>
-								{/each}
-							</select>
-						</label>
-					{/if}
-					<label class="reference-row">
-						<span>Opacity</span>
-						<input type="range" min="0.1" max="1" step="0.05" value={ctl.placement.opacity} oninput={(e) => ctl.setOpacity(Number((e.currentTarget as HTMLInputElement).value))} onchange={ctl.commitOpacity} aria-label="Reference image opacity" />
-					</label>
-				{/if}
-				{#if ctl.placement}
-					<div class="image-tools">
-						{#if ctl.hasImage}
-							<button type="button" class="secondary adjust-image-btn" disabled={ctl.drawing} onclick={ctl.adjustImage}>Adjust image…</button>
-						{/if}
-						<button type="button" class="secondary remove-image-btn" onclick={ctl.removeImage}>Remove</button>
-					</div>
-				{/if}
-			</div>
+	<div class="floorplan-file" role="group" aria-label="Floor plan file">
+		<FileBox
+			name={fileName}
+			badge={fileBadge}
+			variant="box"
+			addLabel="Upload floor plan file"
+			replaceLabel="Edit"
+			replaceTitle="Edit the floor plan"
+			removeTitle="Remove the floor plan file"
+			disabled={ctl.drawing || ctl.decoding || (!!ctl.placement && !ctl.hasImage)}
+			onpick={() => (ctl.placement ? ctl.adjustImage() : ctl.startImport())}
+			onremove={() => (confirmRemove = true)}
+		/>
+		{#if ctl.imageMissing}
+			<span class="ep-chip">File missing</span>
 		{/if}
-	</section>
+		{#if ctl.imageError && !session}
+			<p class="ep-error" role="alert">{ctl.imageError}</p>
+		{/if}
+		{#if ctl.placement && ctl.pdfPageCount > 1}
+			<label class="reference-row">
+				<span>Page</span>
+				<select value={ctl.pdfPage} onchange={(e) => ctl.changePdfPage(Number((e.currentTarget as HTMLSelectElement).value))} aria-label="PDF page">
+					{#each Array.from({ length: ctl.pdfPageCount }, (_, i) => i + 1) as n}
+						<option value={n}>{n} of {ctl.pdfPageCount}</option>
+					{/each}
+				</select>
+			</label>
+		{/if}
+	</div>
 
 	<button type="button" class="ep-disc" aria-expanded={geometryOpen} onclick={() => (geometryOpen = !geometryOpen)}>
 		<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
@@ -172,23 +171,36 @@
 </div>
 
 {#if session}
-	<!-- Change image… opens a new session: the window starts over on it -->
+	<!-- A chosen file (the first, or Change file…) opens a new session: the window starts over on it -->
 	{#key session}
 		<FloorplanImportModal
 			src={session.src}
 			widthPx={session.widthPx}
 			heightPx={session.heightPx}
+			fileName={session.fileName}
 			{units}
 			precision={scene.precision}
 			initial={importInitial}
 			currentOutline={importOutline}
+			opacity={session.opacity}
+			onOpacityChange={ctl.setImportOpacity}
 			onUnitsChange={ctl.handleUnitsChange}
-			onChangeImage={(file) => void ctl.openImport(file)}
+			onChooseFile={chooseFile}
 			decoding={ctl.decoding}
+			error={ctl.imageError}
 			onApply={applyImport}
 			onClose={ctl.closeImport}
 		/>
 	{/key}
+{/if}
+{#if confirmRemove}
+	<ConfirmDialog
+		title="Remove the floor plan file?"
+		message="The plan is taken off the 2D view. The room outline stays."
+		confirmLabel="Remove"
+		onConfirm={() => { confirmRemove = false; ctl.removeImage(); }}
+		onCancel={() => (confirmRemove = false)}
+	/>
 {/if}
 
 <style>
@@ -270,53 +282,13 @@
 		background: var(--color-btn-fill-hover);
 		border-color: transparent;
 	}
-	/* The floor plan image card: below the outline, on its own fill */
-	.image-card {
-		margin-top: var(--spacing-sm);
-	}
-	.image-card button.secondary {
-		padding: 6px 12px;
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		color: var(--color-text);
-		background: var(--color-btn-fill);
-		border: 1px solid transparent;
-		border-radius: var(--radius-md);
-	}
-	.image-card button.secondary:hover:not(:disabled) {
-		background: var(--color-btn-fill-hover);
-		border-color: transparent;
-	}
-	.image-card .plan-btn {
-		width: 100%;
-	}
-	.reference-panel {
+	/* The floor plan file: below the outline, a file box as the lamp files are */
+	.floorplan-file {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
+		margin-top: var(--spacing-sm);
 		font-size: var(--font-size-sm);
-	}
-	/* Adjust image and Remove side by side; a lone button the full width */
-	.image-tools {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: var(--spacing-sm);
-	}
-	.image-tools > button {
-		min-width: 0;
-		margin: 0;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.image-tools > button:last-child:nth-child(odd) {
-		grid-column: 1 / -1;
-	}
-	.reference-meta {
-		color: var(--color-text-muted);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 	.reference-row {
 		display: grid;
@@ -328,8 +300,5 @@
 	.reference-row > span {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
-	}
-	.reference-row input[type='range'] {
-		width: 100%;
 	}
 </style>

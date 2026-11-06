@@ -296,10 +296,12 @@ test.describe('Polygon rooms', () => {
     const part = page.locator('.floorplan-part');
     await openGeometry(page);
 
-    // Upload: the import window opens on the image
-    await part.locator('input[type="file"]').setInputFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
-    const win = page.getByRole('dialog', { name: 'Floor plan from image' });
+    // Upload: the import window opens and asks for the file
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), part.getByRole('button', { name: /Upload floor plan file/ }).click()]);
+    const win = page.getByRole('dialog', { name: 'Floor plan from file' });
     await expect(win).toBeVisible();
+    await chooser.setFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
+    await expect(win.getByRole('button', { name: 'Looks good' })).toBeVisible();
     const clickImage = async (p: [number, number]) => {
       const [x, y] = await page.locator('.fi-image').evaluate((el, [px, py]) => {
         const q = new DOMPoint(px, py).matrixTransform((el as SVGGraphicsElement).getScreenCTM()!);
@@ -316,7 +318,7 @@ test.describe('Polygon rooms', () => {
     await win.getByLabel('Distance between the points').fill('3');
     await page.keyboard.press('Enter');
     await win.getByRole('button', { name: 'Next →' }).click();
-    await win.getByRole('button', { name: 'Trace', exact: true }).click();
+    await win.getByRole('button', { name: 'Manual trace' }).click();
     for (const p of [[10, 50], [110, 50], [110, 10], [10, 10], [10, 50]] as [number, number][]) await clickImage(p);
     await expect(win.locator('.vertex-row')).toHaveCount(4);
     await win.getByRole('button', { name: 'Create room' }).click();
@@ -344,6 +346,7 @@ test.describe('Polygon rooms', () => {
     // is explicit rather than relying on a reload to reset client state.
     await expandRoomPanel(page);
     await part.getByRole('button', { name: 'Remove', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Remove the floor plan file?' }).getByRole('button', { name: 'Remove' }).click();
     await closePlan(page);
     await expect(planSvg(page).locator('image.plan-image')).toHaveCount(0);
 
@@ -351,6 +354,6 @@ test.describe('Polygon rooms', () => {
     await expect(planSvg(page).locator('image.plan-image')).toHaveCount(1, { timeout: 15_000 });
     await expandRoomPanel(page);
     await expect(planSvg(page).locator('image.plan-image')).toBeVisible();
-    await expect(part.locator('.reference-panel')).toBeVisible();
+    await expect(part.getByRole('group', { name: 'Floor plan file' }).locator('.file-box')).toBeVisible();
   });
 });

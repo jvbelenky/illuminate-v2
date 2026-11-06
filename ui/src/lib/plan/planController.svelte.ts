@@ -50,6 +50,7 @@ export type StripTool = 'grid' | 'move' | 'aim';
 
 /** The image the floor plan import window is configuring: a new upload, or the current image reopened. */
 export interface FloorplanImportSession {
+  /** The decoded file ('' until a file is chosen: the window opens on Select floor plan file). */
   src: string;
   mime: string;
   widthPx: number;
@@ -61,6 +62,8 @@ export interface FloorplanImportSession {
   imageId: string | null;
   /** The placement to start from (reopened, or a same-size page of the same PDF). */
   initial: FloorPlanPlacement | null;
+  /** The image's opacity as the window shows it, and as the plan view will (full by default). */
+  opacity: number;
 }
 /** A selected shape (structure, zone outline, keep-out area, or the room outline on Floorplan) is selected for moving, resizing and rotating, or has its corners editable. */
 export type ShapeMode = 'select' | 'corners';
@@ -586,11 +589,7 @@ export class PlanController {
   // units at render. A drag or an opacity slide previews locally and is applied
   // when it ends.
   dragPlacement = $state<FloorPlanPlacement | null>(null);
-  previewOpacity = $state<number | null>(null);
-  readonly placement = $derived.by<FloorPlanPlacement | null>(() => {
-    const floorplan = this.scene().floorplan;
-    return this.dragPlacement ?? (floorplan ? (this.previewOpacity !== null ? { ...floorplan, opacity: this.previewOpacity } : floorplan) : null);
-  });
+  readonly placement = $derived.by<FloorPlanPlacement | null>(() => this.dragPlacement ?? this.scene().floorplan ?? null);
   imageFileName = $state<string | null>(null);
   imageError = $state<string | null>(null);
   decoding = $state(false);
@@ -1916,9 +1915,19 @@ export class PlanController {
   // image; Create room applies the placement and the outline as one undo step.
   importSession = $state<FloorplanImportSession | null>(null);
 
+  /** Upload floor plan file: the window opens on its first step, no file chosen yet. */
+  startImport = () => {
+    if (this.drawing) this.cancelDraw();
+    this.imageError = null;
+    this.importSession = {
+      src: '', mime: '', widthPx: 0, heightPx: 0, fileName: null, pdf: null, imageId: null, initial: null,
+      opacity: this.scene().floorplan?.opacity ?? 1,
+    };
+  };
+
   openImport = async (file: File, page = 1) => {
     if (!isSupportedFloorPlanFile(file)) {
-      this.imageError = 'Unsupported file type. Use PNG, JPEG, WebP, GIF, SVG or PDF.';
+      this.imageError = 'Unsupported file type. Use PNG, JPEG, SVG or PDF.';
       return;
     }
     if (this.drawing) this.cancelDraw();
@@ -1936,6 +1945,7 @@ export class PlanController {
         pdf: isPdf ? { file, page, pageCount: decoded.pageCount ?? 1 } : null,
         imageId: null,
         initial: same ? current : null,
+        opacity: this.importSession?.opacity ?? current?.opacity ?? 1,
       };
     } catch (e) {
       this.imageError = e instanceof FloorPlanDecodeError ? e.message : 'Could not read this file.';
@@ -1951,19 +1961,25 @@ export class PlanController {
     if (this.drawing) this.cancelDraw();
     this.importSession = {
       src: image.src, mime: image.mime, widthPx: floorplan.widthPx, heightPx: floorplan.heightPx,
-      fileName: this.imageFileName, pdf: null, imageId: image.id, initial: floorplan,
+      fileName: this.imageFileName, pdf: null, imageId: image.id, initial: floorplan, opacity: floorplan.opacity,
     };
   };
 
   closeImport = () => {
     this.importSession = null;
+    this.imageError = null;
+  };
+
+  /** The window's opacity slider: kept on the session, applied with Create room. */
+  setImportOpacity = (value: number) => {
+    if (this.importSession) this.importSession.opacity = Math.min(1, Math.max(0.1, value));
   };
 
   /** Create room: the image placed by the frame and (unless kept) the outline, in one undo step. */
-  applyImport = async (result: { frame: ImportFrame; outlineMeters: Vertex[] | null; walls?: WallMeters[] }) => {
+  applyImport = async (result: { frame: ImportFrame; outlineMeters: Vertex[] | null; walls?: WallMeters[]; opacity?: number }) => {
     const s = this.importSession;
-    if (!s) return;
-    let placement = placementFromFrame(result.frame, s.imageId ?? crypto.randomUUID(), s.initial?.opacity ?? DEFAULT_FLOORPLAN_OPACITY);
+    if (!s || !s.src) return;
+    let placement = placementFromFrame(result.frame, s.imageId ?? crypto.randomUUID(), result.opacity ?? s.opacity ?? s.initial?.opacity ?? DEFAULT_FLOORPLAN_OPACITY);
     let vertices: Vertex[] | null = null;
     let walls: WallMeters[] = [];
     if (result.outlineMeters && result.outlineMeters.length >= 3) {
@@ -2014,15 +2030,6 @@ export class PlanController {
     this.pdfFile = null;
     this.pdfPageCount = 0;
     this.actions.setPlacement(null);
-  };
-
-  setOpacity = (value: number) => {
-    this.previewOpacity = Math.min(1, Math.max(0.1, value));
-  };
-  commitOpacity = () => {
-    const floorplan = this.scene().floorplan;
-    if (floorplan && this.previewOpacity !== null) this.actions.setPlacement({ ...floorplan, opacity: this.previewOpacity });
-    this.previewOpacity = null;
   };
 
   setOffset = (axis: 'offsetX' | 'offsetY', displayValue: number) => {

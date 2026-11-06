@@ -17,11 +17,14 @@
 		roomy?: boolean;
 		oncommit: (index: number, axis: 0 | 1, value: number) => void;
 		onremove: (index: number) => void;
-		onadd: () => void;
+		/** Add vertex below the rows (none: the host has its own). */
+		onadd?: () => void;
 		onselect?: (index: number) => void;
+		/** Rows can be removed while more than this many remain (an outline being drawn: 1). */
+		minVertices?: number;
 	}
 
-	let { vertices, unit, precision, selectedIndex, step, min, disabled = false, addLabel = 'Add vertex', roomy = false, oncommit, onremove, onadd, onselect }: Props = $props();
+	let { vertices, unit, precision, selectedIndex, step, min, disabled = false, addLabel = 'Add vertex', roomy = false, oncommit, onremove, onadd, onselect, minVertices = 3 }: Props = $props();
 </script>
 
 <div class="vertex-table" class:roomy>
@@ -37,11 +40,13 @@
 				<span class="row-index" title="Vertex {i + 1}">{i + 1}</span>
 				<ValidatedNumberInput value={vx} {precision} {min} {step} {disabled} oncommit={(v) => oncommit(i, 0, v)} />
 				<ValidatedNumberInput value={vy} {precision} {min} {step} {disabled} oncommit={(v) => oncommit(i, 1, v)} />
-				<button type="button" class="secondary remove-btn" title="Remove vertex {i + 1}" aria-label="Remove vertex {i + 1}" disabled={disabled || vertices.length <= 3} onclick={() => onremove(i)}>×</button>
+				<button type="button" class="secondary remove-btn" title="Remove vertex {i + 1}" aria-label="Remove vertex {i + 1}" disabled={disabled || vertices.length <= minVertices} onclick={() => onremove(i)}>×</button>
 			</div>
 		{/each}
 	</div>
-	<button type="button" class="secondary add-vertex-btn" disabled={disabled || vertices.length < 2} onclick={onadd}>{addLabel}</button>
+	{#if onadd}
+		<button type="button" class="secondary add-vertex-btn" disabled={disabled || vertices.length < 2} onclick={onadd}>{addLabel}</button>
+	{/if}
 </div>
 
 <style>

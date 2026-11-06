@@ -78,28 +78,19 @@ describe('Floorplan part', () => {
     expect(screen.queryByText('later')).toBeNull();
   });
 
-  it('the image button says Upload floor plan image', () => {
-    mount({ part: 'floorplan' });
-    expect(screen.getByRole('button', { name: 'Upload floor plan image' })).toBeTruthy();
-    expect(document.querySelector('input[type="file"]')).not.toBeNull();
-  });
-
-  it('Draw new outline and Edit vertices sit below a divider; Upload floor plan image is on its own card after the outline, Vertices below it', () => {
+  it('with no file: a single Upload floor plan file button (the lamp files\' file box), after the outline tools, Vertices below it', () => {
     mount({ part: 'floorplan' });
     const buttons = [...document.querySelectorAll('.plan-actions button')].map((b) => b.textContent?.trim());
     expect(buttons).toEqual(['Draw new outline', 'Edit vertices']);
-    const card = screen.getByRole('region', { name: 'Floor plan image' });
-    expect(card.classList.contains('ep-addcard')).toBe(true);
-    // No heading: the card itself is the separation
-    expect(card.querySelector('h3')).toBeNull();
-    expect(screen.queryByText('Floor plan image')).toBeNull();
-    expect(card.contains(screen.getByRole('button', { name: 'Upload floor plan image' }))).toBe(true);
-    expect(card.querySelector('input[type="file"]')).not.toBeNull();
+    const box = screen.getByRole('group', { name: 'Floor plan file' });
+    expect(box.querySelectorAll('button')).toHaveLength(1);
+    const upload = within(box).getByRole('button', { name: /Upload floor plan file/ });
+    expect(upload.classList.contains('dropzone')).toBe(true);
+    // The picker is the window's own: none here
+    expect(box.querySelector('input[type="file"]')).toBeNull();
+    expect(screen.queryByText(/image/i)).toBeNull();
     const vertices = screen.getByRole('button', { name: 'Vertices' });
-    expect(card.compareDocumentPosition(vertices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Geometry/ })).toBeNull();
-    // No image: the card holds the upload alone
-    expect(card.querySelectorAll('button')).toHaveLength(1);
+    expect(box.compareDocumentPosition(vertices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('Edit vertices toggles the outline between its box and its corners', async () => {
@@ -114,15 +105,32 @@ describe('Floorplan part', () => {
     expect(btn.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('with an image loaded, its controls are on the card', () => {
+  it('with a file: its name with Edit and Remove, as the lamp files show theirs; no opacity slider here', async () => {
     const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
     const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
-    mount({ part: 'floorplan', floorplan: placement, image });
-    const card = screen.getByRole('region', { name: 'Floor plan image' });
-    for (const name of ['Upload floor plan image', 'Adjust image…', 'Remove']) expect(within(card).getByRole('button', { name })).toBeTruthy();
-    expect(within(card).queryByRole('button', { name: 'Set scale…' })).toBeNull();
-    expect(within(card).queryByRole('button', { name: 'Move image' })).toBeNull();
-    expect(card.contains(screen.getByLabelText('Reference image opacity'))).toBe(true);
+    const { ctl } = mount({ part: 'floorplan', floorplan: placement, image });
+    ctl.imageFileName = 'clinic-plan.png';
+    await tick();
+    const box = screen.getByRole('group', { name: 'Floor plan file' });
+    expect(box.querySelector('.file-box')).not.toBeNull();
+    expect(box.querySelector('.badge')!.textContent).toBe('PNG');
+    expect(box.querySelector('.name')!.textContent).toBe('clinic-plan.png');
+    expect([...box.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Edit', 'Remove']);
+    expect(within(box).queryByRole('button', { name: /Upload/ })).toBeNull();
+    expect(screen.queryByRole('slider')).toBeNull();
+  });
+
+  it('Remove asks first, then takes the file away', async () => {
+    const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+    const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+    const calls: unknown[][] = [];
+    mount({ part: 'floorplan', calls, floorplan: placement, image });
+    await fireEvent.click(within(screen.getByRole('group', { name: 'Floor plan file' })).getByRole('button', { name: 'Remove' }));
+    expect(callsOf(calls, 'setPlacement')).toHaveLength(0);
+    const confirm = screen.getByRole('dialog', { name: 'Remove the floor plan file?' });
+    await fireEvent.click(within(confirm).getByRole('button', { name: 'Remove' }));
+    expect(callsOf(calls, 'setPlacement')).toHaveLength(1);
+    expect(callsOf(calls, 'setPlacement')[0][1]).toBeNull();
   });
 
   it('Vertices holds only the vertex table, with Add vertex', async () => {
@@ -183,44 +191,136 @@ describe('Floorplan part corners', () => {
 describe('Floorplan part: the import window', () => {
   const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6, rotation: -3 };
   const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
-  const windowOpen = () => screen.queryByRole('dialog', { name: 'Floor plan from image' });
+  const windowOpen = () => screen.queryByRole('dialog', { name: 'Floor plan from file' });
+  const session = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null, opacity: 1 };
+  const doneCards = (dlg: HTMLElement) => Array.from(dlg.querySelectorAll('.fi-card')).map((c) => c.classList.contains('done'));
 
-  it('Adjust image… reopens the window on Check axes with the current alignment, origin and scale done', async () => {
-    mount({ part: 'floorplan', floorplan: placement, image });
+  it('Upload floor plan file opens the window on Select floor plan file, all five steps not done, and opens the file picker', async () => {
+    const click = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      mount({ part: 'floorplan' });
+      await fireEvent.click(screen.getByRole('button', { name: /Upload floor plan file/ }));
+      await tick();
+      const dlg = windowOpen()!;
+      expect(dlg).toBeTruthy();
+      expect(Array.from(dlg.querySelectorAll('.fi-label')).map((l) => l.textContent)).toEqual(['Select floor plan file', 'Check axes', 'Set origin', 'Set scale', 'Trace outline']);
+      expect(doneCards(dlg)).toEqual([false, false, false, false, false]);
+      const open = dlg.querySelector('.fi-card.open') as HTMLElement;
+      expect(open.textContent).toMatch(/Select floor plan file/);
+      // The picker was opened at once; cancelled, step 1 stays open with Choose file…
+      const picks = click.mock.contexts.filter((el) => (el as HTMLInputElement).type === 'file');
+      expect(picks).toHaveLength(1);
+      expect(open.querySelector('.fi-instr')!.textContent).toBe('Choose a floor plan file (PNG, JPEG, SVG or PDF).');
+      expect(within(open).getByRole('button', { name: 'Choose file…' })).toBeTruthy();
+      expect(dlg.textContent).toMatch(/No file chosen/);
+      expect(dlg.textContent).not.toMatch(/Change image/);
+      // Another step asks for the file first
+      await fireEvent.click(dlg.querySelectorAll('.fi-card')[2].querySelector('.fi-ch')!);
+      expect(within(dlg).getByRole('alertdialog').textContent).toMatch(/Choose a floor plan file first/);
+    } finally {
+      click.mockRestore();
+    }
+  });
+
+  it('with a file chosen, the window is on Check axes and step 1 is done, showing the file, Change file… and Next', async () => {
+    const { ctl } = mount({ part: 'floorplan' });
+    ctl.importSession = { ...session, fileName: 'clinic-plan.png' };
+    await tick();
+    const dlg = windowOpen()!;
+    expect(doneCards(dlg)).toEqual([true, false, false, false, false]);
+    expect(dlg.querySelector('.fi-card.open .fi-instr')!.textContent).toBe('Do the walls line up with the grid?');
+    const first = dlg.querySelectorAll('.fi-card')[0] as HTMLElement;
+    expect(first.textContent).toMatch(/clinic-plan\.png/);
+    await fireEvent.click(first.querySelector('.fi-ch')!);
+    expect(within(first).getByRole('button', { name: 'Change file…' })).toBeTruthy();
+    expect(within(first).getByRole('button', { name: 'Next' })).toBeTruthy();
+  });
+
+  it('Edit reopens the window on Check axes with the file, alignment, origin and scale done', async () => {
+    const { ctl } = mount({ part: 'floorplan', floorplan: placement, image });
+    ctl.imageFileName = 'clinic-plan.png';
     expect(windowOpen()).toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: 'Adjust image…' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     const dlg = windowOpen()!;
     expect(dlg).toBeTruthy();
     expect(dlg.querySelector('.fi-card.open .fi-instr')!.textContent).toBe('Do the walls line up with the grid?');
     const cards = Array.from(dlg.querySelectorAll('.fi-card'));
-    expect(cards.map((s) => s.classList.contains('done'))).toEqual([true, true, true, false]);
-    expect(cards[2].textContent).toMatch(/Set scale\s*67 px\/m/);
+    expect(doneCards(dlg)).toEqual([true, true, true, true, false]);
+    expect(cards[0].textContent).toMatch(/clinic-plan\.png/);
+    expect(cards[3].textContent).toMatch(/Set scale\s*67 px\/m/);
     expect(dlg.querySelector('svg.fi-svg')!.getAttribute('data-rotation')).toBe('-3');
     // Already aligned: Redo and Next in the card
-    expect(within(cards[0] as HTMLElement).getByRole('button', { name: 'Redo' })).toBeTruthy();
-    // Step 4 offers to keep the current outline, which finishes the step
-    await fireEvent.click(cards[3].querySelector('.fi-ch')!);
+    expect(within(cards[1] as HTMLElement).getByRole('button', { name: 'Redo' })).toBeTruthy();
+    // The opacity starts at the plan's
+    expect((within(dlg).getByLabelText('Floor plan opacity') as HTMLInputElement).value).toBe('0.6');
+    // Trace outline offers to keep the current outline, which finishes the step
+    await fireEvent.click(cards[4].querySelector('.fi-ch')!);
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Keep current outline' }));
-    expect(dlg.querySelectorAll('.fi-card')[3].classList.contains('done')).toBe(true);
+    expect(dlg.querySelectorAll('.fi-card')[4].classList.contains('done')).toBe(true);
     expect(dlg.querySelectorAll('.vertex-row')).toHaveLength(4);
+    // Closed: + Add vertex and Redo
+    const open = dlg.querySelector('.fi-card.open') as HTMLElement;
+    expect([...open.querySelectorAll('.fi-pair button')].map((b) => b.textContent)).toEqual(['+ Add vertex', 'Redo']);
+    expect(within(open).getByRole('group', { name: 'Outline' }).textContent).toMatch(/Manual trace\s*.*Auto-detect/);
   });
 
-  it('Adjust image… is disabled while drawing', async () => {
+  it('Edit is disabled while drawing', async () => {
     const { ctl } = mount({ part: 'floorplan', floorplan: placement, image });
     ctl.startDraw();
     await tick();
-    expect((screen.getByRole('button', { name: 'Adjust image…' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Edit' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('Undo and Redo sit at the left of the image toolbar, disabled until there is something to undo; they undo Looks good and redo it', async () => {
+    const { ctl } = mount({ part: 'floorplan' });
+    ctl.importSession = session;
+    await tick();
+    const dlg = windowOpen()!;
+    const tools = dlg.querySelector('.fi-tools') as HTMLElement;
+    const [undoBtn, redoBtn] = [...tools.querySelectorAll('button')].slice(0, 2) as HTMLButtonElement[];
+    expect([undoBtn.getAttribute('aria-label'), redoBtn.getAttribute('aria-label')]).toEqual(['Undo', 'Redo']);
+    expect(undoBtn.disabled).toBe(true);
+    expect(redoBtn.disabled).toBe(true);
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Looks good' }));
+    await tick();
+    expect(doneCards(dlg)[1]).toBe(true);
+    expect(undoBtn.disabled).toBe(false);
+    await fireEvent.click(undoBtn);
+    await vi.waitFor(() => expect(doneCards(dlg)[1]).toBe(false));
+    // Back where it was undone
+    expect(dlg.querySelector('.fi-card.open .fi-instr')!.textContent).toBe('Do the walls line up with the grid?');
+    expect(redoBtn.disabled).toBe(false);
+    // The undo has finished replaying
+    await new Promise((r) => setTimeout(r, 20));
+    await fireEvent.click(redoBtn);
+    await vi.waitFor(() => expect(doneCards(dlg)[1]).toBe(true));
+  });
+
+  it('the opacity slider over the image sets the plan\'s opacity on Create room (full by default)', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'floorplan', calls });
+    ctl.importSession = session;
+    await tick();
+    const dlg = windowOpen()!;
+    const slider = within(dlg).getByLabelText('Floor plan opacity') as HTMLInputElement;
+    expect(slider.value).toBe('1');
+    expect(slider.closest('label')!.textContent).toMatch(/Opacity/);
+    await fireEvent.input(slider, { target: { value: '0.4' } });
+    expect(ctl.importSession!.opacity).toBe(0.4);
+    await ctl.applyImport({ frame: { widthPx: 400, heightPx: 200, rotation: 0, origin: [0, 200], pxPerM: 40 }, outlineMeters: null });
+    const [, placed] = callsOf(calls, 'setPlacement')[0] as [string, { opacity: number }];
+    expect(placed.opacity).toBe(0.4);
   });
 
   it('Next without an origin names it; OK goes there', async () => {
     const { ctl } = mount({ part: 'floorplan' });
-    ctl.importSession = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null };
+    ctl.importSession = session;
     await tick();
     const dlg = windowOpen()!;
     // Check axes asks; Looks good moves on and marks it done
     expect(dlg.querySelector('.fi-card.open .fi-instr')!.textContent).toBe('Do the walls line up with the grid?');
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Looks good' }));
-    expect(dlg.querySelectorAll('.fi-card')[0].classList.contains('done')).toBe(true);
+    expect(dlg.querySelectorAll('.fi-card')[1].classList.contains('done')).toBe(true);
     expect(dlg.querySelector('.fi-card.open .fi-instr')!.textContent).toBe('Click to place the origin (0, 0).');
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Next →' }));
     const prompt = within(dlg).getByRole('alertdialog');
@@ -232,7 +332,7 @@ describe('Floorplan part: the import window', () => {
   it('closing an untouched window changes nothing and asks nothing', async () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'floorplan', calls });
-    ctl.importSession = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null };
+    ctl.importSession = session;
     await tick();
     await fireEvent.click(within(windowOpen()!).getByTitle('Close'));
     expect(windowOpen()).toBeNull();
@@ -242,7 +342,7 @@ describe('Floorplan part: the import window', () => {
   it('Create room applies the placement with its rotation and the outline (in display units, moved to x, y >= 0)', async () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'floorplan', calls, units: 'centimeters', vertices: [[0, 0], [600, 0], [600, 400], [0, 400]] });
-    ctl.importSession = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null };
+    ctl.importSession = session;
     await ctl.applyImport({
       frame: { widthPx: 400, heightPx: 200, rotation: 2, origin: [50, 150], pxPerM: 50 },
       outlineMeters: [[-0.5, 0], [4, 0], [4, 2], [-0.5, 2]],
@@ -259,7 +359,7 @@ describe('Floorplan part: the import window', () => {
   it('Create room adds one structure per interior wall (moved with the outline, display units, next free names) after the outline', async () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'floorplan', calls, units: 'centimeters', vertices: [[0, 0], [600, 0], [600, 400], [0, 400]], roomZ: 270, objects: [{ ...box, name: 'Wall 1' }] });
-    ctl.importSession = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null };
+    ctl.importSession = session;
     await ctl.applyImport({
       frame: { widthPx: 400, heightPx: 200, rotation: 0, origin: [50, 150], pxPerM: 50 },
       outlineMeters: [[-0.5, 0], [4, 0], [4, 2], [-0.5, 2]],

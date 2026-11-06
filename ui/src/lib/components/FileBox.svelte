@@ -12,9 +12,13 @@
 		onremove?: () => void;
 		replaceTitle?: string;
 		removeTitle?: string;
+		/** The box's pick button (Replace, or the host's own word such as Edit). */
+		replaceLabel?: string;
+		/** Disables the pick button (the box's, or the empty dropzone). */
+		disabled?: boolean;
 	}
 
-	let { name, badge, variant, addLabel, emptyText, onpick, onremove, replaceTitle, removeTitle }: Props = $props();
+	let { name, badge, variant, addLabel, emptyText, onpick, onremove, replaceTitle, removeTitle, replaceLabel = 'Replace', disabled = false }: Props = $props();
 </script>
 
 {#if variant === 'link'}
@@ -32,13 +36,13 @@
 	<div class="file-box">
 		<span class="badge">{badge}</span>
 		<span class="name" title={name}>{name}</span>
-		<button type="button" class="link-btn" title={replaceTitle} onclick={onpick}>Replace</button>
+		<button type="button" class="link-btn" title={replaceTitle} {disabled} onclick={onpick}>{replaceLabel}</button>
 		{#if onremove}
 			<button type="button" class="link-btn" title={removeTitle} onclick={onremove}>Remove</button>
 		{/if}
 	</div>
 {:else}
-	<button type="button" class="dropzone" onclick={onpick}><span class="plus" aria-hidden="true">+</span>{addLabel}</button>
+	<button type="button" class="dropzone" {disabled} onclick={onpick}><span class="plus" aria-hidden="true">+</span>{addLabel}</button>
 {/if}
 
 <style>
@@ -96,6 +100,12 @@
 		cursor: pointer;
 	}
 
+	.link-btn:disabled,
+	.dropzone:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+
 	.dropzone {
 		display: flex;
 		align-items: center;
@@ -112,7 +122,7 @@
 		transition: border-color 120ms, background 120ms;
 	}
 
-	.dropzone:hover {
+	.dropzone:hover:not(:disabled) {
 		border-color: var(--facet-color, var(--color-accent));
 		background: color-mix(in srgb, var(--facet-color, var(--color-accent)) 8%, transparent);
 	}
