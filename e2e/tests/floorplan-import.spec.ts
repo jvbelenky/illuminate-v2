@@ -242,8 +242,9 @@ test.describe('Floor plan import window', () => {
     const canvas = dialog(page).getByRole('application', { name: 'Outline canvas' });
     const box = (await canvas.boundingBox())!;
     const x0 = box.x + box.width * 0.3, y0 = box.y + box.height * 0.7;
-    // Each wall a pixel or two off square
-    for (const [dx, dy] of [[0, 0], [260, 2], [262, -180], [1, -182]] as [number, number][]) {
+    // Short walls, each a few pixels off square (past a 3° angle snap): every
+    // corner lines up with the previous one, the last with the first too
+    for (const [dx, dy] of [[0, 0], [90, 6], [95, -70], [-5, -66]] as [number, number][]) {
       await page.mouse.move(x0 + dx, y0 + dy, { steps: 2 });
       await page.mouse.click(x0 + dx, y0 + dy);
     }
@@ -253,6 +254,10 @@ test.describe('Floor plan import window', () => {
     const pts = await rows.evaluateAll((els) => els.map((r) => Array.from(r.querySelectorAll('input')).slice(0, 2).map((i) => Number((i as HTMLInputElement).value))));
     expect(new Set(pts.map((p) => p[0])).size).toBe(2);
     expect(new Set(pts.map((p) => p[1])).size).toBe(2);
+    // Exactly, not just as shown in the table
+    const exact = await canvas.locator('circle.vertex').evaluateAll((els) => els.map((c) => [c.getAttribute('cx'), c.getAttribute('cy')]));
+    expect(new Set(exact.map((p) => p[0])).size).toBe(2);
+    expect(new Set(exact.map((p) => p[1])).size).toBe(2);
     // Redo clears it back to the choice
     await card(page).getByRole('button', { name: 'Redo' }).click();
     await expect(rows).toHaveCount(0);
