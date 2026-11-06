@@ -59,7 +59,8 @@ export type AlignTool = 'pan' | 'rotate' | 'straighten' | null;
 
 export const CHECK_AXES_QUESTION = 'Do the walls line up with the grid?';
 export const ORIGIN_TEXT = 'Click to place the origin (0, 0).';
-export const DETECT_FAILED = 'No outline found there — trace it instead.';
+/** Auto-detect found nothing: shown in the Auto-detect dialog, by mode. */
+export const DETECT_FAILED = { room: 'No room found there.', floor: 'No outline found.' } as const;
 
 export interface CardContext {
   step: ImportStep;

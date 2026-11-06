@@ -11,6 +11,10 @@ import { getObjectsFromStore } from '../helpers/objects';
 // One interior partition: 8 px (0.08 m) thick at x 500..508, from the top
 // wall's inner face down to y 300 (1.5 m).
 const FIXTURE = path.resolve(__dirname, '../fixtures/floorplan-tilted.png');
+// The user's bedroom plan: 956 x 581, grey walls 13 px thick with a vertex
+// circle on each corner; 152" from the bottom-left circle (72, 543) to the
+// stub's (710, 543), about 165 px/m.
+const BEDROOM = path.resolve(__dirname, '../fixtures/user-bedroom-plan.png');
 const C: [number, number] = [400, 300];
 /** A point of the drawing before the tilt -> its image pixel (turned 4° clockwise on screen). */
 function tilted([x, y]: [number, number]): [number, number] {
@@ -42,10 +46,10 @@ async function clickImage(page: Page, p: [number, number]) {
   await page.mouse.click(x, y);
 }
 
-async function upload(page: Page) {
+async function upload(page: Page, file = FIXTURE) {
   await waitForSession(page);
   await expandRoomPanel(page);
-  await page.locator('.floorplan-part input[type="file"]').setInputFiles(FIXTURE);
+  await page.locator('.floorplan-part input[type="file"]').setInputFiles(file);
   await expect(dialog(page)).toBeVisible();
 }
 
@@ -70,8 +74,31 @@ async function quickSetup(page: Page) {
   await expect(card(page)).toContainText('Trace outline');
 }
 
-/** Steps 1-3 (straighten, origin by drag, scale by the popup), then Auto-detect on one room; ends with the four vertex rows shown. */
-async function detectRoom(page: Page) {
+/**
+ * The user's bedroom plan as a person sets it up: Looks good, the origin on the
+ * bottom-left vertex circle, the scale on the 152" bottom wall's two vertex
+ * circles. With 'meters' the unit is left at its default (a wrong unit).
+ */
+async function bedroomSetup(page: Page, unit: 'inches' | 'meters' = 'inches') {
+  await upload(page, BEDROOM);
+  await dialog(page).getByRole('button', { name: 'Looks good' }).click();
+  await clickImage(page, [72, 543]);
+  await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+  await clickImage(page, [72, 543]);
+  await clickImage(page, [710, 543]);
+  await page.keyboard.type('152');
+  if (unit === 'inches') {
+    const pop = dialog(page).getByRole('group', { name: 'Scale distance' });
+    await pop.getByLabel('Distance units').selectOption('inches');
+    await pop.getByLabel('Distance between the points').focus();
+  }
+  await page.keyboard.press('Enter');
+  await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(card(page)).toContainText('Trace outline');
+}
+
+/** Steps 1-3: straighten, origin by drag, scale by the popup. */
+async function alignedSetup(page: Page) {
   // 1. Check axes: Align axes, then two clicks along the top wall's inner face
   await expect(card(page).getByRole('status')).toHaveText('Do the walls line up with the grid?');
   await card(page).getByRole('button', { name: 'Align axes' }).click();
@@ -99,6 +126,11 @@ async function detectRoom(page: Page) {
   await expect(card(page).getByLabel('Distance', { exact: true })).toHaveValue('5');
   await page.getByRole('button', { name: 'Next →' }).click();
   await expect(dialog(page).getByRole('button', { name: /Set scale\s*5 m/ })).toBeVisible();
+}
+
+/** Steps 1-3, then Auto-detect on one room; ends with the four vertex rows shown. */
+async function detectRoom(page: Page) {
+  await alignedSetup(page);
 
   // 4. Auto-detect: One room, then click inside it
   await card(page).getByRole('button', { name: 'Auto-detect' }).click();
@@ -263,17 +295,73 @@ test.describe('Floor plan import window', () => {
     await expect(rows).toHaveCount(0);
   });
 
-  test('a failed detection says so and leaves you tracing', async ({ page }) => {
+  test('a failed detection says so in the Auto-detect dialog: another spot, the other mode, trace instead, or cancel', async ({ page }) => {
     await upload(page);
+    // Looks good on the 4° tilted plan: its door gap runs off the axes, so nothing closes the room
     await quickSetup(page);
+    const ask = dialog(page).getByRole('alertdialog', { name: 'Detect the outline of…' });
+    const miss = async (spot: [number, number]) => {
+      // The dialog is out of the way while a spot is picked
+      await expect(ask).toHaveCount(0);
+      await expect(card(page).getByRole('status')).toHaveText('Click inside the room to detect it.');
+      await clickImage(page, tilted(spot));
+      await expect(ask.getByRole('alert')).toHaveText('No room found there.');
+    };
     await card(page).getByRole('button', { name: 'Auto-detect' }).click();
-    await dialog(page).getByRole('button', { name: 'One room' }).click();
-    // Outside the building: nothing to find
-    await clickImage(page, tilted([40, 40]));
-    await expect(dialog(page).getByRole('alert')).toHaveText('No outline found there — trace it instead.');
+    await ask.getByRole('button', { name: 'One room' }).click();
+    await miss([450, 220]);
+    await expect(ask.getByRole('button', { name: 'Whole space' })).toBeVisible();
+    await expect(ask.getByRole('button', { name: 'Trace instead' })).toBeVisible();
+    await expect(ask.getByRole('button', { name: 'Cancel' })).toBeVisible();
+    // No notice at the bottom of the window
+    await expect(dialog(page).locator('.fi-notice')).toHaveCount(0);
+    // Another spot: the dialog closes for the click and reopens on a miss
+    await ask.getByRole('button', { name: 'Another spot' }).click();
+    await miss([40, 40]);
+    // The other mode
+    await ask.getByRole('button', { name: 'Whole space' }).click();
+    await expect(ask.getByRole('alert')).toHaveText('No outline found.');
+    await expect(ask.getByRole('button', { name: 'Whole space' })).toHaveCount(0);
+    await expect(ask.getByRole('button', { name: 'One room' })).toBeVisible();
+
+    // Trace instead: drawing starts
+    await ask.getByRole('button', { name: 'Trace instead' }).click();
+    await expect(ask).toHaveCount(0);
     await expect(card(page).getByRole('status')).toHaveText('Click each vertex; click the first one to close.');
     await expect(card(page).getByRole('button', { name: 'Trace', exact: true })).toHaveAttribute('aria-pressed', 'true');
+
+    // Cancel after a miss: back to the choice
+    await page.keyboard.press('Escape');
+    await card(page).getByRole('button', { name: 'Auto-detect' }).click();
+    await ask.getByRole('button', { name: 'One room' }).click();
+    await miss([450, 220]);
+    await ask.getByRole('button', { name: 'Cancel' }).click();
+    await expect(ask).toHaveCount(0);
+    await expect(card(page).getByRole('button', { name: 'Auto-detect' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(card(page).getByRole('button', { name: 'Trace', exact: true })).toHaveAttribute('aria-pressed', 'false');
   });
+
+  // The user's bedroom plan (a consumer floor-plan export, dimensions in inches): user report "auto-detect still fails"
+  for (const unit of ['inches', 'meters'] as const) {
+    test(`the user's bedroom plan, scale typed in ${unit}: One room from anywhere in it, and Whole space, find its 8 corners`, async ({ page }) => {
+      await bedroomSetup(page, unit);
+      const rows = dialog(page).locator('.vertex-row');
+      const ask = dialog(page).getByRole('alertdialog', { name: 'Detect the outline of…' });
+      // The bed, the desk area, open floor, by the door, by the stub wall
+      for (const spot of [[190, 360], [470, 420], [600, 330], [800, 250], [650, 500]] as [number, number][]) {
+        await card(page).getByRole('button', { name: 'Auto-detect' }).click();
+        await ask.getByRole('button', { name: 'One room' }).click();
+        await clickImage(page, spot);
+        await expect(rows, `clicked at ${spot}`).toHaveCount(8);
+        await card(page).getByRole('button', { name: 'Redo' }).click();
+        await expect(rows).toHaveCount(0);
+      }
+      await card(page).getByRole('button', { name: 'Auto-detect' }).click();
+      await ask.getByRole('button', { name: 'Whole space' }).click();
+      await expect(rows).toHaveCount(8);
+      await expect(ask).toHaveCount(0);
+    });
+  }
 
   test('the units select changes the vertex table', async ({ page }) => {
     await upload(page);

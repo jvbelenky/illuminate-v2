@@ -342,7 +342,9 @@ export function detectPlan(img: RasterImage, mode: DetectMode, opts: DetectOptio
   if (!res.outline || !res.region) return { outline: null, walls: [] };
   const mask = res.mask as WallMaskInfo;
   const f = mask.factor;
-  const pxPerM = opts.pxPerM && opts.pxPerM > 0 ? opts.pxPerM * f : null;
+  // The scale the outline was found at (the given one may not have fitted)
+  const used = res.pxPerM === undefined ? opts.pxPerM : res.pxPerM;
+  const pxPerM = used && used > 0 ? used * f : null;
   const walls = extractInteriorWalls(mask, res.region, { pxPerM }).map((s) => ({
     a: [s.a[0] / f, s.a[1] / f] as Pt,
     b: [s.b[0] / f, s.b[1] / f] as Pt,

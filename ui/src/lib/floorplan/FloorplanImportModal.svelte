@@ -94,8 +94,8 @@
 	let picking = $state(false);
 	let detecting = $state(false);
 	let detectAsk = $state(false);
-	let notice = $state<string | null>(null);
-	let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+	/** The last auto-detect found nothing: the dialog reopens saying so. */
+	let detectFail = $state<'room' | 'floor' | null>(null);
 	let selV = $state(-1);
 	/** Interior walls found by auto-detect: centre line and thickness in image pixels. */
 	type IWall = { id: number; a: Pt; b: Pt; thickness: number; on: boolean };
@@ -505,6 +505,7 @@
 		drag = null;
 		popup = null;
 		detectAsk = false;
+		detectFail = null;
 		if (entering) enterOutline();
 	}
 	function apply(move: ReturnType<typeof moveNext>) {
@@ -587,7 +588,7 @@
 			return true;
 		}
 		if (detectAsk) {
-			detectAsk = false;
+			cancelDetect();
 			return true;
 		}
 		if (popup) {
@@ -612,11 +613,6 @@
 		return true;
 	}
 
-	function showNotice(t: string) {
-		notice = t;
-		clearTimeout(noticeTimer);
-		noticeTimer = setTimeout(() => (notice = null), 4000);
-	}
 	function stopDetect() {
 		detectToken++;
 		detecting = false;
@@ -626,7 +622,8 @@
 		stopDetect();
 		walls = [];
 		how = 'trace';
-		notice = null;
+		detectAsk = false;
+		detectFail = null;
 		canvasTool = 'edit';
 		selV = -1;
 		canvas?.startDraw('polygon');
@@ -634,13 +631,22 @@
 	}
 	function chooseAuto() {
 		if (drawing) canvas?.cancelDraw();
+		detectFail = null;
 		detectAsk = true;
+	}
+	/** The Auto-detect dialog's Cancel: after a failed detection, back to the choice. */
+	function cancelDetect() {
+		detectAsk = false;
+		if (detectFail) {
+			detectFail = null;
+			how = null;
+		}
 	}
 	function startAuto() {
 		if (drawing) canvas?.cancelDraw();
 		stopDetect();
 		detectAsk = false;
-		notice = null;
+		detectFail = null;
 		walls = [];
 		how = 'auto';
 		draft = [];
@@ -803,9 +809,9 @@
 		if (token !== detectToken) return;
 		detecting = false;
 		if (!found) {
-			// Back to the plain 2D editing, drawing
-			chooseTrace();
-			showNotice(DETECT_FAILED);
+			// The dialog reopens saying so: another spot, the other mode, or trace
+			detectFail = seed ? 'room' : 'floor';
+			detectAsk = true;
 		}
 	}
 
@@ -1175,9 +1181,6 @@
 						<button type="button" class="fi-b on" onclick={closePopup}>OK</button>
 					</div>
 				{/if}
-				{#if notice}
-					<div class="fi-notice" role="alert">{notice}</div>
-				{/if}
 			</div>
 			{#if need}
 				<div class="fi-need-back">
@@ -1192,11 +1195,21 @@
 				<div class="fi-need-back">
 					<div class="fi-need" role="alertdialog" aria-labelledby="fi-detect-title">
 						<b id="fi-detect-title">Detect the outline of…</b>
+						{#if detectFail}
+							<div class="fi-fail" role="alert">{DETECT_FAILED[detectFail]}</div>
+						{/if}
 						<div class="fi-choice">
-							<button type="button" class="fi-b" onclick={detectOneRoom}><span class="fi-gl" aria-hidden="true">▢</span>One room</button>
-							<button type="button" class="fi-b" onclick={detectWholeSpace}><span class="fi-gl" aria-hidden="true">▣</span>Whole space</button>
+							<button type="button" class="fi-b" onclick={detectOneRoom}><span class="fi-gl" aria-hidden="true">▢</span>{detectFail === 'room' ? 'Another spot' : 'One room'}</button>
+							{#if detectFail !== 'floor'}
+								<button type="button" class="fi-b" onclick={detectWholeSpace}><span class="fi-gl" aria-hidden="true">▣</span>Whole space</button>
+							{/if}
 						</div>
-						<div class="fi-need-row"><button type="button" class="fi-b" onclick={() => (detectAsk = false)}>Cancel</button></div>
+						<div class="fi-need-row">
+							{#if detectFail}
+								<button type="button" class="fi-b" onclick={chooseTrace}><span class="fi-gl" aria-hidden="true">✎</span>Trace instead</button>
+							{/if}
+							<button type="button" class="fi-b" onclick={cancelDetect}>Cancel</button>
+						</div>
 					</div>
 				</div>
 			{/if}
@@ -1636,20 +1649,14 @@
 		background: var(--color-bg-secondary);
 		box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
 	}
-	.fi-notice {
-		position: absolute;
-		left: 50%;
-		bottom: 56px;
-		transform: translateX(-50%);
-		z-index: 6;
-		padding: 8px 14px;
-		border: 1px solid var(--color-border);
-		border-radius: 6px;
-		background: var(--color-bg);
-		color: var(--color-text);
-		font-size: 14px;
-		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-		pointer-events: none;
+	.fi-fail {
+		padding: 10px 12px;
+		border-left: 3px solid var(--color-warning);
+		border-radius: 4px;
+		background: var(--color-warning-bg);
+		color: var(--color-warning-text);
+		font-size: 15px;
+		font-weight: 600;
 	}
 	.fi-lens {
 		position: absolute;
@@ -1725,6 +1732,7 @@
 	.fi-need-row {
 		display: flex;
 		justify-content: flex-end;
+		gap: 8px;
 	}
 	.fi-foot {
 		display: flex;

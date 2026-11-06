@@ -59,6 +59,8 @@ export interface DetectResult {
   mask: WallMask;
   /** The pixels inside the outline (working resolution, 1 = inside), interior walls included; null without an outline. */
   region?: Uint8Array | null;
+  /** The scale (input pixels per metre) the outline was found at: the given one, or one read from the drawing when the given one did not fit. */
+  pxPerM?: number | null;
 }
 
 // --- 1. grey + downscale
@@ -256,13 +258,7 @@ export function buildWallMask(img: RasterImage, opts: DetectOptions = {}, level:
   // Ink must be the minority (lines on paper) and must exist
   if (count === 0 || count > 0.6 * w * h) return null;
 
-  // Wall thickness: the 95th percentile of the distance to paper over ink pixels
-  const dist = chessboardDistance(ink, w, h);
-  const hist = new Uint32Array(64);
-  for (let i = 0; i < dist.length; i++) if (ink[i]) hist[Math.min(63, dist[i])]++;
-  let acc = 0, p95 = 1;
-  for (let d = 0; d < 64; d++) { acc += hist[d]; if (acc >= 0.95 * count) { p95 = d; break; } }
-  const thickness = Math.max(1, 2 * p95 - 1);
+  const thickness = inkThickness(ink, w, h, count);
   const pxPerM = opts.pxPerM && opts.pxPerM > 0 ? opts.pxPerM * factor : null;
   // Vertex markers (a white circle or square drawn over each wall corner, wider
   // than the wall) cut the walls apart: such holes in the ink count as ink
@@ -297,6 +293,28 @@ export function buildWallMask(img: RasterImage, opts: DetectOptions = {}, level:
   // Doors and windows drawn as an outlined insert in the wall line, at any width
   bridgeInserts(closed, raw, ink, w, h, thickness);
   return { width: w, height: h, data: closed, factor, bridge, wallThickness: thickness, ink };
+}
+
+/** Wall thickness: the 95th percentile of the distance to paper over ink pixels. */
+function inkThickness(ink: Uint8Array, w: number, h: number, count: number): number {
+  const dist = chessboardDistance(ink, w, h);
+  const hist = new Uint32Array(64);
+  for (let i = 0; i < dist.length; i++) if (ink[i]) hist[Math.min(63, dist[i])]++;
+  let acc = 0, p95 = 1;
+  for (let d = 0; d < 64; d++) { acc += hist[d]; if (acc >= 0.95 * count) { p95 = d; break; } }
+  return Math.max(1, 2 * p95 - 1);
+}
+
+/** The drawn wall thickness in input pixels, at Otsu's level; null for a blank image. */
+export function wallThicknessPx(img: RasterImage, workSize = 1000): number | null {
+  const { width: w, height: h, grey, factor } = toGrey(img, workSize);
+  const t = otsuThreshold(grey);
+  if (t === null) return null;
+  const ink = new Uint8Array(w * h);
+  let count = 0;
+  for (let i = 0; i < grey.length; i++) if (grey[i] < t) { ink[i] = 1; count++; }
+  if (count === 0 || count > 0.6 * w * h) return null;
+  return inkThickness(ink, w, h, count) / factor;
 }
 
 /** Pixels of `m` on a straight run (horizontal, vertical or diagonal) of at least `len` pixels. */
@@ -661,12 +679,43 @@ export function squareCorners(ring: Pt[], tolDeg = 10): Pt[] {
  * holding `seed` (input pixels); `floor` mode the outer envelope.
  */
 export function detectOutline(img: RasterImage, mode: DetectMode, opts: DetectOptions = {}): DetectResult {
-  const res = detectAtLevel(img, mode, opts, 0);
-  if (res.outline) return res;
-  // Nothing (or no room-sized space) at Otsu's level: the walls may be a lighter
-  // grey than the black lines and text that set it
-  const alt = detectAtLevel(img, mode, opts, 1);
-  return alt.outline ? alt : res;
+  let first: DetectResult | null = null;
+  for (const pxPerM of scalesToTry(img, opts)) {
+    const o = { ...opts, pxPerM };
+    const res = detectAtLevel(img, mode, o, 0);
+    if (res.outline) return { ...res, pxPerM };
+    // Nothing (or no room-sized space) at Otsu's level: the walls may be a lighter
+    // grey than the black lines and text that set it
+    const alt = detectAtLevel(img, mode, o, 1);
+    if (alt.outline) return { ...alt, pxPerM };
+    first ??= res;
+  }
+  return first!;
+}
+
+/** Drawn walls thinner or thicker than this (metres) mean the scale does not fit the drawing. */
+const WALL_M_MIN = 0.01, WALL_M_MAX = 0.6;
+/** Drawn wall thicknesses (metres) a scale is read from when the given one does not fit or finds nothing. */
+const WALL_M_GUESSES = [0.07, 0.2];
+
+/**
+ * The scales to detect at, in order. The door bridge, the marker and blob
+ * sizes and the smallest room all follow the scale, so one that does not fit
+ * the drawing (a distance typed in the wrong unit: 152 in read as 152 m or
+ * 152 ft) finds nothing. The given scale is tried first when the walls it
+ * implies are plausible; then scales read from the drawn wall thickness; then
+ * none. The outline is in pixels either way.
+ */
+function scalesToTry(img: RasterImage, opts: DetectOptions): (number | null)[] {
+  const given = opts.pxPerM && opts.pxPerM > 0 ? opts.pxPerM : null;
+  if (!given) return [null];
+  const t = wallThicknessPx(img, opts.workSize ?? 1000);
+  if (!t) return [given];
+  const out: (number | null)[] = [];
+  if (t / given >= WALL_M_MIN && t / given <= WALL_M_MAX) out.push(given);
+  for (const m of WALL_M_GUESSES) out.push(t / m);
+  out.push(null);
+  return out;
 }
 
 function detectAtLevel(img: RasterImage, mode: DetectMode, opts: DetectOptions, level: 0 | 1): DetectResult {
