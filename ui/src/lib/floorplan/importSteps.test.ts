@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { moveNext, moveTo, stepDone, guideMessage, type GuideContext, type StepFacts } from './importSteps';
+import { moveNext, moveTo, stepDone, cardText, STEP_LABELS, type CardContext, type StepFacts } from './importSteps';
 
 const none: StepFacts = { aligned: false, origin: false, scale: false, outline: false };
 const all: StepFacts = { aligned: true, origin: true, scale: true, outline: true };
@@ -11,7 +11,7 @@ describe('step completion and gating', () => {
     expect(stepDone(all, 4)).toBe(true);
   });
 
-  it('Next on Align axes always goes on, and marks it done', () => {
+  it('Next on Check axes always goes on, and marks it done', () => {
     expect(moveNext(none, 1)).toEqual({ kind: 'go', step: 2, aligned: true });
   });
 
@@ -30,7 +30,7 @@ describe('step completion and gating', () => {
     expect(moveNext(all, 4)).toMatchObject({ kind: 'create' });
   });
 
-  it('a later step card asks for the first unfinished step before it; Align axes never blocks', () => {
+  it('a later step card asks for the first unfinished step before it; Check axes never blocks', () => {
     expect(moveTo(none, 2)).toEqual({ kind: 'go', step: 2, aligned: true });
     expect(moveTo(none, 4)).toEqual({ kind: 'need', step: 2, aligned: true });
     expect(moveTo({ ...none, origin: true }, 4)).toMatchObject({ kind: 'need', step: 3 });
@@ -40,24 +40,29 @@ describe('step completion and gating', () => {
   });
 });
 
-describe('instruction box', () => {
-  const base: GuideContext = { step: 1, tool: 'straighten', wallPoints: 0, origin: false, scaleA: false, scaleB: false, how: null, tracing: false, detected: null, detecting: false };
-  it('uses the mockup wording', () => {
-    expect(guideMessage(base)).toBe('Click two points along a wall that should line up with the grid.');
-    expect(guideMessage({ ...base, wallPoints: 1 })).toBe('Now click a second point on the same wall.');
-    expect(guideMessage({ ...base, tool: 'rotate' })).toBe('Drag on the image to rotate it until the walls follow the grid.');
-    expect(guideMessage({ ...base, step: 2 })).toBe('Click or drag to place the origin (0, 0).');
-    expect(guideMessage({ ...base, step: 2, origin: true })).toBe('Origin placed. Drag it to adjust, or press Next.');
-    expect(guideMessage({ ...base, step: 3 })).toBe('Click two points a known distance apart.');
-    expect(guideMessage({ ...base, step: 3, scaleA: true })).toBe('Now click the second point.');
-    expect(guideMessage({ ...base, step: 3, scaleA: true, scaleB: true })).toBe('Enter the distance between the two points.');
-    expect(guideMessage({ ...base, step: 4 })).toBe('Choose Trace or Auto-detect.');
-    expect(guideMessage({ ...base, step: 4, how: 'trace', tracing: true })).toBe('Click each vertex; click the first one to close.');
-    expect(guideMessage({ ...base, step: 4, how: 'trace' })).toBe('Drag vertices or type their values to adjust.');
+describe('step cards', () => {
+  const base: CardContext = { step: 1, aligning: false, tool: null, wallPoints: 0, scaleA: false, scaleB: false, picking: false, detecting: false, tracing: false };
+  it('the steps are Check axes, Set origin, Set scale, Trace outline', () => {
+    expect(Object.values(STEP_LABELS)).toEqual(['Check axes', 'Set origin', 'Set scale', 'Trace outline']);
   });
-  it('auto-detect: click a room, then edit; a miss says to trace', () => {
-    expect(guideMessage({ ...base, step: 4, how: 'auto' })).toBe('Click inside the room to detect it.');
-    expect(guideMessage({ ...base, step: 4, how: 'auto', detected: 'found' })).toBe('Drag vertices or type their values to adjust.');
-    expect(guideMessage({ ...base, step: 4, how: 'auto', detected: 'none' })).toBe('No outline found; trace it instead.');
+  it('Check axes asks first; Align axes shows the live tool text', () => {
+    expect(cardText(base)).toBe('Do the walls line up with the grid?');
+    expect(cardText({ ...base, aligning: true, tool: 'straighten' })).toBe('Click two points along a wall to align it to an axis.');
+    expect(cardText({ ...base, aligning: true, tool: 'straighten', wallPoints: 1 })).toBe('Now click a second point on the same wall.');
+    expect(cardText({ ...base, aligning: true, tool: 'rotate' })).toBe('Drag on the image to rotate it until the walls follow the grid.');
+  });
+  it('Set origin never changes its text', () => {
+    expect(cardText({ ...base, step: 2 })).toBe('Click to place the origin (0, 0).');
+  });
+  it('Set scale: two clicks, then the fields alone', () => {
+    expect(cardText({ ...base, step: 3 })).toBe('Click two points a known distance apart.');
+    expect(cardText({ ...base, step: 3, scaleA: true })).toBe('Click the second point.');
+    expect(cardText({ ...base, step: 3, scaleA: true, scaleB: true })).toBeNull();
+  });
+  it('Trace outline: picking a room, detecting, tracing', () => {
+    expect(cardText({ ...base, step: 4 })).toBeNull();
+    expect(cardText({ ...base, step: 4, picking: true })).toBe('Click inside the room to detect it.');
+    expect(cardText({ ...base, step: 4, detecting: true })).toBe('Detecting walls…');
+    expect(cardText({ ...base, step: 4, tracing: true })).toBe('Click each vertex; click the first one to close.');
   });
 });

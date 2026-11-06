@@ -1,13 +1,13 @@
 /**
  * The import window's four steps: what counts as done, where Next or a step
- * card may go, and the instruction box's text (the approved mockup's wording).
+ * card may go, and the text in the open step card.
  */
 
 export type ImportStep = 1 | 2 | 3 | 4;
-export const STEP_LABELS: Record<ImportStep, string> = { 1: 'Align axes', 2: 'Set origin', 3: 'Set scale', 4: 'Trace outline' };
+export const STEP_LABELS: Record<ImportStep, string> = { 1: 'Check axes', 2: 'Set origin', 3: 'Set scale', 4: 'Trace outline' };
 
 export interface StepFacts {
-  /** Straighten, Rotate, Already aligned or Next was used on step 1. */
+  /** Looks good, Done, Straighten, Rotate or Next was used on Check axes. */
   aligned: boolean;
   origin: boolean;
   scale: boolean;
@@ -31,7 +31,7 @@ export type StepMove =
   | { kind: 'create'; aligned: boolean };
 
 /**
- * Going to step `to` (a card click): every earlier step must be done. Align
+ * Going to step `to` (a card click): every earlier step must be done. Check
  * axes never blocks; passing it marks it done.
  */
 export function moveTo(f: StepFacts, to: ImportStep): StepMove {
@@ -43,7 +43,7 @@ export function moveTo(f: StepFacts, to: ImportStep): StepMove {
   return { kind: 'go', step: to, aligned };
 }
 
-/** Next from step `at`: the current step must be done (Align axes is, by pressing Next). On step 4, Create room. */
+/** Next from step `at`: the current step must be done (Check axes is, by pressing Next). On step 4, Create room. */
 export function moveNext(f: StepFacts, at: ImportStep): StepMove {
   const aligned = f.aligned || at === 1;
   const facts = { ...f, aligned };
@@ -57,37 +57,38 @@ export function moveNext(f: StepFacts, at: ImportStep): StepMove {
 
 export type AlignTool = 'pan' | 'rotate' | 'straighten' | null;
 
-export interface GuideContext {
+export const CHECK_AXES_QUESTION = 'Do the walls line up with the grid?';
+export const ORIGIN_TEXT = 'Click to place the origin (0, 0).';
+export const DETECT_FAILED = 'No outline found there — trace it instead.';
+
+export interface CardContext {
   step: ImportStep;
+  /** Check axes: the align tools are open. */
+  aligning: boolean;
   tool: AlignTool;
   /** Straighten points placed so far. */
   wallPoints: number;
-  origin: boolean;
   scaleA: boolean;
   scaleB: boolean;
-  how: 'trace' | 'auto' | 'keep' | null;
-  tracing: boolean;
-  /** Auto-detect: the outline found (or null before the first click), or 'none' when it failed. */
-  detected: 'found' | 'none' | null;
+  /** Trace outline: a click picks the room to detect. */
+  picking: boolean;
   detecting: boolean;
+  tracing: boolean;
 }
 
-/** The instruction box text. */
-export function guideMessage(c: GuideContext): string {
+/** The instruction in the open step card, or null when the card shows only its controls. */
+export function cardText(c: CardContext): string | null {
   if (c.step === 1) {
-    if (c.tool === 'straighten') return c.wallPoints ? 'Now click a second point on the same wall.' : 'Click two points along a wall that should line up with the grid.';
+    if (!c.aligning) return CHECK_AXES_QUESTION;
+    if (c.tool === 'straighten') return c.wallPoints ? 'Now click a second point on the same wall.' : 'Click two points along a wall to align it to an axis.';
     if (c.tool === 'rotate') return 'Drag on the image to rotate it until the walls follow the grid.';
     if (c.tool === 'pan') return 'Drag to move the image.';
-    return 'Choose Straighten or Rotate above the image to line up the walls.';
+    return 'Use the tools above the image to line up the walls with the grid.';
   }
-  if (c.step === 2) return c.origin ? 'Origin placed. Drag it to adjust, or press Next.' : 'Click or drag to place the origin (0, 0).';
-  if (c.step === 3) return c.scaleB ? 'Enter the distance between the two points.' : c.scaleA ? 'Now click the second point.' : 'Click two points a known distance apart.';
-  if (!c.how) return 'Choose Trace or Auto-detect.';
-  if (c.how === 'trace' && c.tracing) return 'Click each vertex; click the first one to close.';
-  if (c.how === 'auto') {
-    if (c.detecting) return 'Detecting walls…';
-    if (c.detected === 'none') return 'No outline found; trace it instead.';
-    if (c.detected === null) return 'Click inside the room to detect it.';
-  }
-  return 'Drag vertices or type their values to adjust.';
+  if (c.step === 2) return ORIGIN_TEXT;
+  if (c.step === 3) return c.scaleB ? null : c.scaleA ? 'Click the second point.' : 'Click two points a known distance apart.';
+  if (c.detecting) return 'Detecting walls…';
+  if (c.picking) return 'Click inside the room to detect it.';
+  if (c.tracing) return 'Click each vertex; click the first one to close.';
+  return null;
 }
