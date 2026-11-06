@@ -194,5 +194,5 @@ export async function decodeFloorPlanFile(file: File, opts: { page?: number } = 
   if (mime === 'image/svg+xml') return decodeSvg(file);
   if (mime === 'application/pdf') return decodePdf(file, opts.page ?? 1);
   if (RASTER_MIMES.has(mime)) return decodeRaster(file, mime);
-  throw new FloorPlanDecodeError('Unsupported file type. Use PNG, JPEG, WebP, GIF, SVG or PDF.');
+  throw new FloorPlanDecodeError('Unsupported file type. Use PNG, JPEG, SVG or PDF.');
 }
