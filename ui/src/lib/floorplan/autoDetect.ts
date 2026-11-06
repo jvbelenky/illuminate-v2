@@ -5,9 +5,13 @@
  *
  *   1. grey (alpha over white), downscaled to about 1000 px on the long side;
  *   2. Otsu threshold: dark pixels are ink;
- *   3. thin strokes (text, furniture, door swings) go: an opening sized from the
- *      wall thickness, then small ink blobs are dropped;
- *   4. a closing bridges door gaps up to about 1 m at the given scale;
+ *   3. vertex markers (white circles or squares over the corners) are filled;
+ *      thin strokes (text, furniture, door swings) go: an opening sized from
+ *      the wall thickness; then only long straight runs stay (walls), and
+ *      small ink blobs are dropped;
+ *   4. door gaps up to about 1 m are bridged ALONG the wall line (never across
+ *      a pocket), and doors or windows drawn as an outlined insert in the wall
+ *      line are filled at any width;
  *   5. room mode: the enclosed region holding the seed; floor mode: all the
  *      enclosed space inside the exterior walls; then a closing as wide as the
  *      thickest wall fills interior walls and stubs, so the outline follows the
@@ -92,11 +96,12 @@ export function toGrey(img: RasterImage, workSize = 1000): { width: number; heig
 
 // --- 2. Otsu
 
-/** Otsu's threshold over grey levels: ink is `grey < t`. Null for a flat image. */
-export function otsuThreshold(grey: Uint8Array): number | null {
+/** Otsu's threshold over grey levels (those at `from` or lighter): ink is `grey < t`. Null for a flat image. */
+export function otsuThreshold(grey: Uint8Array, from = 0): number | null {
   const hist = new Float64Array(256);
-  for (let i = 0; i < grey.length; i++) hist[grey[i]]++;
-  const total = grey.length;
+  for (let i = 0; i < grey.length; i++) if (grey[i] >= from) hist[grey[i]]++;
+  let total = 0;
+  for (let t = 0; t < 256; t++) total += hist[t];
   let sumAll = 0;
   for (let t = 0; t < 256; t++) sumAll += t * hist[t];
   let sumB = 0, wB = 0, best = -1, bestT = -1;
@@ -234,10 +239,16 @@ export interface WallMaskInfo extends WallMask {
   ink: Uint8Array;
 }
 
-/** The ink that forms walls, thin strokes and small blobs removed and door gaps bridged, at the working resolution. Null for a blank image. */
-export function buildWallMask(img: RasterImage, opts: DetectOptions = {}): WallMaskInfo | null {
+/**
+ * The ink that forms walls, thin strokes and small blobs removed and door gaps
+ * bridged, at the working resolution. Null for a blank image.
+ * `level` 0 thresholds at Otsu's level; 1 at the next level up (Otsu over the
+ * lighter side), for light grey walls among black lines and text.
+ */
+export function buildWallMask(img: RasterImage, opts: DetectOptions = {}, level: 0 | 1 = 0): WallMaskInfo | null {
   const { width: w, height: h, grey, factor } = toGrey(img, opts.workSize ?? 1000);
-  const t = otsuThreshold(grey);
+  let t = otsuThreshold(grey);
+  if (t !== null && level === 1) t = otsuThreshold(grey, t);
   if (t === null) return null;
   let ink: Uint8Array = new Uint8Array(w * h);
   let count = 0;
@@ -252,11 +263,18 @@ export function buildWallMask(img: RasterImage, opts: DetectOptions = {}): WallM
   let acc = 0, p95 = 1;
   for (let d = 0; d < 64; d++) { acc += hist[d]; if (acc >= 0.95 * count) { p95 = d; break; } }
   const thickness = Math.max(1, 2 * p95 - 1);
+  const pxPerM = opts.pxPerM && opts.pxPerM > 0 ? opts.pxPerM * factor : null;
+  // Vertex markers (a white circle or square drawn over each wall corner, wider
+  // than the wall) cut the walls apart: such holes in the ink count as ink
+  fillMarkerHoles(ink, w, h, thickness, Math.ceil(Math.min(2.5 * thickness, pxPerM ? 0.5 * pxPerM : Infinity)));
+  const raw = ink;
   // Strokes thinner than about 40% of a wall go (text, furniture, door swings)
   const rOpen = Math.floor(thickness / 5);
   if (rOpen > 0) ink = dilate(erode(ink, w, h, rOpen), w, h, rOpen);
+  // Walls are long: only runs of at least three wall thicknesses along an axis
+  // or a diagonal stay, which also trims the vertex markers back to the walls
+  ink = lineOpening(ink, w, h, 3 * thickness);
 
-  const pxPerM = opts.pxPerM && opts.pxPerM > 0 ? opts.pxPerM * factor : null;
   const long = Math.max(w, h);
   // Small blobs go: anything whose bounding box is under 0.3 m (or 1.5% of the image)
   const minBlob = Math.max(3, pxPerM ? 0.3 * pxPerM : 0.015 * long);
@@ -267,13 +285,157 @@ export function buildWallMask(img: RasterImage, opts: DetectOptions = {}): WallM
     if (Math.max(s.x1 - s.x0, s.y1 - s.y0) + 1 < minBlob) ink[i] = 0;
   }
 
-  // Bridge door gaps: a closing of half the door width
+  // Bridge door gaps: along the wall line, up to the door width
   const doorM = opts.doorWidthM ?? 1;
   let bridge = Math.ceil(pxPerM ? (doorM / 2) * pxPerM : 0.015 * long);
   bridge = Math.max(1, Math.min(bridge, Math.floor(Math.min(w, h) / 8)));
-  const closed = erode(dilate(ink, w, h, bridge), w, h, bridge);
+  // Slits narrower than a wall close (anti-aliasing, touching lines)
+  const rSlit = Math.ceil(thickness / 2);
+  const closed = erode(dilate(ink, w, h, rSlit), w, h, rSlit);
   for (let i = 0; i < closed.length; i++) closed[i] |= ink[i];
+  bridgeGaps(closed, ink, w, h, thickness, 2 * bridge);
+  // Doors and windows drawn as an outlined insert in the wall line, at any width
+  bridgeInserts(closed, raw, ink, w, h, thickness);
   return { width: w, height: h, data: closed, factor, bridge, wallThickness: thickness, ink };
+}
+
+/** Pixels of `m` on a straight run (horizontal, vertical or diagonal) of at least `len` pixels. */
+function lineOpening(m: Uint8Array, w: number, h: number, len: number): Uint8Array {
+  const out = new Uint8Array(w * h);
+  for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
+    // Start every run at a pixel whose predecessor is off the image or off `m`
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (!m[y * w + x]) continue;
+      const px = x - dx, py = y - dy;
+      if (px >= 0 && py >= 0 && px < w && py < h && m[py * w + px]) continue;
+      let n = 0, cx = x, cy = y;
+      while (cx >= 0 && cy >= 0 && cx < w && cy < h && m[cy * w + cx]) { n++; cx += dx; cy += dy; }
+      if (n < len) continue;
+      for (let k = 0, kx = x, ky = y; k < n; k++, kx += dx, ky += dy) out[ky * w + kx] = 1;
+    }
+  }
+  return out;
+}
+
+/**
+ * Set to ink every enclosed non-ink hole (4-connected, off the border) that is
+ * round or square, at least `min` and at most `max` pixels across. Long slots
+ * (a double-lined furniture edge, a door insert) and tiny holes (letters) stay.
+ */
+function fillMarkerHoles(ink: Uint8Array, w: number, h: number, min: number, max: number) {
+  const paper = new Uint8Array(w * h);
+  for (let i = 0; i < ink.length; i++) paper[i] = ink[i] ? 0 : 1;
+  const { label, stats } = components(paper, w, h);
+  const fill = new Uint8Array(stats.length);
+  for (let k = 1; k < stats.length; k++) {
+    const s = stats[k];
+    const onBorder = s.x0 === 0 || s.y0 === 0 || s.x1 === w - 1 || s.y1 === h - 1;
+    const bw = s.x1 - s.x0 + 1, bh = s.y1 - s.y0 + 1;
+    const lo = Math.min(bw, bh), hi = Math.max(bw, bh);
+    fill[k] = !onBorder && hi <= max && lo >= min && lo >= 0.6 * hi ? 1 : 0;
+  }
+  for (let i = 0; i < ink.length; i++) if (label[i] && fill[label[i]]) ink[i] = 1;
+}
+
+/**
+ * Bridge door gaps along wall lines: on a row (column), a gap of at most
+ * `maxGap` pixels is filled when it lies between the ends of two wall pieces
+ * on the same line (their cross-sections overlap), or between a wall's end
+ * and the face of a wall across its line (a door beside a corner). An end is a
+ * cross-section no longer than 2.5 wall thicknesses; thin lines (furniture
+ * edges) only bridge to another end, never to a face. Unlike a square closing,
+ * this never seals a pocket or a corridor between parallel walls.
+ */
+function bridgeGaps(mask: Uint8Array, wall: Uint8Array, w: number, h: number, t: number, maxGap: number) {
+  const fills: number[] = [];
+  for (const horizontal of [true, false]) {
+    const lines = horizontal ? h : w, len = horizontal ? w : h;
+    const at = (l: number, i: number) => (horizontal ? l * w + i : i * w + l);
+    // The wall's extent across the line at (l, i)
+    const across = (l: number, i: number): [number, number] => {
+      let a = l, b = l;
+      while (a > 0 && wall[at(a - 1, i)]) a--;
+      while (b < lines - 1 && wall[at(b + 1, i)]) b++;
+      return [a, b];
+    };
+    for (let l = 0; l < lines; l++) {
+      let i = 0;
+      while (i < len && !wall[at(l, i)]) i++;
+      while (i < len) {
+        while (i < len && wall[at(l, i)]) i++;
+        const start = i;
+        while (i < len && !wall[at(l, i)]) i++;
+        if (i >= len || i - start > maxGap) continue;
+        const [a0, a1] = across(l, start - 1), [b0, b1] = across(l, i);
+        const la = a1 - a0 + 1, lb = b1 - b0 + 1;
+        const endA = la <= 2.5 * t, endB = lb <= 2.5 * t;
+        let ok = false;
+        if (endA && endB) ok = Math.min(a1, b1) - Math.max(a0, b0) + 1 >= 0.5 * Math.min(la, lb);
+        else if (endA !== endB) ok = (endA ? la : lb) >= 0.6 * t;
+        if (ok) for (let k = start; k < i; k++) fills.push(at(l, k));
+      }
+    }
+  }
+  for (const j of fills) mask[j] = 1;
+}
+
+/**
+ * Bridge doors and windows drawn IN the wall line as a thin-outlined insert:
+ * along a row (column), a gap between two wall pieces is filled when every
+ * pixel of it lies between thin lines within a wall thickness above and below
+ * (left and right), i.e. inside the insert's outline, for most of it (its
+ * marks aside), and not alongside a wall (a double-lined bed head against one).
+ * `mask` is updated; `raw` is the ink before thin strokes were removed, `wall` after.
+ */
+function bridgeInserts(mask: Uint8Array, raw: Uint8Array, wall: Uint8Array, w: number, h: number, t: number) {
+  const fills: number[] = [];
+  for (const horizontal of [true, false]) {
+    // Along each line (row for horizontal walls), across (column) for the sandwich test
+    const lines = horizontal ? h : w, len = horizontal ? w : h;
+    const at = (l: number, i: number) => (horizontal ? l * w + i : i * w + l);
+    const thin = (l: number, i: number) => {
+      if (l < 0 || l >= lines) return false;
+      const j = at(l, i);
+      return raw[j] === 1 && wall[j] === 0;
+    };
+    const paper = (l: number, i: number) => l >= 0 && l < lines && raw[at(l, i)] === 0;
+    const nearWall = (l: number, i: number) => {
+      for (let d = -t; d <= t; d++) if (l + d >= 0 && l + d < lines && wall[at(l + d, i)]) return true;
+      return false;
+    };
+    // Between two thin lines, with paper between them: not on a lone line
+    const sandwiched = (l: number, i: number) => {
+      let a = 1, b = -1;
+      for (let d = t; d >= 0; d--) if (thin(l - d, i)) { a = -d; break; }
+      for (let d = t; d >= 0; d--) if (thin(l + d, i)) { b = d; break; }
+      if (a > 0 || b < 0) return false;
+      for (let d = a + 1; d < b; d++) if (paper(l + d, i)) return true;
+      return false;
+    };
+    for (let l = 0; l < lines; l++) {
+      let i = 0;
+      while (i < len && !wall[at(l, i)]) i++;
+      while (i < len) {
+        while (i < len && wall[at(l, i)]) i++;
+        const start = i;
+        // Every pixel inside the insert's outline or on its marks, mostly
+        // inside; and the insert replaces the wall, it does not run along one
+        // (a double-lined bed head against a wall)
+        let ok = true, inside = 0, along = 0;
+        while (i < len && !wall[at(l, i)]) {
+          if (ok) {
+            if (sandwiched(l, i)) inside++;
+            else if (!raw[at(l, i)]) ok = false;
+            if (nearWall(l, i)) along++;
+          }
+          i++;
+        }
+        const n = i - start;
+        if (i < len && ok && n > 0 && inside >= 0.5 * n && along <= 0.25 * n) for (let k = start; k < i; k++) fills.push(at(l, k));
+      }
+    }
+  }
+  for (const j of fills) mask[j] = 1;
 }
 
 // --- 5. the region
@@ -499,16 +661,31 @@ export function squareCorners(ring: Pt[], tolDeg = 10): Pt[] {
  * holding `seed` (input pixels); `floor` mode the outer envelope.
  */
 export function detectOutline(img: RasterImage, mode: DetectMode, opts: DetectOptions = {}): DetectResult {
-  const mask = buildWallMask(img, opts);
+  const res = detectAtLevel(img, mode, opts, 0);
+  if (res.outline) return res;
+  // Nothing (or no room-sized space) at Otsu's level: the walls may be a lighter
+  // grey than the black lines and text that set it
+  const alt = detectAtLevel(img, mode, opts, 1);
+  return alt.outline ? alt : res;
+}
+
+function detectAtLevel(img: RasterImage, mode: DetectMode, opts: DetectOptions, level: 0 | 1): DetectResult {
+  const mask = buildWallMask(img, opts, level);
   const empty: WallMask = { width: 0, height: 0, data: new Uint8Array(0), factor: 1 };
   if (!mask) return { outline: null, mask: empty };
   const { width: w, height: h, factor } = mask;
+  const pxPerM = opts.pxPerM && opts.pxPerM > 0 ? opts.pxPerM * factor : null;
   let region = regionFor(mask, mode);
   if (!region) return { outline: null, mask };
   region = tidyRegion(region, w, h);
+  // A space under half a square metre is a piece of furniture, not a room
+  if (pxPerM) {
+    let n = 0;
+    for (let i = 0; i < region.length; i++) n += region[i];
+    if (n < 0.5 * pxPerM * pxPerM) return { outline: null, mask };
+  }
   const ring = traceBoundary(region, w, h);
   if (ring.length < 3) return { outline: null, mask };
-  const pxPerM = opts.pxPerM && opts.pxPerM > 0 ? opts.pxPerM * factor : null;
   const eps = Math.min(Math.max(1.5, pxPerM ? 0.04 * pxPerM : 0), 0.01 * Math.max(w, h) + 1.5);
   let simple = squareCorners(simplifyClosed(ring, eps));
   simple = dropShortEdges(simple, eps);

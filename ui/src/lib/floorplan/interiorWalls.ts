@@ -34,6 +34,8 @@ export interface WallOptions {
   pxPerM?: number | null;
   /** Shortest wall kept, metres (default 0.3). */
   minLengthM?: number;
+  /** Thinnest wall kept, metres (default 0.04): a furniture edge is thinner. */
+  minThicknessM?: number;
 }
 
 // --- 1. thinning
@@ -316,7 +318,7 @@ export function extractInteriorWalls(mask: WallMaskInfo, region: Uint8Array, opt
   const out: WallSegment[] = [];
   for (const q of walls) {
     // Furniture and text are drawn thinner than walls
-    if (q.thickness < Math.max(1.5, 0.3 * wallThickness)) continue;
+    if (q.thickness < Math.max(1.5, 0.3 * wallThickness, pxPerM ? (opts.minThicknessM ?? 0.04) * pxPerM : 0)) continue;
     extend(ink, region, w, h, q, cap);
     const len = q.s1 - q.s0;
     if (len < minLen || len < 2.5 * q.thickness) continue;
