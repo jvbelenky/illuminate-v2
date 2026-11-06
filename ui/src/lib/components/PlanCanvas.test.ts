@@ -719,6 +719,120 @@ describe('PlanCanvas snapping to the room outline', () => {
   });
 });
 
+describe('PlanCanvas axis alignment while drawing and dragging corners', () => {
+  const S = 400;
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function mountView(props: Record<string, unknown> = {}) {
+    const onEdit = vi.fn();
+    const { container, component } = render(PlanCanvas, {
+      props: { draft: [], units: 'meters', precision: 2, onEdit, ...props },
+    });
+    const svg = container.querySelector('svg.plan') as SVGSVGElement;
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: S, height: S, right: S, bottom: S, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await resize(svg, S, S);
+    const api = component as unknown as { fitView: (p: Vertex[]) => void; startDraw: () => void };
+    api.fitView([[0, 0], [10, 10]]);
+    await tick();
+    const v = box(svg);
+    const upp = v.h / S;
+    const client = (x: number, y: number) => ({ clientX: (x - v.x) / upp, clientY: S - (y - v.bottom) / upp });
+    const corners = () => [...svg.querySelectorAll('circle.vertex')].map((c) => [Number(c.getAttribute('cx')), 0 - Number(c.getAttribute('cy'))]);
+    return { svg, api, client, corners, upp };
+  }
+  const distinct = (vals: number[]) => [...new Set(vals.map((v) => Math.round(v * 1e9) / 1e9))].sort((a, b) => a - b);
+
+  // Off-grid corners, short walls (about 35 px) and a few pixels of hand wobble:
+  // well past the 3 degree right-angle snap, well within the 10 px alignment.
+  const X0 = 2.27, X1 = 3.23, Y0 = 2.24, Y1 = 3.26;
+
+  async function drawWobbly(alt = false) {
+    const m = await mountView();
+    const { svg, api, client, upp } = m;
+    api.startDraw();
+    await tick();
+    await fireEvent.pointerEnter(svg);
+    const at = (x: number, y: number) => ({ ...client(x, y), altKey: alt });
+    await fireEvent.click(svg, at(X0, Y0));
+    await fireEvent.pointerMove(svg, { ...at(X1, Y0 + 4 * upp), pointerId: 1 });
+    await fireEvent.click(svg, at(X1, Y0 + 4 * upp));
+    await fireEvent.click(svg, at(X1 - 5 * upp, Y1));
+    await fireEvent.click(svg, at(X0 + 6 * upp, Y1 + 3 * upp));
+    await fireEvent.click(svg, at(X0 + 2 * upp, Y0 - 2 * upp));
+    await tick();
+    return m;
+  }
+
+  it('a hand-drawn rectangle comes out square: every corner shares its x and y with its neighbours', async () => {
+    const { svg, corners } = await drawWobbly();
+    expect(svg.classList.contains('drawing')).toBe(false);
+    const c = corners();
+    expect(c).toHaveLength(4);
+    expect(distinct(c.map((p) => p[0]))).toHaveLength(2);
+    expect(distinct(c.map((p) => p[1]))).toHaveLength(2);
+    expect(distinct(c.map((p) => p[0]))[0]).toBeCloseTo(X0, 1);
+    expect(distinct(c.map((p) => p[1]))[0]).toBeCloseTo(Y0, 1);
+  });
+
+  it('Alt leaves the drawn corners where they were clicked', async () => {
+    const { corners } = await drawWobbly(true);
+    expect(distinct(corners().map((p) => p[0])).length).toBeGreaterThan(2);
+  });
+
+  it('the rubber band shows a dashed guide on the axis it aligned to', async () => {
+    const { svg, api, client, upp } = await mountView();
+    api.startDraw();
+    await tick();
+    await fireEvent.pointerEnter(svg);
+    await fireEvent.click(svg, client(X0, Y0));
+    await fireEvent.pointerMove(svg, { ...client(X1, Y0 + 5 * upp), pointerId: 1 });
+    const g = [...svg.querySelectorAll('line.guide:not(.outline-guide)')];
+    expect(g.some((l) => Math.abs(-Number(l.getAttribute('y1')) - Y0) < 1e-9 && l.getAttribute('y1') === l.getAttribute('y2'))).toBe(true);
+  });
+
+  it('a short diagonal wall is not collapsed onto the previous corner', async () => {
+    const { svg, api, client, upp, corners } = await mountView();
+    api.startDraw();
+    await tick();
+    await fireEvent.pointerEnter(svg);
+    await fireEvent.click(svg, client(X0, Y0));
+    await fireEvent.click(svg, client(X0 + 8 * upp, Y0 + 7 * upp));
+    expect(corners()).toHaveLength(2);
+  });
+
+  it('inside a room, a corner snapped onto a wall still lines up with the other corners along it', async () => {
+    const { svg, api, client, upp, corners } = await mountView({ outline: [[0, 0], [10, 0], [10, 10], [0, 10]] });
+    api.startDraw();
+    await tick();
+    await fireEvent.pointerEnter(svg);
+    await fireEvent.click(svg, client(X0, 3 * upp));
+    await fireEvent.click(svg, client(X0 + 4 * upp, Y1));
+    await fireEvent.click(svg, client(X1, Y1 + 3 * upp));
+    await fireEvent.click(svg, client(X1 - 6 * upp, 2 * upp));
+    const c = corners();
+    expect(c[0]).toEqual([X0, 0]);
+    expect(c[1]).toEqual([X0, Y1]);
+    expect(c[2]).toEqual([X1, Y1]);
+    expect(c[3]).toEqual([X1, 0]);
+  });
+
+  it('a dragged corner lines up with its neighbours within 10 px', async () => {
+    const draft: Vertex[] = [[X0, Y0], [X1, Y0], [X1, Y1], [X0, Y1]];
+    const { svg, client, upp, corners } = await mountView({ draft: draft.map((v) => [...v] as Vertex) });
+    const corner = screen.getByRole('button', { name: 'Vertex 3' });
+    const near = client(X1 + 8 * upp, Y1 - 8 * upp);
+    await fireEvent.pointerDown(corner, { ...client(X1, Y1), button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(svg, { ...near, pointerId: 1 });
+    expect(corners()[2][0]).toBeCloseTo(X1, 9);
+    expect(corners()[2][1]).toBeCloseTo(Y1, 9);
+    await fireEvent.pointerUp(svg, { ...near, pointerId: 1 });
+  });
+});
+
 describe('PlanCanvas typed corners, drawn lengths and names', () => {
   const S = 400;
   beforeEach(() => {

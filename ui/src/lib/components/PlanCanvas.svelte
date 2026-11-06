@@ -602,7 +602,15 @@
 	// outline close square without an extra corner to tidy up afterwards.
 	interface Guide { axis: 'x' | 'y'; value: number }
 	let guides = $state<Guide[]>([]);
-	const GUIDE_TOLERANCE_PX = 6;
+	/**
+	 * A corner within this many screen pixels of another corner's x or y lines up
+	 * with it, the previous corner included (a square wall). The outline snap's
+	 * reach: 10 px, or the host's (zones use 5).
+	 */
+	const ALIGN_TOLERANCE_PX = 10;
+	function alignTolerance(): number {
+		return px * (outlineSnapPx ?? ALIGN_TOLERANCE_PX);
+	}
 	/** The outline edges and corner the shape just snapped to, highlighted while dragging or drawing. */
 	let outlineGuide = $state<{ edges: number[]; corner: number | null }>({ edges: [], corner: null });
 	const NO_OUTLINE_GUIDE = { edges: [], corner: null };
@@ -612,9 +620,11 @@
 
 	/**
 	 * Snap a corner onto the room outline: an outline corner, else the nearest
-	 * edge, then the grid along an axis-aligned edge. Null when out of reach.
+	 * edge, then (along an axis-aligned edge) another corner's x or y, else the
+	 * grid; `align` lists the corners not to line up with, null for none at all.
+	 * Null when out of reach.
 	 */
-	function snapToOutline(p: Vertex, altKey: boolean): Vertex | null {
+	function snapToOutline(p: Vertex, altKey: boolean, align: number[] | null = null): Vertex | null {
 		const hit = snapPointToOutline(p, outline, outlineTolerance(altKey));
 		if (!hit) {
 			outlineGuide = NO_OUTLINE_GUIDE;
@@ -625,8 +635,19 @@
 		let q = hit.point;
 		if (hit.edge !== null) {
 			const axis = edgeAxis(outline!, hit.edge);
-			if (axis === 'horizontal') q = [snapCoord(q[0], 'x', altKey), q[1]];
-			else if (axis === 'vertical') q = [q[0], snapCoord(q[1], 'y', altKey)];
+			const lined = align && !altKey ? cornerAlignment(p, align, -1) : null;
+			if (axis === 'horizontal') {
+				// (Not onto a corner already on this wall: that would stack the two)
+				if (lined && lined.x >= 0 && Math.abs(draft[lined.x][1] - q[1]) > 1e-9) {
+					q = [draft[lined.x][0], q[1]];
+					pendingGuides.push({ axis: 'x', value: q[0] });
+				} else q = [snapCoord(q[0], 'x', altKey), q[1]];
+			} else if (axis === 'vertical') {
+				if (lined && lined.y >= 0 && Math.abs(draft[lined.y][0] - q[0]) > 1e-9) {
+					q = [q[0], draft[lined.y][1]];
+					pendingGuides.push({ axis: 'y', value: q[1] });
+				} else q = [q[0], snapCoord(q[1], 'y', altKey)];
+			}
 		}
 		guides = [...pendingGuides];
 		return [Math.round(q[0] * 1e6) / 1e6, Math.round(q[1] * 1e6) / 1e6];
@@ -647,26 +668,41 @@
 	}
 
 	/**
+	 * The corners whose x and whose y the RAW pointer position is nearest to,
+	 * within alignTolerance (-1 for none). Both on one corner would put this
+	 * corner on top of it, so only the nearer axis is kept, except on `meet` (the
+	 * first corner, which closes a drawing).
+	 */
+	function cornerAlignment(raw: Vertex, exclude: number[], meet: number, lock: 'x' | 'y' | null = null): { x: number; y: number } {
+		const tol = alignTolerance();
+		let bx = -1;
+		let by = -1;
+		draft.forEach((v, i) => {
+			if (exclude.includes(i)) return;
+			if (lock !== 'x' && Math.abs(v[0] - raw[0]) <= tol && (bx < 0 || Math.abs(v[0] - raw[0]) < Math.abs(draft[bx][0] - raw[0]))) bx = i;
+			if (lock !== 'y' && Math.abs(v[1] - raw[1]) <= tol && (by < 0 || Math.abs(v[1] - raw[1]) < Math.abs(draft[by][1] - raw[1]))) by = i;
+		});
+		if (bx >= 0 && bx === by && bx !== meet) {
+			if (Math.abs(draft[bx][0] - raw[0]) <= Math.abs(draft[by][1] - raw[1])) by = -1;
+			else bx = -1;
+		}
+		return { x: bx, y: by };
+	}
+
+	/**
 	 * Pull `p` onto any other corner's x and/or y that the RAW pointer position is
 	 * within tolerance of (so a corner wins over a nearby grid line); `lock` keeps an
 	 * axis-snapped coordinate fixed.
 	 */
-	function alignToCorners(p: Vertex, raw: Vertex, exclude: number[], lock: 'x' | 'y' | null, altKey: boolean): Vertex {
+	function alignToCorners(p: Vertex, raw: Vertex, exclude: number[], lock: 'x' | 'y' | null, altKey: boolean, meet = -1): Vertex {
 		guides = [...pendingGuides];
 		if (altKey) return p;
-		const tol = px * GUIDE_TOLERANCE_PX;
 		let [x, y] = p;
-		let bestX: Vertex | null = null;
-		let bestY: Vertex | null = null;
-		draft.forEach((v, i) => {
-			if (exclude.includes(i)) return;
-			if (lock !== 'x' && Math.abs(v[0] - raw[0]) <= tol && (!bestX || Math.abs(v[0] - raw[0]) < Math.abs(bestX[0] - raw[0]))) bestX = v;
-			if (lock !== 'y' && Math.abs(v[1] - raw[1]) <= tol && (!bestY || Math.abs(v[1] - raw[1]) < Math.abs(bestY[1] - raw[1]))) bestY = v;
-		});
+		const hit = cornerAlignment(raw, exclude, meet, lock);
 		// A corner alignment replaces a grid snap on the same axis
-		const next: Guide[] = guides.filter((g) => !(bestX && g.axis === 'x') && !(bestY && g.axis === 'y'));
-		if (bestX) { x = (bestX as Vertex)[0]; next.push({ axis: 'x', value: x }); }
-		if (bestY) { y = (bestY as Vertex)[1]; next.push({ axis: 'y', value: y }); }
+		const next: Guide[] = guides.filter((g) => !(hit.x >= 0 && g.axis === 'x') && !(hit.y >= 0 && g.axis === 'y'));
+		if (hit.x >= 0) { x = draft[hit.x][0]; next.push({ axis: 'x', value: x }); }
+		if (hit.y >= 0) { y = draft[hit.y][1]; next.push({ axis: 'y', value: y }); }
 		guides = next;
 		return [x, y];
 	}
@@ -675,7 +711,7 @@
 		const raw = pointerToRoom(event);
 		const last = draft[draft.length - 1];
 		const exclude = [draft.length - 1];
-		const onOutline = snapToOutline(raw, event.altKey);
+		const onOutline = snapToOutline(raw, event.altKey, []);
 		if (onOutline) return onOutline;
 		if (!last) {
 			// The first corner snaps quietly: a guideline means nothing until there is
@@ -683,6 +719,14 @@
 			const p = snapPoint(raw, event.altKey);
 			guides = [];
 			return p;
+		}
+		// Lining up with a corner's x or y (the previous corner's makes a square
+		// wall, the first corner's a square closing wall) wins over the angle snap
+		// and the grid
+		const meet = draft.length >= 3 ? 0 : -1;
+		if (!event.altKey && !event.shiftKey) {
+			const hit = cornerAlignment(raw, [], meet);
+			if (hit.x >= 0 || hit.y >= 0) return alignToCorners(snapPoint(raw, false), raw, [], null, false, meet);
 		}
 		const { point, snapped } = snapAngle(last, raw, referenceDirection(), event);
 		if (!snapped) return alignToCorners(snapPoint(raw, event.altKey), raw, exclude, null, event.altKey);
@@ -1212,7 +1256,7 @@
 			const prev = next[(drag.index - 1 + next.length) % next.length];
 			let target: Vertex = p;
 			if (event.shiftKey && prev) target = constrain(prev, p);
-			next[drag.index] = snapToOutline(target, event.altKey) ?? alignToCorners(snapPoint(target, event.altKey), target, [drag.index], null, event.altKey);
+			next[drag.index] = snapToOutline(target, event.altKey, [drag.index]) ?? alignToCorners(snapPoint(target, event.altKey), target, [drag.index], null, event.altKey);
 			draft = next;
 		} else {
 			// Slide the whole edge by the pointer delta (both endpoints move together)

@@ -223,6 +223,29 @@ test.describe('Polygon rooms', () => {
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(6);
   });
 
+  test('a hand-drawn outline comes out square: corners line up with each other, a dashed guide shows it', async ({ page }) => {
+    await waitForSession(page);
+    await expandRoomPanel(page);
+    await planTool(page, 'Draw new outline').click();
+    const plan = planSvg(page);
+    const box = (await plan.boundingBox())!;
+    const x0 = box.x + box.width * 0.3, y0 = box.y + box.height * 0.7;
+    // Short walls a few pixels off square, then a click near the first corner closes it
+    const clicks: [number, number][] = [[0, 0], [100, 6], [106, -80], [-6, -75], [3, 2]];
+    for (const [i, [dx, dy]] of clicks.entries()) {
+      await page.mouse.move(x0 + dx, y0 + dy, { steps: 2 });
+      if (i === 1) await expect(plan.locator('line.guide:not(.outline-guide)')).not.toHaveCount(0);
+      await page.mouse.click(x0 + dx, y0 + dy);
+    }
+    await expect(page.locator('.plan-pane svg.plan.drawing')).toHaveCount(0);
+    await planTool(page, 'Edit vertices').click();
+    await expect(plan.locator('circle.vertex')).toHaveCount(4);
+    const pts = await plan.locator('circle.vertex').evaluateAll((els) => els.map((c) => [c.getAttribute('cx'), c.getAttribute('cy')]));
+    expect(pts).toHaveLength(4);
+    expect(new Set(pts.map((p) => p[0])).size).toBe(2);
+    expect(new Set(pts.map((p) => p[1])).size).toBe(2);
+  });
+
   test('draw an outline by typing wall lengths, then type a corner position', async ({ page }) => {
     await waitForSession(page);
     await expandRoomPanel(page);
