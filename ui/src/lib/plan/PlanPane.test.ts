@@ -24,8 +24,6 @@ vi.mock('$lib/api/client', async (importOriginal) => {
 
 const rect: [number, number][] = [[0, 0], [6, 0], [6, 4], [0, 4]];
 const baseProps = { vertices: rect, units: 'meters' as const, precision: 1 };
-/** No dimension rulers or XYZ marker, so Fit frames the outline alone (as before they were drawn on the plan). */
-const NO_DECOR = { showDimensions: false, showXYZMarker: false };
 
 /** The harness logs every action the plan takes; filter them by name. */
 function callsOf(calls: unknown[][], name: string): unknown[][] {
@@ -386,21 +384,12 @@ describe('PlanPane', () => {
   describe('the outline canvas', () => {
 
     it('fits the view with the origin near the bottom-left corner, not centred', () => {
-      const { container } = mount({ room: NO_DECOR });
+      const { container } = mount({});
       const [x, y, size] = (container.querySelector('svg.plan')!.getAttribute('viewBox') ?? '').split(' ').map(Number);
       expect(x).toBeLessThan(0);
       expect(x).toBeGreaterThan(-0.6);
       expect(-(y + size)).toBeGreaterThan(-1.2);
       expect(size).toBeLessThan(7);
-    });
-
-    it('with the rulers and the XYZ marker shown, Fit leaves a tenth of the longest side for them below and left', () => {
-      const { container } = mount();
-      const [x, y, size] = (container.querySelector('svg.plan')!.getAttribute('viewBox') ?? '').split(' ').map(Number);
-      expect(x).toBeLessThan(-0.6);
-      expect(x).toBeGreaterThan(-1.2);
-      expect(-(y + size)).toBeLessThan(-0.6);
-      expect(size).toBeLessThan(8);
     });
 
     it('placing a corner near the canvas edge does not change the zoom', async () => {
@@ -498,7 +487,7 @@ describe('PlanPane', () => {
     });
 
     it('grid snapping is light: a corner near a grid line lands on it, elsewhere it stays put', async () => {
-      const { container, ctl } = mount({ precision: 2, room: NO_DECOR });
+      const { container, ctl } = mount({ precision: 2 });
       await startNewOutline();
       const plan = stubPlan(container);
       await fireEvent.pointerMove(plan, { clientX: 119, clientY: 400 });
@@ -514,7 +503,7 @@ describe('PlanPane', () => {
 
     it('snaps to whole units even when the visible grid is coarser, with a guideline after the first corner', async () => {
       const big: [number, number][] = [[0, 0], [30, 0], [30, 30], [0, 30]];
-      const { container, ctl } = mount({ vertices: big, precision: 2, room: NO_DECOR });
+      const { container, ctl } = mount({ vertices: big, precision: 2 });
       await startNewOutline();
       const plan = stubPlan(container);
       await fireEvent.click(plan, { clientX: 100, clientY: 400 });
@@ -2206,43 +2195,16 @@ describe('PlanPane view options (one setting for 2D and 3D)', () => {
     off.unmount();
   });
 
-  it('Show Dimensions: rulers along X and Y with the 3D ticks at the room precision; off, none', async () => {
-    const on = mount({ precision: 1 });
+  it('the plan draws no dimension rulers and no XYZ marker, whatever the View menu says', async () => {
+    const on = mount({ room: { showDimensions: true, showXYZMarker: true } });
     await tick();
-    const labels = Array.from(svgOf(on.container).querySelectorAll('text.ruler-label')).map((t) => t.textContent);
-    expect(labels).toEqual(['0.0', '2.0', '4.0', '6.0', '1.0', '2.0', '3.0', '4.0']);
+    const svg = svgOf(on.container);
+    expect(svg.querySelector('.rulers, text.ruler-label, g.xyz-marker')).toBeNull();
     on.unmount();
-    const off = mount({ room: { showDimensions: false } });
-    await tick();
-    expect(svgOf(off.container).querySelector('.rulers')).toBeNull();
-    off.unmount();
-  });
-
-  it('Show Dimensions on a wall: its length across and the room height up', async () => {
-    const { container, ctl } = mount({ precision: 0 });
+    const { container, ctl } = mount({ room: { showDimensions: true, showXYZMarker: true } });
     ctl.setSurface('wall:0');
     await tick();
-    const labels = Array.from(svgOf(container).querySelectorAll('text.ruler-label')).map((t) => t.textContent);
-    // Wall 0 is 6 long, the room 2.7 high
-    expect(labels).toEqual(['0', '2', '4', '6', '1', '2']);
-  });
-
-  it('Show XYZ Marker: X red and Y blue lines and a green Z dot from above; Z up on a wall; off, none', async () => {
-    const { container, ctl, unmount } = mount();
-    await tick();
-    const marker = () => svgOf(container).querySelector('g.xyz-marker');
-    expect(marker()?.querySelector('line[data-axis="x"]')?.getAttribute('stroke')).toBe('#ff0000');
-    expect(marker()?.querySelector('line[data-axis="y"]')?.getAttribute('stroke')).toBe('#0000ff');
-    expect(marker()?.querySelector('circle[data-axis="z"]')?.getAttribute('fill')).toBe('#00ff00');
-    ctl.setSurface('wall:0');
-    await tick();
-    expect(marker()?.querySelector('line[data-axis="z"]')).not.toBeNull();
-    expect(marker()?.querySelector('circle[data-axis="y"]')).not.toBeNull();
-    unmount();
-    const off = mount({ room: { showXYZMarker: false } });
-    await tick();
-    expect(svgOf(off.container).querySelector('g.xyz-marker')).toBeNull();
-    off.unmount();
+    expect(svgOf(container).querySelector('.rulers, text.ruler-label, g.xyz-marker')).toBeNull();
   });
 
   it('Show Floor Plan Image: off hides it on the plan, except where the Floorplan part edits it', async () => {

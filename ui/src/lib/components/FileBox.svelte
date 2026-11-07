@@ -113,9 +113,9 @@
 		gap: var(--spacing-sm);
 		width: 100%;
 		padding: 14px;
-		border: 1.5px dashed var(--color-border);
+		border: 1.5px dashed color-mix(in srgb, var(--color-text) 50%, transparent);
 		border-radius: var(--radius-md);
-		background: transparent;
+		background: color-mix(in srgb, var(--color-text) 4%, transparent);
 		color: var(--color-text);
 		font-size: var(--font-size-base);
 		cursor: pointer;

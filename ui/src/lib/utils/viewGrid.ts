@@ -1,12 +1,11 @@
 /**
- * The look of the view grid, rulers and XYZ marker, shared by the 3D scene
- * (Scene, Room3D, RoomAxes) and the 2D plan (PlanCanvas), so the two views
- * cannot drift apart: the same colours per theme, the same spacing, the same
- * fade, the same tick generator and the same axis colours.
+ * The look of the view grid, rulers and XYZ marker. The grid is shared by the 3D
+ * scene and the 2D plan (PlanCanvas), so the two cannot drift apart: the same
+ * colours per theme, spacing and fade. The rulers and XYZ marker are 3D only
+ * (Scene, Room3D, RoomAxes).
  */
 import type { Theme } from '$lib/stores/theme';
 import { gridCellSize, type LengthUnit } from '$lib/utils/unitConversion';
-import { toWall, type WallSegment } from '$lib/utils/surfaces';
 
 // --- Grid -------------------------------------------------------------------
 
@@ -109,55 +108,4 @@ export type RoomAxis = keyof typeof AXIS_COLORS;
 /** The marker sits a tenth of the room's longest side outside the origin corner, one grid cell long. */
 export function xyzMarker(maxDim: number, units: LengthUnit): { offset: number; length: number } {
   return { offset: maxDim * 0.1, length: gridCellSize(units) };
-}
-
-// --- The 2D plan's projections ------------------------------------------------
-
-/** How a 2D canvas maps the room: seen from above (floor, ceiling), or a wall face-on from inside. */
-export type PlanProjection = { kind: 'top' } | { kind: 'wall'; seg: WallSegment };
-
-/** A room point to canvas (x, y). A wall view is mirrored: x = wall length - along (see wallToCanvas). */
-export function projectToPlan(p: [number, number, number], proj: PlanProjection): [number, number] {
-  if (proj.kind === 'top') return [p[0], p[1]];
-  const w = toWall(p[0], p[1], p[2], proj.seg);
-  return [proj.seg.length - w.along, w.up];
-}
-
-export interface PlanAxesMarker {
-  origin: [number, number];
-  /** Each room axis's tip on the canvas; an axis pointing at the viewer ends where it starts. */
-  axes: { axis: RoomAxis; color: string; end: [number, number] }[];
-}
-
-/** The 3D XYZ marker as the 2D canvas sees it: the same origin, length and colours, projected. */
-export function planAxesMarker(proj: PlanProjection, maxDim: number, units: LengthUnit): PlanAxesMarker {
-  const { offset, length } = xyzMarker(maxDim, units);
-  const o: [number, number, number] = [-offset, -offset, 0];
-  const dirs: Record<RoomAxis, [number, number, number]> = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
-  return {
-    origin: projectToPlan(o, proj),
-    axes: (Object.keys(dirs) as RoomAxis[]).map((axis) => {
-      const d = dirs[axis];
-      return { axis, color: AXIS_COLORS[axis], end: projectToPlan([o[0] + d[0] * length, o[1] + d[1] * length, o[2] + d[2] * length], proj) };
-    }),
-  };
-}
-
-export interface PlanRulers {
-  /** Along the canvas's x from 0 (labelled, 0 included). */
-  h: { length: number; ticks: number[] };
-  /** Along the canvas's y from 0 (0 left out, so the origin is marked once). */
-  v: { length: number; ticks: number[] };
-}
-
-/**
- * The 3D dimension rulers for a 2D canvas: X and Y seen from above, the wall's
- * length and the room's height on a wall. Lengths in display units.
- */
-export function planRulers(proj: PlanProjection, room: { x: number; y: number; z: number }): PlanRulers {
-  const [hLen, vLen] = proj.kind === 'top' ? [room.x, room.y] : [proj.seg.length, room.z];
-  return {
-    h: { length: hLen, ticks: rulerTicks(hLen) },
-    v: { length: vLen, ticks: rulerTicks(vLen).filter((t) => t > 0) },
-  };
 }
