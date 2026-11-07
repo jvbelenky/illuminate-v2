@@ -11,16 +11,9 @@ import {
   rulerTicks,
   formatTick,
   rulerColors,
-  planAxesMarker,
-  planRulers,
-  projectToPlan,
-  xyzMarker,
-  AXIS_COLORS,
   GRID_MIN_GAP_PX,
 } from './viewGrid';
-import { wallSegment } from './surfaces';
 
-const rect: [number, number][] = [[0, 0], [6, 0], [6, 4], [0, 4]];
 
 describe('grid spacing', () => {
   it('is one cell per metre or foot, a section every 5 cells, in every unit', () => {
@@ -85,47 +78,6 @@ describe('ruler ticks', () => {
   });
 });
 
-describe('the 2D projections', () => {
-  it('seen from above, the rulers are X and Y (Y without its 0)', () => {
-    const r = planRulers({ kind: 'top' }, { x: 6, y: 4, z: 2.7 });
-    expect(r.h).toEqual({ length: 6, ticks: [0, 2, 4, 6] });
-    expect(r.v).toEqual({ length: 4, ticks: [1, 2, 3, 4] });
-  });
-
-  it('on a wall, the rulers are the wall length and the room height', () => {
-    const seg = wallSegment(rect, 1)!;
-    const r = planRulers({ kind: 'wall', seg }, { x: 6, y: 4, z: 2.7 });
-    expect(r.h.length).toBe(4);
-    expect(r.v).toEqual({ length: 2.7, ticks: [1, 2] });
-  });
-
-  it('the XYZ marker from above: X right in red, Y up in blue, Z a dot in green, one cell long, outside the origin', () => {
-    const m = planAxesMarker({ kind: 'top' }, 6, 'meters');
-    const { offset, length } = xyzMarker(6, 'meters');
-    expect(m.origin).toEqual([-offset, -offset]);
-    const by = Object.fromEntries(m.axes.map((a) => [a.axis, a]));
-    expect(by.x.end).toEqual([-offset + length, -offset]);
-    expect(by.y.end).toEqual([-offset, -offset + length]);
-    expect(by.z.end).toEqual(m.origin);
-    expect(by.x.color).toBe(AXIS_COLORS.x);
-    expect(by.y.color).toBe(AXIS_COLORS.y);
-    expect(by.z.color).toBe(AXIS_COLORS.z);
-  });
-
-  it('the XYZ marker on a wall: Z points up, the wall\'s own axis across (mirrored), the other one at the viewer', () => {
-    // Wall 0 runs along +x from (0,0); seen from inside, canvas x = 6 - room x
-    const seg = wallSegment(rect, 0)!;
-    expect(projectToPlan([1, 0, 2], { kind: 'wall', seg })).toEqual([5, 2]);
-    const m = planAxesMarker({ kind: 'wall', seg }, 6, 'meters');
-    const by = Object.fromEntries(m.axes.map((a) => [a.axis, a]));
-    expect(by.z.end[0]).toBeCloseTo(m.origin[0]);
-    expect(by.z.end[1]).toBeCloseTo(m.origin[1] + 1);
-    expect(by.x.end[0]).toBeCloseTo(m.origin[0] - 1);
-    expect(by.y.end[0]).toBeCloseTo(m.origin[0]);
-    expect(by.y.end[1]).toBeCloseTo(m.origin[1]);
-  });
-});
-
 describe('one module for both views', () => {
   const src = (p: string) => readFileSync(resolve(__dirname, p), 'utf8');
 
@@ -143,5 +95,7 @@ describe('one module for both views', () => {
     expect(room3d).not.toMatch(/#666666|#888888/);
     expect(scene).toMatch(/gridSpacing\(units\)/);
     expect(canvas).toMatch(/gridSpacing\(units\)/);
+    // The 2D plan draws no dimension rulers and no XYZ marker
+    expect(canvas).not.toMatch(/rulers|axesMarker|xyz-marker/);
   });
 });

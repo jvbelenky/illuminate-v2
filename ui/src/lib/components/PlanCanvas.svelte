@@ -47,14 +47,10 @@
 		gridSpacing,
 		gridColors,
 		planGridLines,
-		formatTick,
-		rulerColors,
 		GRID_CELL_THICKNESS,
 		GRID_SECTION_THICKNESS,
 		GRID_CELL_OPACITY,
 		GRID_SECTION_OPACITY,
-		type PlanRulers,
-		type PlanAxesMarker,
 	} from '$lib/utils/viewGrid';
 	import Glyph from '$lib/workspace/Glyph.svelte';
 	import UnitsSelect from '$lib/workspace/UnitsSelect.svelte';
@@ -78,7 +74,7 @@
 	import { localAxisToWorld, resizeByHandle, rotateByDrag, snapLineToOutline, type Handle } from '$lib/plan/shapeTransform';
 
 	// A plan-view canvas for drawing and editing a polygon in room coordinates:
-	// viewport (fit / pan / zoom), grid with rulers, light grid and corner
+	// viewport (fit / pan / zoom), grid, light grid and corner
 	// snapping with guidelines, draw-by-clicking with a gentle right-angle snap,
 	// corner and wall dragging, midpoint insertion, keyboard, and context layers
 	// (room outline, lamps, object footprints). Hosts add their own layers through
@@ -188,10 +184,6 @@
 		showGrid?: boolean;
 		/** The grid fades out to nothing this far from the view's centre (room units), as 3D's does; null: no fade. */
 		gridFade?: number | null;
-		/** Dimension rulers along the room's edges (View › Show Dimensions, shared with 3D). */
-		rulers?: PlanRulers | null;
-		/** The XYZ marker (View › Show XYZ Marker, shared with 3D). */
-		axesMarker?: PlanAxesMarker | null;
 		/** Length, vertex and cursor labels on backed chips, placed inside the outline (over a busy plan image). */
 		labelChips?: boolean;
 	}
@@ -251,8 +243,6 @@
 		toolCursor = null,
 		showGrid = true,
 		gridFade = null,
-		rulers = null,
-		axesMarker = null,
 		labelChips = false,
 	}: Props = $props();
 
@@ -456,9 +446,6 @@
 	const gridX = $derived(showGrid ? planGridLines(gridLo.x, gridHi.x, spacing, px) : { cells: [], sections: [] });
 	const gridY = $derived(showGrid ? planGridLines(gridLo.y, gridHi.y, spacing, px) : { cells: [], sections: [] });
 	const fadeId = `plan-grid-fade-${Math.random().toString(36).slice(2, 9)}`;
-	const rulerCol = $derived(rulerColors($theme));
-	/** A ruler's tick length on screen (3D's tickSize): the line sits one out, ticks reach two, labels three. */
-	const RULER_TICK_PX = 6;
 	/**
 	 * The dash of a dimmed or disabled footprint, in screen pixels. Drawn in world
 	 * units (as a CSS dasharray would be) a 4 m dash with 3 m gaps left outlines
@@ -1730,37 +1717,6 @@
 		<polygon points={contextPoints} class="context-outline" stroke-width={px * 1.5} />
 	{/if}
 
-	<!-- Dimension rulers, as 3D's: along the bottom (0 included) and the left edge, ticks and labels outside -->
-	{#if rulers}
-		{@const t = px * RULER_TICK_PX}
-		<g class="rulers" stroke={rulerCol.line} stroke-width={px}>
-			<line class="ruler" x1={0} y1={t} x2={rulers.h.length} y2={t} />
-			{#each rulers.h.ticks as v (v)}
-				<line class="ruler-tick" x1={v} y1={t} x2={v} y2={2 * t} />
-				<text class="ruler-label" x={v} y={2 * t + px * 12} font-size={px * 11} text-anchor="middle" fill={rulerCol.text} stroke="none">{formatTick(v, precision)}</text>
-			{/each}
-			<line class="ruler" x1={-t} y1={0} x2={-t} y2={-rulers.v.length} />
-			{#each rulers.v.ticks as v (v)}
-				<line class="ruler-tick" x1={-t} y1={-v} x2={-2 * t} y2={-v} />
-				<text class="ruler-label" x={-2 * t - px * 3} y={-v + px * 3.5} font-size={px * 11} text-anchor="end" fill={rulerCol.text} stroke="none">{formatTick(v, precision)}</text>
-			{/each}
-		</g>
-	{/if}
-
-	<!-- The XYZ marker, as 3D's projected: an axis pointing at the viewer is a dot -->
-	{#if axesMarker}
-		{@const [ox, oy] = axesMarker.origin}
-		<g class="xyz-marker">
-			{#each [...axesMarker.axes].sort((a, b) => Math.hypot(a.end[0] - ox, a.end[1] - oy) - Math.hypot(b.end[0] - ox, b.end[1] - oy)) as a (a.axis)}
-				{#if Math.hypot(a.end[0] - ox, a.end[1] - oy) > px * 0.5}
-					<line x1={ox} y1={-oy} x2={a.end[0]} y2={-a.end[1]} stroke={a.color} stroke-width={px * 2} data-axis={a.axis} />
-				{:else}
-					<circle cx={ox} cy={-oy} r={px * 3} fill={a.color} data-axis={a.axis} />
-				{/if}
-			{/each}
-		</g>
-	{/if}
-
 	<!-- Guidelines through the corner the cursor is aligned with -->
 	{#each guides as g}
 		{#if g.axis === 'x'}
@@ -2085,15 +2041,10 @@
 	.plan:focus-visible {
 		border-color: var(--color-focus);
 	}
-	/* Colours and weights come from viewGrid (shared with 3D); presses on the grid,
-	   the rulers and the marker are presses on empty space */
-	.grid-line,
-	.rulers,
-	.xyz-marker {
+	/* Colours and weights come from viewGrid (shared with 3D); presses on the grid
+	   are presses on empty space */
+	.grid-line {
 		pointer-events: none;
-	}
-	.ruler-label {
-		font-family: var(--font-mono, monospace);
 	}
 	.vertex-label,
 	.edge-label,

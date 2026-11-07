@@ -26,7 +26,7 @@
 	import { surfaceName } from '$lib/utils/surfaces';
 	import { moveLampKeepingAim, movePointKeepingAim, pointPlacement } from '$lib/utils/lampMove';
 	import { planShouldHandleKey, type PlanController } from './planController.svelte';
-	import { planAxesMarker, planRulers, gridFadeDistance, type PlanProjection } from '$lib/utils/viewGrid';
+	import { gridFadeDistance } from '$lib/utils/viewGrid';
 
 	interface Props {
 		controller: PlanController;
@@ -56,26 +56,12 @@
 	const ZONE_OUTLINE_SNAP_PX = 5;
 
 	const units = $derived(ctl.scene().units);
-	// The View menu's options, one setting for both views: grid, dimension rulers,
-	// XYZ marker and floor-plan image, drawn as 3D draws them (viewGrid)
+	// The View menu's options shared with 3D: grid and floor-plan image (dimension
+	// rulers and the XYZ marker are 3D only)
 	const room = $derived(ctl.scene().room);
-	const projection = $derived<PlanProjection>(ctl.wallSeg && ctl.wallView ? { kind: 'wall', seg: ctl.wallSeg } : { kind: 'top' });
 	const maxDim = $derived(Math.max(room.x, room.y, room.z));
 	const showGrid = $derived(room.showGrid ?? true);
 	const gridFade = $derived(gridFadeDistance(maxDim));
-	const rulers = $derived((room.showDimensions ?? true) ? planRulers(projection, room) : null);
-	const axesMarker = $derived((room.showXYZMarker ?? true) ? planAxesMarker(projection, maxDim, units) : null);
-	// Fit leaves room below and left of the outline for the rulers and the marker: a tenth
-	// of the longest side, as 3D's marker offset (measured on the outline, which Fit follows)
-	const decorFit = $derived.by((): Vertex[] => {
-		const vs = ctl.scene().vertices;
-		if ((!rulers && !axesMarker) || vs.length === 0) return [];
-		const xs = vs.map((v) => v[0]);
-		const ys = vs.map((v) => v[1]);
-		const pad = Math.max(...xs, ...ys, room.z) * 0.1;
-		if (projection.kind === 'wall') return [[-pad, -pad]];
-		return [[Math.min(...xs) - pad, Math.min(...ys) - pad]];
-	});
 	// The Floorplan part edits the image, so it shows there whatever the option says
 	const planImageShown = $derived((room.showFloorPlanImage ?? true) || (!ro && ctl.onOutline));
 	// Items hidden with their eye are left out, as in 3D
@@ -260,8 +246,8 @@
 {#snippet neighbours(c: CanvasContext, labels: { left: string; right: string }, length: number)}
 	{@const l = c.toScreen(0, 0)}
 	{@const r = c.toScreen(length, 0)}
-	<span class="wall-neighbour left" style="left: {l[0]}px; top: {l[1] + (rulers ? 30 : 6)}px">{labels.left}</span>
-	<span class="wall-neighbour right" style="left: {r[0]}px; top: {r[1] + (rulers ? 30 : 6)}px">{labels.right}</span>
+	<span class="wall-neighbour left" style="left: {l[0]}px; top: {l[1] + 6}px">{labels.left}</span>
+	<span class="wall-neighbour right" style="left: {r[0]}px; top: {r[1] + 6}px">{labels.right}</span>
 {/snippet}
 
 <!-- The lamps' photometric webs, projected on the floor/ceiling or the wall shown (display-only, under the markers) -->
@@ -305,7 +291,6 @@
 				onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 				{precision}
 				fallbackFit={wv.outline}
-				extraFitPoints={decorFit}
 				lamps={wv.lamps}
 				lampOpacity={wv.lampOpacity}
 				selectedLampIds={ctl.selectedLampIds}
@@ -317,8 +302,6 @@
 				ariaLabel={wallLabel}
 				{showGrid}
 				{gridFade}
-				{rulers}
-				{axesMarker}
 			>
 				{#snippet field(c)}{@render zoneFields(c)}{/snippet}
 				{#snippet overlay(c)}
@@ -345,7 +328,6 @@
 				onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 				{precision}
 				fallbackFit={wv.outline}
-				extraFitPoints={decorFit}
 				lamps={wv.lamps}
 				lampOpacity={wv.lampOpacity}
 				selectedLampIds={ctl.selectedLampIds}
@@ -373,8 +355,6 @@
 				ariaLabel={wallLabel}
 				{showGrid}
 				{gridFade}
-				{rulers}
-				{axesMarker}
 			>
 				{#snippet field(c)}{@render zoneFields(c)}{/snippet}
 				{#snippet overlay(c)}
@@ -421,7 +401,7 @@
 			onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 			{precision}
 			fallbackFit={vertices}
-			extraFitPoints={[...ctl.imageFitPoints, ...decorFit]}
+			extraFitPoints={ctl.imageFitPoints}
 			{lamps}
 			selectedLampIds={ctl.selectedLampIds}
 			highlightedLampIds={roHighlightedLamps}
@@ -431,8 +411,6 @@
 			ariaLabel="Floor plan canvas"
 			{showGrid}
 			{gridFade}
-			{rulers}
-			{axesMarker}
 		>
 			{#snippet field(c)}{@render zoneFields(c)}{/snippet}
 			{#snippet overlay(c)}
@@ -475,7 +453,7 @@
 			onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 			{precision}
 			fallbackFit={vertices}
-			extraFitPoints={[...ctl.imageFitPoints, ...decorFit]}
+			extraFitPoints={ctl.imageFitPoints}
 			lamps={ctl.onLamps ? [] : lamps}
 			objects={[]}
 			shapes={ctl.onCeiling ? [] : ctl.shapes}
@@ -507,8 +485,6 @@
 			onBackgroundPointerDown={ctl.onBackgroundPointerDown}
 			{showGrid}
 			{gridFade}
-			{rulers}
-			{axesMarker}
 		>
 			{#snippet underlay(c)}
 				{#if onCeilingSurface && ceiling.ceilingShown && vertices.length >= 3}

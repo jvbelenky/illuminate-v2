@@ -17,30 +17,28 @@ async function toggleView(page: Page, item: string): Promise<void> {
 }
 
 test.describe('View options apply to the 2D plan as to 3D', () => {
-  test('Show Grid, Show Dimensions and Show XYZ Marker toggle the plan, once for both views', async ({ page }) => {
+  test('Show Grid toggles the plan grid; the plan never draws dimension rulers or the XYZ marker', async ({ page }) => {
     const guard = attachErrorGuard(page);
     await waitForSession(page);
     const plan = planSvg(page);
     await expect(plan).toBeVisible();
 
-    // On by default, as in 3D: the grid, rulers along X and Y and the XYZ marker
     await expect(plan.locator('line.grid-line.major').first()).toBeAttached();
-    await expect(plan.locator('text.ruler-label').first()).toBeAttached();
-    await expect(plan.locator('g.xyz-marker line[data-axis="x"]')).toBeAttached();
-
-    await toggleView(page, 'Show Grid');
-    await expect(plan.locator('line.grid-line')).toHaveCount(0);
-    await toggleView(page, 'Show Dimensions');
-    await expect(plan.locator('.rulers')).toHaveCount(0);
-    await toggleView(page, 'Show XYZ Marker');
+    await expect(plan.locator('text.ruler-label')).toHaveCount(0);
     await expect(plan.locator('g.xyz-marker')).toHaveCount(0);
 
     await toggleView(page, 'Show Grid');
+    await expect(plan.locator('line.grid-line')).toHaveCount(0);
+    await toggleView(page, 'Show Grid');
+    await expect(plan.locator('line.grid-line').first()).toBeAttached();
+
+    // 3D-only options: switching them leaves the plan without rulers or marker
     await toggleView(page, 'Show Dimensions');
     await toggleView(page, 'Show XYZ Marker');
-    await expect(plan.locator('line.grid-line').first()).toBeAttached();
-    await expect(plan.locator('.rulers')).toHaveCount(1);
-    await expect(plan.locator('g.xyz-marker')).toHaveCount(1);
+    await toggleView(page, 'Show Dimensions');
+    await toggleView(page, 'Show XYZ Marker');
+    await expect(plan.locator('.rulers')).toHaveCount(0);
+    await expect(plan.locator('g.xyz-marker')).toHaveCount(0);
     guard.assertClean();
   });
 
