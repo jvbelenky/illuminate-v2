@@ -241,8 +241,16 @@ class TestLampPlaceAroundStructuresAndCeiling:
             p = self._place(client, headers, mode="corner", position_index=i, ceiling=ceiling)
             assert not (p["x"] < 1 and p["y"] < 1)
 
+    def test_tiles_too_fine_for_the_room_are_ignored(self, initialized_session):
+        client, headers = initialized_session
+        plain = self._place(client, headers, mode="downlight")
+        fine = self._place(client, headers, mode="downlight", ceiling={"tile_grid": [0.013, 0.007, 0.001, 0.001]})
+        assert (fine["x"], fine["y"]) == (plain["x"], plain["y"])
+
     @pytest.mark.parametrize("ceiling", [
         {"keep_out": [[[0, 0], [1, 0]]]},
+        {"keep_out": [[[i, 0], [i + 1, 0], [i, 1]] for i in range(501)]},
+        {"keep_out": [[[i, i * i] for i in range(257)]]},
         {"tile_grid": [0, 0, 0, 0.6]},
         {"tile_grid": [0, 0, 0.6, float("1e400")]},
     ])

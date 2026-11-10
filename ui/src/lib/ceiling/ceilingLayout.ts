@@ -387,6 +387,9 @@ export function normalizeOffset(offset: [number, number], units: LengthUnit): [n
 
 /** Without tiles, a detector, vent or sensor keeps a square this far to each side clear of lamps. */
 const POINT_CLEARANCE_M = 0.3;
+const PLACEMENT_MAX_AREAS = 500;
+const PLACEMENT_MAX_AREA_VERTICES = 256;
+const PLACEMENT_MAX_VERTICES = 4000;
 
 /**
  * The layout as lamp placement takes it: where no lamp may go (the keep-out
@@ -398,12 +401,21 @@ export function placementCeiling(layout: CeilingLayout, outline: Vertex[], units
   const tiles = grid.tw > 0 && grid.th > 0;
   const half = fromMeters(POINT_CLEARANCE_M, units);
   const box = (x0: number, y0: number, x1: number, y1: number): Vertex[] => [[r6(x0), r6(y0)], [r6(x1), r6(y0)], [r6(x1), r6(y1)], [r6(x0), r6(y1)]];
-  const keep_out = layout.items.map((item) => {
+  const areas = layout.items.map((item) => {
     if (item.kind === 'keep') return item.vertices.map(([x, y]) => [x, y] as Vertex);
     if (!tiles) return box(item.x - half, item.y - half, item.x + half, item.y + half);
     const x0 = grid.ox + Math.floor((item.x - grid.ox) / grid.tw) * grid.tw;
     const y0 = grid.oy + Math.floor((item.y - grid.oy) / grid.th) * grid.th;
     return box(x0, y0, x0 + grid.tw, y0 + grid.th);
   });
+  // The request's caps (PlacementCeiling in the API): areas past them are left out
+  const keep_out: Vertex[][] = [];
+  let corners = 0;
+  for (const area of areas) {
+    if (keep_out.length >= PLACEMENT_MAX_AREAS) break;
+    if (area.length > PLACEMENT_MAX_AREA_VERTICES || corners + area.length > PLACEMENT_MAX_VERTICES) continue;
+    corners += area.length;
+    keep_out.push(area);
+  }
   return { keep_out, tile_grid: tiles ? [grid.ox, grid.oy, grid.tw, grid.th] : null };
 }

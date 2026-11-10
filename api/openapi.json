@@ -3666,7 +3666,7 @@
               },
               "type": "array"
             },
-            "maxItems": 2000,
+            "maxItems": 500,
             "title": "Keep Out",
             "type": "array"
           },
