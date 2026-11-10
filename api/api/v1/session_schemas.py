@@ -1,5 +1,6 @@
 """Pydantic schemas for the session router endpoints."""
 
+import math
 import re
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, Dict, Literal, Any, List, Tuple
@@ -636,10 +637,42 @@ class LampUpdateResponse(BaseModel):
     state_hashes: Optional[Dict[str, Any]] = None
 
 
+class PlacementCeiling(BaseModel):
+    """The ceiling designer's layout (kept by the frontend), as far as lamp
+    placement goes: the areas no lamp may be in (room units, x/y), and the tile
+    grid downlights centre on (origin x, origin y, tile width, tile height)."""
+    keep_out: List[List[Tuple[float, float]]] = Field(default_factory=list, max_length=2000)
+    tile_grid: Optional[Tuple[float, float, float, float]] = None
+
+    @field_validator("keep_out")
+    @classmethod
+    def _check_keep_out(cls, areas):
+        if sum(len(a) for a in areas) > 20000:
+            raise ValueError("Too many keep-out vertices")
+        for area in areas:
+            if not 3 <= len(area) <= 1000:
+                raise ValueError("A keep-out area has 3 to 1000 vertices")
+            if any(not math.isfinite(c) or abs(c) > 1e6 for v in area for c in v):
+                raise ValueError("Keep-out vertices must be finite")
+        return areas
+
+    @field_validator("tile_grid")
+    @classmethod
+    def _check_tile_grid(cls, grid):
+        if grid is None:
+            return grid
+        if any(not math.isfinite(c) or abs(c) > 1e6 for c in grid):
+            raise ValueError("The tile grid must be finite")
+        if grid[2] <= 0 or grid[3] <= 0:
+            raise ValueError("Tile sizes must be positive")
+        return grid
+
+
 class PlaceLampRequest(BaseModel):
     """Request to compute lamp placement"""
     mode: Optional[Literal["downlight", "corner", "edge", "horizontal"]] = None
     position_index: Optional[int] = None
+    ceiling: Optional[PlacementCeiling] = None
 
 
 class PlaceLampResponse(BaseModel):
@@ -1173,6 +1206,7 @@ class NudgeIntoBoundsResponse(BaseModel):
 class MassPlaceRequest(BaseModel):
     """Request to compute placements for multiple lamps at once."""
     lamps_by_mode: Dict[Literal["downlight", "corner", "edge", "horizontal"], List[str]]
+    ceiling: Optional[PlacementCeiling] = None
 
 
 class MassPlaceResponse(BaseModel):

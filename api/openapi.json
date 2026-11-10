@@ -2973,6 +2973,16 @@
       "MassPlaceRequest": {
         "description": "Request to compute placements for multiple lamps at once.",
         "properties": {
+          "ceiling": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlacementCeiling"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "lamps_by_mode": {
             "additionalProperties": {
               "items": {
@@ -3525,6 +3535,16 @@
       "PlaceLampRequest": {
         "description": "Request to compute lamp placement",
         "properties": {
+          "ceiling": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlacementCeiling"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "mode": {
             "anyOf": [
               {
@@ -3624,6 +3644,61 @@
           "mode"
         ],
         "title": "PlaceLampResponse",
+        "type": "object"
+      },
+      "PlacementCeiling": {
+        "description": "The ceiling designer's layout (kept by the frontend), as far as lamp\nplacement goes: the areas no lamp may be in (room units, x/y), and the tile\ngrid downlights centre on (origin x, origin y, tile width, tile height).",
+        "properties": {
+          "keep_out": {
+            "items": {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "maxItems": 2000,
+            "title": "Keep Out",
+            "type": "array"
+          },
+          "tile_grid": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tile Grid"
+          }
+        },
+        "title": "PlacementCeiling",
         "type": "object"
       },
       "PlotStyle": {

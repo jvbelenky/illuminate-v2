@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { isInsideWithMargin, pointInPolygon, polygonBoundingBox, type Vertex } from '$lib/utils/roomGeometry';
 import { fromMeters, METERS_PER_FOOT, type LengthUnit } from '$lib/utils/unitConversion';
+import type { PlacementCeiling } from '$lib/api/contract';
 
 export type TileSize = 'none' | '2x2' | '4x2' | '2x4';
 export type TileAlign = 'tl' | 'tr' | 'bl' | 'br' | 'c';
@@ -382,4 +383,27 @@ export function normalizeOffset(offset: [number, number], units: LengthUnit): [n
   const period = tileSizeIn(units, '4x2').tw;
   const phase = (v: number) => (Number.isFinite(v) ? r6(((v % period) + period) % period) : 0);
   return [phase(offset[0]), phase(offset[1])];
+}
+
+/** Without tiles, a detector, vent or sensor keeps a square this far to each side clear of lamps. */
+const POINT_CLEARANCE_M = 0.3;
+
+/**
+ * The layout as lamp placement takes it: where no lamp may go (the keep-out
+ * areas, and the tile each detector, vent or sensor is in, or a square around
+ * it without tiles), and the tile grid downlights centre on.
+ */
+export function placementCeiling(layout: CeilingLayout, outline: Vertex[], units: LengthUnit): PlacementCeiling {
+  const grid = tileGrid(layout, outline, units);
+  const tiles = grid.tw > 0 && grid.th > 0;
+  const half = fromMeters(POINT_CLEARANCE_M, units);
+  const box = (x0: number, y0: number, x1: number, y1: number): Vertex[] => [[r6(x0), r6(y0)], [r6(x1), r6(y0)], [r6(x1), r6(y1)], [r6(x0), r6(y1)]];
+  const keep_out = layout.items.map((item) => {
+    if (item.kind === 'keep') return item.vertices.map(([x, y]) => [x, y] as Vertex);
+    if (!tiles) return box(item.x - half, item.y - half, item.x + half, item.y + half);
+    const x0 = grid.ox + Math.floor((item.x - grid.ox) / grid.tw) * grid.tw;
+    const y0 = grid.oy + Math.floor((item.y - grid.oy) / grid.th) * grid.th;
+    return box(x0, y0, x0 + grid.tw, y0 + grid.th);
+  });
+  return { keep_out, tile_grid: tiles ? [grid.ox, grid.oy, grid.tw, grid.th] : null };
 }

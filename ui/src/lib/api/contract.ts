@@ -22,6 +22,9 @@ import type { components } from './generated/api-types';
  */
 export type GuvStandard = components['schemas']['SessionRoomConfig']['standard'];
 
+/** The ceiling layout as lamp placement takes it (`POST /session/lamps/{id}/place`): keep-out areas and the tile grid. */
+export type PlacementCeiling = components['schemas']['PlacementCeiling'];
+
 /**
  * Response after adding a zone to the session (`POST /session/zones`), as
  * declared in the OpenAPI schema. See `AddZoneResponse` in

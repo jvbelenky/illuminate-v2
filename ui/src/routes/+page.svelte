@@ -52,7 +52,7 @@
 	import { restoreByTitle, restoreById } from '$lib/stores/modalDock.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
-	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
+	import { getVersion, saveSession, loadSession, getLampOptionsCached } from '$lib/api/client';
 	import { attachSidecar, readSidecar, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { stickStateOf } from '$lib/utils/lampSticking';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
@@ -838,7 +838,7 @@
 		const lampId = await project.addLamp(newLamp);
 
 		try {
-			const placement = await placeSessionLamp(lampId, placementMode);
+			const placement = await project.placeLamp(lampId, placementMode);
 			project.applyPlacement(lampId, placementMode, {
 				x: placement.x,
 				y: placement.y,
