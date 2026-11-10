@@ -195,7 +195,7 @@ describe('Floorplan part: the import window', () => {
   const session = { src: image.src, mime: image.mime, widthPx: 400, heightPx: 200, fileName: 'plan.png', pdf: null, imageId: null, initial: null, opacity: 1 };
   const doneCards = (dlg: HTMLElement) => Array.from(dlg.querySelectorAll('.fi-card')).map((c) => c.classList.contains('done'));
 
-  it('Upload floor plan file opens the window on Select floor plan file, all five steps not done, and opens the file picker', async () => {
+  it('Upload floor plan file opens the window on Select floor plan file, all five steps not done; the file picker waits for Choose file…', async () => {
     const click = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
     try {
       mount({ part: 'floorplan' });
@@ -203,15 +203,16 @@ describe('Floorplan part: the import window', () => {
       await tick();
       const dlg = windowOpen()!;
       expect(dlg).toBeTruthy();
-      expect(Array.from(dlg.querySelectorAll('.fi-label')).map((l) => l.textContent)).toEqual(['Select floor plan file', 'Check axes', 'Set origin', 'Set scale', 'Trace outline']);
+      expect(Array.from(dlg.querySelectorAll('.fi-label')).map((l) => l.textContent)).toEqual(['Select floor plan file', 'Align axes', 'Set origin', 'Set scale', 'Trace outline']);
       expect(doneCards(dlg)).toEqual([false, false, false, false, false]);
       const open = dlg.querySelector('.fi-card.open') as HTMLElement;
       expect(open.textContent).toMatch(/Select floor plan file/);
-      // The picker was opened at once; cancelled, step 1 stays open with Choose file…
-      const picks = click.mock.contexts.filter((el) => (el as HTMLInputElement).type === 'file');
-      expect(picks).toHaveLength(1);
+      // The picker opens only from Choose file…
+      const picks = () => click.mock.contexts.filter((el) => (el as HTMLInputElement).type === 'file');
+      expect(picks()).toHaveLength(0);
       expect(open.querySelector('.fi-instr')!.textContent).toBe('Choose a floor plan file (PNG, JPEG, SVG or PDF).');
-      expect(within(open).getByRole('button', { name: 'Choose file…' })).toBeTruthy();
+      await fireEvent.click(within(open).getByRole('button', { name: 'Choose file…' }));
+      expect(picks()).toHaveLength(1);
       expect(dlg.textContent).toMatch(/No file chosen/);
       expect(dlg.textContent).not.toMatch(/Change image/);
       // Another step asks for the file first
@@ -222,7 +223,7 @@ describe('Floorplan part: the import window', () => {
     }
   });
 
-  it('with a file chosen, the window is on Check axes and step 1 is done, showing the file, Change file… and Next', async () => {
+  it('with a file chosen, the window is on Align axes and step 1 is done, showing the file, Change file… and Next', async () => {
     const { ctl } = mount({ part: 'floorplan' });
     ctl.importSession = { ...session, fileName: 'clinic-plan.png' };
     await tick();
@@ -236,7 +237,7 @@ describe('Floorplan part: the import window', () => {
     expect(within(first).getByRole('button', { name: 'Next' })).toBeTruthy();
   });
 
-  it('Edit reopens the window on Check axes with the file, alignment, origin and scale done', async () => {
+  it('Edit reopens the window on Align axes with the file, alignment, origin and scale done', async () => {
     const { ctl } = mount({ part: 'floorplan', floorplan: placement, image });
     ctl.imageFileName = 'clinic-plan.png';
     expect(windowOpen()).toBeNull();
@@ -258,9 +259,9 @@ describe('Floorplan part: the import window', () => {
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Keep current outline' }));
     expect(dlg.querySelectorAll('.fi-card')[4].classList.contains('done')).toBe(true);
     expect(dlg.querySelectorAll('.vertex-row')).toHaveLength(4);
-    // Closed: + Add vertex and Redo
+    // Closed: Redo (vertices are added on the plan, as in the main view)
     const open = dlg.querySelector('.fi-card.open') as HTMLElement;
-    expect([...open.querySelectorAll('.fi-pair button')].map((b) => b.textContent)).toEqual(['+ Add vertex', 'Redo']);
+    expect([...open.querySelectorAll('.fi-pair button')].map((b) => b.textContent)).toEqual(['Redo']);
     expect(within(open).getByRole('group', { name: 'Outline' }).textContent).toMatch(/Manual trace\s*.*Auto-detect/);
   });
 
@@ -317,7 +318,7 @@ describe('Floorplan part: the import window', () => {
     ctl.importSession = session;
     await tick();
     const dlg = windowOpen()!;
-    // Check axes asks; Looks good moves on and marks it done
+    // Align axes asks; Looks good moves on and marks it done
     expect(dlg.querySelector('.fi-card.open .fi-instr')!.textContent).toBe('Do the walls line up with the grid?');
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Looks good' }));
     expect(dlg.querySelectorAll('.fi-card')[1].classList.contains('done')).toBe(true);

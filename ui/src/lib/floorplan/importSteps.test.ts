@@ -21,11 +21,11 @@ describe('step completion and gating', () => {
     expect(NEED_TEXT[1].title).toBe('Choose a floor plan file first');
   });
 
-  it('Next on the file step goes to Check axes', () => {
+  it('Next on the file step goes to Align axes', () => {
     expect(moveNext(file, 1)).toEqual({ kind: 'go', step: 2, aligned: false });
   });
 
-  it('Next on Check axes always goes on, and marks it done', () => {
+  it('Next on Align axes always goes on, and marks it done', () => {
     expect(moveNext(file, 2)).toEqual({ kind: 'go', step: 3, aligned: true });
   });
 
@@ -45,7 +45,7 @@ describe('step completion and gating', () => {
     expect(moveNext(all, 5)).toMatchObject({ kind: 'create' });
   });
 
-  it('a later step card asks for the first unfinished step before it; Check axes never blocks', () => {
+  it('a later step card asks for the first unfinished step before it; Align axes never blocks', () => {
     expect(moveTo(file, 3)).toEqual({ kind: 'go', step: 3, aligned: true });
     expect(moveTo(file, 5)).toEqual({ kind: 'need', step: 3, aligned: true });
     expect(moveTo({ ...file, origin: true }, 5)).toMatchObject({ kind: 'need', step: 4 });
@@ -58,14 +58,14 @@ describe('step completion and gating', () => {
 
 describe('step cards', () => {
   const base: CardContext = { step: 2, file: true, aligning: false, tool: null, wallPoints: 0, scaleA: false, scaleB: false, detecting: false, tracing: false, vertices: 0 };
-  it('the steps are Select floor plan file, Check axes, Set origin, Set scale, Trace outline', () => {
-    expect(Object.values(STEP_LABELS)).toEqual(['Select floor plan file', 'Check axes', 'Set origin', 'Set scale', 'Trace outline']);
+  it('the steps are Select floor plan file, Align axes, Set origin, Set scale, Trace outline', () => {
+    expect(Object.values(STEP_LABELS)).toEqual(['Select floor plan file', 'Align axes', 'Set origin', 'Set scale', 'Trace outline']);
   });
   it('the file step asks for a file until there is one', () => {
     expect(cardText({ ...base, step: 1, file: false })).toBe('Choose a floor plan file (PNG, JPEG, SVG or PDF).');
     expect(cardText({ ...base, step: 1 })).toBeNull();
   });
-  it('Check axes asks first; Align axes shows the live tool text', () => {
+  it('Align axes asks first; Straighten shows the live tool text', () => {
     expect(cardText(base)).toBe('Do the walls line up with the grid?');
     expect(cardText({ ...base, aligning: true, tool: 'straighten' })).toBe('Click two points along a wall to align it to an axis.');
     expect(cardText({ ...base, aligning: true, tool: 'straighten', wallPoints: 1 })).toBe('Now click a second point on the same wall.');

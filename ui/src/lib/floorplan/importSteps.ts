@@ -4,12 +4,12 @@
  */
 
 export type ImportStep = 1 | 2 | 3 | 4 | 5;
-export const STEP_LABELS: Record<ImportStep, string> = { 1: 'Select floor plan file', 2: 'Check axes', 3: 'Set origin', 4: 'Set scale', 5: 'Trace outline' };
+export const STEP_LABELS: Record<ImportStep, string> = { 1: 'Select floor plan file', 2: 'Align axes', 3: 'Set origin', 4: 'Set scale', 5: 'Trace outline' };
 
 export interface StepFacts {
   /** A floor plan file is loaded. */
   file: boolean;
-  /** Looks good, Done, Straighten, Rotate or Next was used on Check axes. */
+  /** Looks good, Done, Straighten, Rotate or Next was used on Align axes. */
   aligned: boolean;
   origin: boolean;
   scale: boolean;
@@ -21,7 +21,7 @@ export function stepDone(f: StepFacts, n: ImportStep): boolean {
   return n === 1 ? f.file : n === 2 ? f.aligned : n === 3 ? f.origin : n === 4 ? f.scale : f.outline;
 }
 
-/** The steps a move can be stopped at (Check axes never stops one). */
+/** The steps a move can be stopped at (Align axes never stops one). */
 export type BlockingStep = 1 | 3 | 4 | 5;
 
 /** The file formats as the window names them (WebP and GIF are read too). */
@@ -41,7 +41,7 @@ export type StepMove =
   | { kind: 'create'; aligned: boolean };
 
 /**
- * Going to step `to` (a card click): every earlier step must be done. Check
+ * Going to step `to` (a card click): every earlier step must be done. Align
  * axes never blocks; passing it marks it done.
  */
 export function moveTo(f: StepFacts, to: ImportStep): StepMove {
@@ -53,7 +53,7 @@ export function moveTo(f: StepFacts, to: ImportStep): StepMove {
   return { kind: 'go', step: to, aligned };
 }
 
-/** Next from step `at`: the current step must be done (Check axes is, by pressing Next). On step 5, Create room. */
+/** Next from step `at`: the current step must be done (Align axes is, by pressing Next). On step 5, Create room. */
 export function moveNext(f: StepFacts, at: ImportStep): StepMove {
   const aligned = f.aligned || (at === 2 && f.file);
   const facts = { ...f, aligned };
@@ -79,7 +79,7 @@ export interface CardContext {
   step: ImportStep;
   /** A floor plan file is loaded. */
   file: boolean;
-  /** Check axes: the align tools are open. */
+  /** Align axes: the align tools are open. */
   aligning: boolean;
   tool: AlignTool;
   /** Straighten points placed so far. */

@@ -13,11 +13,12 @@
 
 <script lang="ts">
 	// The floor plan import window: openable step cards on the left (Select floor
-	// plan file, Check axes, Set origin, Set scale, Trace outline), each holding
+	// plan file, Align axes, Set origin, Set scale, Trace outline), each holding
 	// its own instructions and controls; the image on the right with Undo/Redo and
 	// its tools over its top-left corner, the opacity bottom left and the units
-	// select bottom right; Back and Next below. Opened without a file, it asks for
-	// one at once. Undo/Redo is a window-local history (the app's createHistory
+	// select bottom right; Back and Next below. Opened without a file, Choose
+	// file… asks for one. Auto-detect is over the image from the first step on.
+	// Undo/Redo is a window-local history (the app's createHistory
 	// over snapshots of the window's work), dropped with the window.
 	// Points live in IMAGE pixels; steps 1-3 show the ALIGNED frame (the image
 	// turned by `rotation` about its centre, see importFrame.ts). Trace outline
@@ -55,6 +56,8 @@
 		currentOutline?: Pt[] | null;
 		/** The units select over the image (the project's setting, as in the main views). */
 		onUnitsChange?: (event: Event) => void;
+		/** Set scale's distance units become the project's. */
+		onSetUnits?: (units: LengthUnit) => void;
 		/** The file chosen (the first, or Change file…); the host reopens the window on it. */
 		onChooseFile?: (file: File) => void;
 		/** A new file is being read. */
@@ -68,7 +71,7 @@
 		onClose: () => void;
 	}
 
-	let { src, fileName = null, widthPx, heightPx, units, precision, initial = null, currentOutline = null, onUnitsChange, onChooseFile, decoding = false, error = null, opacity = 1, onOpacityChange, onApply, onClose }: Props = $props();
+	let { src, fileName = null, widthPx, heightPx, units, precision, initial = null, currentOutline = null, onUnitsChange, onSetUnits, onChooseFile, decoding = false, error = null, opacity = 1, onOpacityChange, onApply, onClose }: Props = $props();
 
 	const STEPS: ImportStep[] = [1, 2, 3, 4, 5];
 	// The window starts from these; later prop changes do not restart it
@@ -80,9 +83,9 @@
 	let imgOpacity = $state(start.opacity);
 	let rotation = $state(start.initial?.rotation ?? 0);
 	let aligned = $state(!!start.initial);
-	/** Check axes: the align tools are open. */
+	/** Align axes: the align tools are open. */
 	let aligning = $state(false);
-	/** The rotation when Align axes was opened: Redo goes back to it. */
+	/** The rotation when Straighten was opened: Redo goes back to it. */
 	let alignFrom = $state(start.initial?.rotation ?? 0);
 	let tool = $state<AlignTool>(null);
 	let guides = $state(true);
@@ -122,7 +125,6 @@
 	let worked = $state(false);
 	let need = $state<{ step: BlockingStep; title: string; body: string } | null>(null);
 	let confirmClose = $state(false);
-	let confirmChange = $state(false);
 
 	const k = $derived(unitsPerMeter(units));
 	const measuredScale = $derived(scaleA && scaleB && distance ? pxPerMeter(scaleA, scaleB, toMeters(distance, distUnit)) : null);
@@ -337,6 +339,13 @@
 	let tx = $state(0);
 	let ty = $state(0);
 	let fitted = false;
+	/** Where the stage sits in its wrapper (the plan canvas takes its place on Trace outline). */
+	let stageOff: Pt = [0, 0];
+	/** The stage's top-left corner on screen, whether or not it is mounted. */
+	function stageClient(): Pt {
+		const w = wrapEl?.getBoundingClientRect();
+		return [(w?.left ?? 0) + stageOff[0], (w?.top ?? 0) + stageOff[1]];
+	}
 	const coarse = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
 	const HANDLE = coarse ? 12 : 7;
 	const centre = start.centre;
@@ -377,6 +386,8 @@
 				const r = el.getBoundingClientRect();
 				sw = r.width;
 				sh = r.height;
+				const w = wrapEl?.getBoundingClientRect();
+				if (w) stageOff = [r.left + el.clientLeft - w.left, r.top + el.clientTop - w.top];
 				if (!fitted && sw > 0 && sh > 0) {
 					fitted = true;
 					fit();
@@ -419,7 +430,7 @@
 	let pinch: { d0: number; q0: Pt; z0: number } | null = null;
 
 	const placing = $derived(
-		drag?.kind === 'handle' ||
+		drag?.kind === 'handle' || (picking && !detecting) ||
 		(tool !== 'pan' && ((step === 2 && aligning && tool === 'straighten') || step === 3 || (step === 4 && !scaleB))),
 	);
 	// The lens shows the image at 100% wherever the view shows it smaller
@@ -451,6 +462,12 @@
 			drag = { kind: 'pan', p0: p, t0: [tx, ty] };
 			return;
 		}
+		if (picking) {
+			if (detecting) return;
+			picking = false;
+			void runDetect(img);
+			return;
+		}
 		if (h === 'origin' || h === 'scaleA' || h === 'scaleB') {
 			drag = { kind: 'handle', which: h };
 			return;
@@ -479,7 +496,7 @@
 		if (step === 4 && !scaleB) {
 			if (!scaleA) scaleA = img;
 			else {
-				scaleB = img;
+				scaleB = scalePoint(img, scaleA, e.altKey);
 				scaleShown = true;
 				drag = { kind: 'handle', which: 'scaleB' };
 				popupAfterUp = true;
@@ -504,6 +521,7 @@
 			return;
 		}
 		if (e.pointerType === 'mouse' || drag) cursor = p;
+		cursorAlt = e.altKey;
 		const d = drag;
 		if (!d) return;
 		if (d.kind === 'pan') {
@@ -522,8 +540,27 @@
 		const img = fromAligned(frame, toView(p));
 		markWork();
 		if (d.which === 'origin') origin = img;
-		else if (d.which === 'scaleA') scaleA = img;
-		else scaleB = img;
+		else if (d.which === 'scaleA') scaleA = scalePoint(img, scaleB, e.altKey);
+		else scaleB = scalePoint(img, scaleA, e.altKey);
+	}
+
+	// --- Set scale: a point nearly level or plumb with the other one lines up with it (Alt frees)
+	const SCALE_SNAP_PX = 8;
+	const SCALE_SNAP_TAN = Math.tan((3 * Math.PI) / 180);
+	let cursorAlt = $state(false);
+	/** Aligned-frame point `a`, lined up with `o` when within 3° (or 8 screen px) of level or plumb. */
+	function snapAligned(a: Pt, o: Pt | null, free: boolean): Pt {
+		if (!o || free) return a;
+		const dx = Math.abs(a[0] - o[0]), dy = Math.abs(a[1] - o[1]);
+		const tol = SCALE_SNAP_PX / z;
+		if (dy <= dx && dy <= Math.max(tol, dx * SCALE_SNAP_TAN)) return [a[0], o[1]];
+		if (dx < dy && dx <= Math.max(tol, dy * SCALE_SNAP_TAN)) return [o[0], a[1]];
+		return a;
+	}
+	function scalePoint(img: Pt, other: Pt | null, free: boolean): Pt {
+		if (!other || free) return img;
+		const a = al(img), s = snapAligned(a, al(other), false);
+		return s === a ? img : fromAligned(frame, s);
 	}
 
 	async function onUp(e: PointerEvent) {
@@ -563,7 +600,7 @@
 		wall = [];
 	}
 
-	// --- Check axes
+	// --- Align axes
 	function openAlign() {
 		alignFrom = rotation;
 		aligning = true;
@@ -616,6 +653,11 @@
 		window.addEventListener('pointerdown', away, true);
 		return () => window.removeEventListener('pointerdown', away, true);
 	});
+	function setDistUnit(e: Event) {
+		distUnit = (e.currentTarget as HTMLSelectElement).value as LengthUnit;
+		markWork();
+		onSetUnits?.(distUnit);
+	}
 	function setDistance(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		const v = Number(input.value);
@@ -640,7 +682,10 @@
 
 	// --- Steps
 	function go(to: ImportStep) {
-		if (step === 5 && to !== 5) leaveOutline();
+		const leaving = step === 5 && to !== 5;
+		// The image stays where it is on screen between the plan canvas and the stage
+		const handover = leaving ? canvasView() : null;
+		if (leaving) leaveOutline();
 		const entering = step !== 5 && to === 5;
 		// The outline moves between the image (pixels) and the canvas (display units): not an edit
 		if (to !== step && (to === 5 || step === 5)) rebase = true;
@@ -652,7 +697,39 @@
 		popup = null;
 		detectAsk = false;
 		detectFail = null;
-		if (entering) enterOutline();
+		picking = false;
+		if (handover) {
+			({ z, tx, ty } = handover);
+			fitted = true;
+		}
+		if (entering) {
+			enterOutline();
+			void showStageView();
+		}
+	}
+	/** The plan canvas's view as the stage's (zoom and offset of the aligned image). */
+	function canvasView(): { z: number; tx: number; ty: number } | null {
+		if (!onCanvas || !canvas || !origin) return null;
+		const upp = canvas.pixelUnits();
+		if (!(upp > 0)) return null;
+		const nz = Math.max(0.02, Math.min(16, imgUnit / upp));
+		const s = canvas.toClient(0, 0);
+		const c = stageClient();
+		const o = toAligned(frame, origin);
+		return { z: nz, tx: s[0] - c[0] - o[0] * nz, ty: s[1] - c[1] - o[1] * nz };
+	}
+	/** Entering Trace outline: the plan canvas shows the image where the stage did. */
+	async function showStageView() {
+		if (!fitted || !sw || !sh || !origin) return;
+		const mid: Pt = [sw / 2, sh / 2];
+		const a = toView(mid);
+		const o = toAligned(frame, origin);
+		const u = imgUnit;
+		const upp = u / z;
+		await tick();
+		if (step !== 5 || !canvas) return;
+		const c = stageClient();
+		canvas.showAt([(a[0] - o[0]) * u, -(a[1] - o[1]) * u], [c[0] + mid[0], c[1] + mid[1]], upp);
 	}
 	function apply(move: ReturnType<typeof moveNext>) {
 		aligned = move.aligned;
@@ -728,9 +805,8 @@
 			need = null;
 			return true;
 		}
-		if (confirmClose || confirmChange) {
+		if (confirmClose) {
 			confirmClose = false;
-			confirmChange = false;
 			return true;
 		}
 		if (detectAsk) {
@@ -745,7 +821,7 @@
 			canvas?.cancelDraw();
 			return true;
 		}
-		if (onCanvas && picking) {
+		if (picking) {
 			picking = false;
 			canvasTool = 'edit';
 			return true;
@@ -796,6 +872,7 @@
 		walls = [];
 		how = 'auto';
 		draft = [];
+		outline = [];
 		selV = -1;
 		markWork();
 	}
@@ -872,15 +949,7 @@
 		selV = -1;
 		edited();
 	}
-	function addVertex() {
-		const o = draft;
-		if (o.length < 2) return;
-		const i = selV >= 0 ? selV : o.length - 1;
-		const a = o[i], b = o[(i + 1) % o.length];
-		draft = [...o.slice(0, i + 1), [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as Vertex, ...o.slice(i + 1)];
-		selV = i + 1;
-		edited();
-	}
+
 
 	// Trace outline's Pan tool: a drag pans the plan canvas instead of reaching it
 	let canvasPan: Pt | null = null;
@@ -921,9 +990,8 @@
 		});
 	}
 
-	/** Auto-detect on the aligned image: a room around `seed` (image pixels), or the whole space. */
+	/** Auto-detect on the aligned image: a room around `seed` (image pixels), or the whole space. Without a scale yet, the wall thickness drawn stands in for it. */
 	async function runDetect(seed: Pt | null) {
-		if (!pxPerM) return;
 		const token = ++detectToken;
 		detecting = true;
 		selV = -1;
@@ -953,7 +1021,7 @@
 			const result = await detectPlanAsync(
 				{ width: w, height: h, data: data.data },
 				seed ? { mode: 'room', seed: toCanvas(seed) } : { mode: 'floor' },
-				{ pxPerM: pxPerM * f },
+				{ pxPerM: pxPerM ? pxPerM * f : null },
 			);
 			// Trace, Keep, another step or a newer detection took over meanwhile
 			if (token !== detectToken) return;
@@ -961,7 +1029,7 @@
 			if (result.outline && result.outline.length >= 3) {
 				outline = result.outline.map(backTo);
 				// Counter-clockwise in room units, as the plan canvas's labels expect
-				draft = normalizeCCW(outline.map(pxToDisplay));
+				if (onCanvas) draft = normalizeCCW(outline.map(pxToDisplay));
 				walls = result.walls.map((s, i) => ({ id: i, a: backTo(s.a), b: backTo(s.b), thickness: s.thickness / f, on: true }));
 				found = true;
 			}
@@ -977,22 +1045,11 @@
 		}
 	}
 
-	// --- Select floor plan file: opened without one, the picker opens at once; Change file… asks first when there is work
+	// --- Select floor plan file: Choose file… and Change file… open the picker. A chosen file starts
+	// the window over (the host reopens it); a cancelled picker changes nothing.
 	let fileEl = $state<HTMLInputElement | undefined>(undefined);
-	let autoPicked = false;
-	$effect(() => {
-		const el = fileEl;
-		if (hasFile || !el || autoPicked) return;
-		autoPicked = true;
-		untrack(() => el.click());
-	});
 	function pickFile() {
 		fileEl?.click();
-	}
-	const hasWork = $derived(worked || aligned || !!origin || !!pxPerM || draft.length > 0 || outline.length > 0);
-	function requestChange() {
-		if (hasWork) confirmChange = true;
-		else pickFile();
 	}
 	function onFile(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
@@ -1062,9 +1119,12 @@
 			<circle class="fi-handle" cx={q[0]} cy={q[1]} r={r} stroke-width={2 / s} />
 		{/each}
 	{/if}
+	{#if step !== 5 && shownOutline.length >= 3}
+		<polygon class="fi-outline" points={shownOutline.map((p) => al(p).join(',')).join(' ')} stroke-width={2 / s} />
+	{/if}
 	{#if scaleA && scaleShown && (step === 4 || scaleB)}
 		{@const a = al(scaleA)}
-		{@const b = scaleB ? al(scaleB) : step === 4 && cursor && !drag && !coarse ? toView(cursor) : a}
+		{@const b = scaleB ? al(scaleB) : step === 4 && cursor && !drag && !coarse ? snapAligned(toView(cursor), a, cursorAlt) : a}
 		<line class="fi-scale" x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke-width={3 / s} stroke-dasharray={step !== 4 ? `${10 / s} ${6 / s}` : undefined} />
 		{#if scaleB && distance}
 			<text class="fi-scale-label" x={(a[0] + b[0]) / 2} y={(a[1] + b[1]) / 2 - 10 / s} font-size={15 / s} text-anchor="middle">{distance} {unitAbbrev(distUnit)}</text>
@@ -1164,7 +1224,7 @@
 									{#if hasFile}
 										<span class="fi-file" title={fileName ?? undefined}>{fileName ?? 'Floor plan file'}</span>
 										<div class="fi-row fi-pair">
-											<button type="button" class="fi-b" disabled={decoding} onclick={requestChange}>{decoding ? 'Reading…' : 'Change file…'}</button>
+											<button type="button" class="fi-b" disabled={decoding} onclick={pickFile}>{decoding ? 'Reading…' : 'Change file…'}</button>
 											<button type="button" class="fi-b on" onclick={next}>Next</button>
 										</div>
 									{:else}
@@ -1180,7 +1240,7 @@
 										{@render redoNext(redoAlign, 'Next', next)}
 									{:else}
 										<div class="fi-row">
-											<button type="button" class="fi-b" onclick={openAlign}>Align axes</button>
+											<button type="button" class="fi-b" onclick={openAlign}>Straighten</button>
 											<button type="button" class="fi-b on" onclick={looksGood}>Looks good</button>
 										</div>
 									{/if}
@@ -1190,7 +1250,7 @@
 									{#if scaleB}
 										<div class="fi-row">
 											<input id="fi-distance" class="fi-num" type="number" min="0" step="any" aria-label="Distance" value={distance ?? ''} oninput={setDistance} />
-											<select aria-label="Distance units" value={distUnit} onchange={(e) => (distUnit = (e.currentTarget as HTMLSelectElement).value as LengthUnit)}>
+											<select aria-label="Distance units" value={distUnit} onchange={setDistUnit}>
 												{#each LENGTH_UNITS as u (u)}<option value={u}>{unitAbbrev(u)}</option>{/each}
 											</select>
 											<button type="button" class="fi-b icon" aria-pressed={!scaleShown} aria-label={scaleShown ? 'Hide the scale line' : 'Show the scale line'} title={scaleShown ? 'Hide the scale line' : 'Show the scale line'} onclick={() => (scaleShown = !scaleShown)}>{@render icon(scaleShown ? 'eye' : 'eye-off')}</button>
@@ -1213,7 +1273,6 @@
 												<button type="button" class="fi-b" onclick={redoOutline}>Redo</button>
 												<button type="button" class="fi-b on" disabled={draft.length < 3} title="Close the outline back to the first vertex" onclick={finishTrace}>Finish</button>
 											{:else}
-												<button type="button" class="fi-b" onclick={addVertex}>+ Add vertex</button>
 												<button type="button" class="fi-b" onclick={redoOutline}>Redo</button>
 											{/if}
 										</div>
@@ -1358,6 +1417,11 @@
 					<div class="fi-seg">
 						<button type="button" class="fi-b icon" class:on={guides} aria-pressed={guides} title="Guidelines" aria-label="Guidelines" onclick={() => (guides = !guides)}>{@render icon('guides')}</button>
 					</div>
+					{#if step !== 5}
+						<div class="fi-seg">
+							<button type="button" class="fi-b" disabled={detecting} onclick={chooseAuto}><span aria-hidden="true">⚡</span> Auto-detect</button>
+						</div>
+					{/if}
 				</div>
 				<div class="fi-zoom fi-seg">
 					<button type="button" class="fi-b" class:on={!onCanvas && Math.abs(z - 1) < 1e-6} title="Full resolution" onclick={fullSize}>100%</button>
@@ -1370,6 +1434,9 @@
 				{#if onUnitsChange}
 					<div class="fi-units"><UnitsSelect {units} onchange={onUnitsChange} /></div>
 				{/if}
+				{#if detecting && step !== 5}
+					<div class="fi-imgprompt" role="status"><span>Detecting walls…</span></div>
+				{/if}
 				{#if picking && !detecting}
 					<div class="fi-imgprompt" role="status" aria-label="Pick a room">
 						<span>{PICK_ROOM_TEXT}</span>
@@ -1380,7 +1447,7 @@
 				{#if popup}
 					<div class="fi-pop" bind:this={popupEl} style="left: {popup[0]}px; top: {popup[1]}px" role="group" aria-label="Scale distance">
 						<input bind:this={popupInput} class="fi-num" type="number" min="0" step="any" aria-label="Distance between the points" value={distance ?? ''} oninput={setDistance} onkeydown={popupKey} />
-						<select aria-label="Distance units" value={distUnit} onchange={(e) => (distUnit = (e.currentTarget as HTMLSelectElement).value as LengthUnit)} onkeydown={popupKey}>
+						<select aria-label="Distance units" value={distUnit} onchange={setDistUnit} onkeydown={popupKey}>
 							{#each LENGTH_UNITS as u (u)}<option value={u}>{unitAbbrev(u)}</option>{/each}
 						</select>
 						<button type="button" class="fi-b on" onclick={closePopup}>OK</button>
@@ -1411,7 +1478,7 @@
 							{/if}
 						</div>
 						<div class="fi-need-row">
-							{#if detectFail}
+							{#if detectFail && onCanvas}
 								<button type="button" class="fi-b" onclick={chooseTrace}><span class="fi-gl" aria-hidden="true">✎</span>Trace instead</button>
 							{/if}
 							<button type="button" class="fi-b" onclick={cancelDetect}>Cancel</button>
@@ -1437,17 +1504,6 @@
 		cancelLabel="Keep editing"
 		onConfirm={() => { confirmClose = false; onClose(); }}
 		onCancel={() => (confirmClose = false)}
-	/>
-{/if}
-{#if confirmChange}
-	<ConfirmDialog
-		title="Start over with a new file?"
-		message="The alignment, origin, scale and outline set here will be lost."
-		confirmLabel="Choose file"
-		cancelLabel="Keep editing"
-		variant="warning"
-		onConfirm={() => { confirmChange = false; fileEl?.click(); }}
-		onCancel={() => (confirmChange = false)}
 	/>
 {/if}
 

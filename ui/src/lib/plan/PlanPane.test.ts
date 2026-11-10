@@ -127,7 +127,7 @@ describe('PlanPane', () => {
     expect(labels(container)).toEqual(['Move', 'Aim', 'Copy', 'Delete']);
     unmount();
     const out = render(Harness, { props: { ...baseProps, context: 'outline' } });
-    expect(labels(out.container)).toEqual(['Edit vertices', 'Rotate 90°', 'Draw new outline']);
+    expect(labels(out.container)).toEqual(['Draw new outline', 'Edit vertices', 'Rotate 90°']);
     out.unmount();
     // Structures and zones: nothing selected, no shape tools (their Add cards make them)
     const zones = render(Harness, { props: { ...baseProps, context: 'zones' } });
@@ -251,7 +251,7 @@ describe('PlanPane', () => {
     const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
     const { container } = render(Harness, { props: { ...baseProps, floorplan: placement, image } });
     expect(screen.queryByRole('button', { name: 'Move image' })).toBeNull();
-    expect(Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.getAttribute('aria-label'))).toEqual(['Edit vertices', 'Rotate 90°', 'Draw new outline']);
+    expect(Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.getAttribute('aria-label'))).toEqual(['Draw new outline', 'Edit vertices', 'Rotate 90°']);
   });
 
   it('readonly draws the plan but shows no handles or toolbar and ignores drags', async () => {
@@ -551,12 +551,12 @@ describe('PlanPane', () => {
     };
     const extents = (vs: number[][]) => [Math.min(...vs.map((p) => p[0])), Math.max(...vs.map((p) => p[0])), Math.min(...vs.map((p) => p[1])), Math.max(...vs.map((p) => p[1]))];
 
-    it('shows its box, not its corners; the strip offers Edit vertices, Rotate 90° and Draw new outline (no Copy or Delete)', () => {
+    it('shows its box, not its corners; the strip offers Draw new outline, Edit vertices and Rotate 90° (no Copy or Delete)', () => {
       const { container } = mount();
       expect(container.querySelector('.transform-box')).not.toBeNull();
       expect(container.querySelectorAll('circle.vertex')).toHaveLength(0);
       expect(container.querySelectorAll('.mid-handle')).toHaveLength(0);
-      expect(labels(container)).toEqual(['Edit vertices', 'Rotate 90°', 'Draw new outline']);
+      expect(labels(container)).toEqual(['Draw new outline', 'Edit vertices', 'Rotate 90°']);
     });
 
     it('dragging inside moves the room: one setOutline on release, lamps and structures left alone', async () => {

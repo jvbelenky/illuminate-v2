@@ -184,7 +184,7 @@
 		showGrid?: boolean;
 		/** The grid fades out to nothing this far from the view's centre (room units), as 3D's does; null: no fade. */
 		gridFade?: number | null;
-		/** Length, vertex and cursor labels on backed chips, placed inside the outline (over a busy plan image). */
+		/** Length and cursor labels on backed chips, the lengths inside the outline, and no vertex numbers (over a busy plan image). */
 		labelChips?: boolean;
 	}
 
@@ -345,6 +345,34 @@
 	export function zoomToUnitsPerPixel(upp: number) {
 		if (!(upp > 0)) return;
 		zoomAbout(view.x + viewW / 2, view.y + viewH / 2, (upp * shortSide) / view.size);
+	}
+	/** Show the room point `room` at the client position `at`, one CSS pixel showing `upp` room units (a host handing its own view over). */
+	export function showAt(room: Vertex, at: [number, number], upp: number) {
+		const b = drawnBox();
+		if (!b || !(upp > 0)) return;
+		const size = clampViewSize(upp * b.short);
+		const u = size / b.short;
+		view = { x: room[0] - (at[0] - b.left) * u, y: room[1] - (b.bottom - at[1]) * u, size };
+		userMoved = true;
+	}
+	/** The client position of a room point. */
+	export function toClient(x: number, y: number): [number, number] {
+		const b = drawnBox();
+		if (!b) return [0, 0];
+		const s = b.short / Math.max(view.size, 1e-9);
+		return [b.left + (x - view.x) * s, b.bottom - (y - view.y) * s];
+	}
+	/** Room units one CSS pixel shows. */
+	export function pixelUnits(): number {
+		const b = drawnBox();
+		return b ? view.size / b.short : unitsPerPixel();
+	}
+	/** The box the view is drawn in, on screen: the SVG inside its border (the view's bottom-left is its bottom-left). */
+	function drawnBox(): { left: number; bottom: number; short: number } | null {
+		if (!svgEl) return null;
+		const rect = svgEl.getBoundingClientRect();
+		const w = svgEl.clientWidth || rect.width, h = svgEl.clientHeight || rect.height;
+		return { left: rect.left + svgEl.clientLeft, bottom: rect.top + svgEl.clientTop + h, short: Math.max(Math.min(w, h), 1e-9) };
 	}
 	/** Pan the view by a pointer delta in CSS pixels (a host's own Pan tool). */
 	export function panBy(dxPx: number, dyPx: number) {
@@ -1867,17 +1895,9 @@
 			onpointerdown={(e) => beginDrag(e, 'vertex', i)}
 			ondblclick={(e) => onVertexDblClick(e, i)}
 		/>
-		{#if labelChips && !drawing && inwardNormals.length === draft.length}
-			<!-- Inside the outline, along the corner's bisector -->
-			{@const na = inwardNormals[(i - 1 + draft.length) % draft.length]}
-			{@const nb = inwardNormals[i]}
-			{@const dl = Math.hypot(na[0] + nb[0], na[1] + nb[1]) || 1}
-			{@const [tx, ty] = toSvg(vx + ((na[0] + nb[0]) / dl) * px * 22, vy + ((na[1] + nb[1]) / dl) * px * 22)}
-			{@render chip(tx, ty + px * 4, String(i + 1), 'middle', px * 11)}
-			<text x={tx} y={ty + px * 4} class="vertex-label chipped" font-size={px * 11} text-anchor="middle">{i + 1}</text>
-		{:else}
-			{#if labelChips}{@render chip(sx + handleR * 1.6, sy - handleR * 1.2, String(i + 1), 'start', px * 11)}{/if}
-			<text x={sx + handleR * 1.6} y={sy - handleR * 1.2} class="vertex-label" class:chipped={labelChips} font-size={px * 11}>{i + 1}</text>
+		<!-- Over a plan image the wall lengths are the only labels: vertex numbers would read as more of them -->
+		{#if !labelChips}
+			<text x={sx + handleR * 1.6} y={sy - handleR * 1.2} class="vertex-label" font-size={px * 11}>{i + 1}</text>
 		{/if}
 	{/each}
 
@@ -2063,7 +2083,6 @@
 		stroke: var(--color-border);
 		pointer-events: none;
 	}
-	.vertex-label.chipped,
 	.edge-label.chipped,
 	.cursor-label.chipped {
 		fill: var(--color-text);

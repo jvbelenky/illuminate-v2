@@ -103,13 +103,14 @@
 		background: color-mix(in srgb, var(--color-error) 85%, black);
 	}
 
+	/* A choice to confirm, not a danger: the app's highlight, as its other primary actions */
 	.confirm-btn.warning {
-		background: var(--color-warning);
-		color: black;
+		background: var(--color-highlight);
+		color: var(--color-on-highlight);
 	}
 
 	.confirm-btn.warning:hover {
-		background: color-mix(in srgb, var(--color-warning) 85%, black);
+		background: color-mix(in srgb, var(--color-highlight) 85%, black);
 	}
 
 	.confirm-btn.success {

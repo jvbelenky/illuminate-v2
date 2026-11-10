@@ -7,8 +7,8 @@
 	// selected, Edit vertices, Rotate 90°, Copy and Delete; while its vertices are
 	// edited, Done. Structures and zones come from their Add cards, so with nothing
 	// selected their strip is empty; keep-out areas still draw from Rectangle and Polygon.
-	// The room outline on Floorplan is always in that box: Edit vertices, Rotate 90°
-	// and Draw new outline (no Copy or Delete), then Done. Lamps and calc points:
+	// The room outline on Floorplan is always in that box: Draw new outline, Edit
+	// vertices and Rotate 90° (no Copy or Delete), then Done. Lamps and calc points:
 	// Move, Aim, Copy and Delete.
 	import Glyph, { type GlyphName } from '$lib/workspace/Glyph.svelte';
 	import type { DrawShape, PlanController } from './planController.svelte';
@@ -82,7 +82,7 @@
 		if (ctl.onOutline) {
 			if (ctl.outlineEditable && !ctl.drawing && ctl.shapeMode === 'corners') return [DONE];
 			const draw: Tool = { label: 'Draw new outline', glyph: 'pen', title: ctl.drawing ? 'Cancel drawing (Esc)' : 'Draw a new room outline', onclick: () => (ctl.drawing ? ctl.cancelDraw() : ctl.requestNewOutline()), pressed: ctl.drawing };
-			return ctl.outlineEditable && !ctl.drawing ? [...boxTools(), draw] : [draw];
+			return ctl.outlineEditable && !ctl.drawing ? [draw, ...boxTools()] : [draw];
 		}
 		if (ctl.onObstacles) {
 			if (ctl.drawing) return newShapeTools();

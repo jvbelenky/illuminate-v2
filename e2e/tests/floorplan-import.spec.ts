@@ -46,22 +46,19 @@ async function clickImage(page: Page, p: [number, number]) {
   await page.mouse.click(x, y);
 }
 
-/** Upload floor plan file: the window opens and asks for the file at once. */
+/** Upload floor plan file: the window opens on step 1; the picker waits for Choose file…. */
 async function openWindow(page: Page) {
   await waitForSession(page);
   await expandRoomPanel(page);
-  const [chooser] = await Promise.all([
-    page.waitForEvent('filechooser'),
-    page.locator('.floorplan-part').getByRole('button', { name: /Upload floor plan file/ }).click(),
-  ]);
+  await page.locator('.floorplan-part').getByRole('button', { name: /Upload floor plan file/ }).click();
   await expect(dialog(page)).toBeVisible();
-  return chooser;
 }
 
 async function upload(page: Page, file = FIXTURE) {
-  const chooser = await openWindow(page);
+  await openWindow(page);
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), card(page).getByRole('button', { name: 'Choose file…' }).click()]);
   await chooser.setFiles(file);
-  await expect(card(page)).toContainText('Check axes');
+  await expect(card(page)).toContainText('Align axes');
 }
 
 /** The One room prompt over the image. */
@@ -115,9 +112,9 @@ async function bedroomSetup(page: Page, unit: 'inches' | 'meters' = 'inches') {
 
 /** Steps 1-3: straighten, origin by drag, scale by the popup. */
 async function alignedSetup(page: Page) {
-  // 1. Check axes: Align axes, then two clicks along the top wall's inner face
+  // 1. Align axes: Straighten, then two clicks along the top wall's inner face
   await expect(card(page).getByRole('status')).toHaveText('Do the walls line up with the grid?');
-  await card(page).getByRole('button', { name: 'Align axes' }).click();
+  await card(page).getByRole('button', { name: 'Straighten' }).click();
   await expect(card(page).getByRole('status')).toHaveText('Click two points along a wall to align it to an axis.');
   await clickImage(page, tilted([170, 150]));
   await clickImage(page, tilted([630, 150]));
@@ -303,7 +300,7 @@ test.describe('Floor plan import window', () => {
     await expect(card(page).locator('.fi-pair button')).toHaveText(['Redo', 'Finish']);
     await page.keyboard.press('Enter');
     await expect(rows).toHaveCount(4);
-    await expect(card(page).locator('.fi-pair button')).toHaveText(['+ Add vertex', 'Redo']);
+    await expect(card(page).locator('.fi-pair button')).toHaveText(['Redo']);
     const pts = await rows.evaluateAll((els) => els.map((r) => Array.from(r.querySelectorAll('input')).slice(0, 2).map((i) => Number((i as HTMLInputElement).value))));
     expect(new Set(pts.map((p) => p[0])).size).toBe(2);
     expect(new Set(pts.map((p) => p[1])).size).toBe(2);
@@ -345,20 +342,103 @@ test.describe('Floor plan import window', () => {
     await page.mouse.click(x0, y0 - 90);
     await expect(rows).toHaveCount(4);
     await finish.click();
-    await expect(card(page).locator('.fi-pair button')).toHaveText(['+ Add vertex', 'Redo']);
+    await expect(card(page).locator('.fi-pair button')).toHaveText(['Redo']);
     await expect(canvas.locator('polygon.outline')).toHaveCount(1);
     await expect(dialog(page).locator('.fi-card').nth(4)).toHaveClass(/done/);
+    // The wall lengths sit on chips, the only labels on the outline (no vertex numbers)
+    await expect(canvas.locator('rect.label-chip')).toHaveCount(4);
+    await expect(canvas.locator('text.edge-label')).toHaveCount(4);
+    await expect(canvas.locator('text.vertex-label')).toHaveCount(0);
     // Undo the Finish: drawing again with the same four
     await undo.click();
     await expect(card(page).locator('.fi-pair button')).toHaveText(['Redo', 'Finish']);
     await expect(rows).toHaveCount(4);
-    // The labels sit on chips
-    await expect(canvas.locator('rect.label-chip').first()).toBeVisible();
   });
 
-  test('opening the window asks for the file; cancelled, step 1 stays open; chosen, Check axes; Change file… starts over', async ({ page }) => {
+  test('the scale line snaps level, and its units become the project\'s', async ({ page }) => {
+    await upload(page);
+    await dialog(page).getByRole('button', { name: 'Looks good' }).click();
+    await clickImage(page, tilted([150, 450]));
+    await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+    // The second point 10 px off level over 400 px (1.4°): it lines up with the first
+    await clickImage(page, [200, 400]);
+    await clickImage(page, [600, 410]);
+    const line = dialog(page).locator('.fi-stage line.fi-scale');
+    const at = async () => line.evaluate((el) => ['x1', 'y1', 'x2', 'y2'].map((k) => Number(el.getAttribute(k))));
+    const [x1, y1, x2, y2] = await at();
+    expect(x1).toBeCloseTo(200, 0);
+    expect(x2).toBeCloseTo(600, 0);
+    expect(y1).toBeCloseTo(400, 0);
+    expect(y2).toBe(y1);
+    // The distance's units become the project's
+    const pop = dialog(page).getByRole('group', { name: 'Scale distance' });
+    await page.keyboard.type('400');
+    await pop.getByLabel('Distance units').selectOption('centimeters');
+    await expect(dialog(page).locator('.fi-units select')).toHaveValue('centimeters');
+    await pop.getByRole('button', { name: 'OK' }).click();
+    await expect(card(page).locator('#fi-distance')).toHaveValue('400');
+    await expect(card(page).getByLabel('Distance units')).toHaveValue('centimeters');
+    // Well off level it stays where it was clicked
+    await card(page).getByRole('button', { name: 'Redo' }).click();
+    await clickImage(page, [200, 400]);
+    await clickImage(page, [600, 300]);
+    const free = await at();
+    expect(free[3]).toBeCloseTo(300, 0);
+  });
+
+  test('the image stays where it is between Set scale and Trace outline', async ({ page }) => {
+    await upload(page);
+    await dialog(page).getByRole('button', { name: 'Looks good' }).click();
+    await clickImage(page, tilted([150, 450]));
+    await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+    await scaleBy(page, tilted([150, 450]), tilted([650, 450]), '5');
+    const corners: [number, number][] = [[0, 0], [800, 600]];
+    const where = async () => (await Promise.all(corners.map((c) => screenOf(page, c)))).flat();
+    const close = (a: number[], b: number[]) => a.forEach((v, i) => expect(Math.abs(v - b[i])).toBeLessThan(1.5));
+    const before = await where();
+    await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(card(page)).toContainText('Trace outline');
+    await expect(dialog(page).getByRole('application', { name: 'Outline canvas' })).toBeVisible();
+    close(await where(), before);
+    // Zoomed on the canvas, then back a step: the stage shows the same
+    await page.mouse.move(before[0] + 200, before[1] + 200);
+    await page.mouse.wheel(0, -400);
+    const zoomed = await where();
+    expect(Math.abs(zoomed[2] - zoomed[0])).toBeGreaterThan(Math.abs(before[2] - before[0]) * 1.2);
+    await page.getByRole('button', { name: '← Back' }).click();
+    await expect(card(page)).toContainText('Set scale');
+    close(await where(), zoomed);
+  });
+
+  test('Auto-detect is over the image from the first step: the outline found before the origin and scale, then carried to Trace outline', async ({ page }) => {
+    await upload(page, BEDROOM);
+    await dialog(page).locator('.fi-tools').getByRole('button', { name: 'Auto-detect' }).click();
+    await page.getByRole('alertdialog', { name: 'Detect the outline of…' }).getByRole('button', { name: 'Whole space' }).click();
+    const found = dialog(page).locator('.fi-stage polygon.fi-outline');
+    await expect(found).toBeVisible();
+    expect((await found.getAttribute('points'))!.trim().split(/\s+/)).toHaveLength(8);
+    // Still on Align axes; the outline step waits for the origin and scale
+    await expect(card(page)).toContainText('Align axes');
+    await expect(dialog(page).locator('.fi-card').nth(4)).not.toHaveClass(/done/);
+    await dialog(page).getByRole('button', { name: 'Looks good' }).click();
+    await clickImage(page, [72, 543]);
+    await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+    await clickImage(page, [72, 543]);
+    await clickImage(page, [710, 543]);
+    await page.keyboard.type('152');
+    const pop = dialog(page).getByRole('group', { name: 'Scale distance' });
+    await pop.getByLabel('Distance units').selectOption('inches');
+    await pop.getByRole('button', { name: 'OK' }).click();
+    await expect(dialog(page).locator('.fi-card').nth(4)).toHaveClass(/done/);
+    await card(page).getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(card(page)).toContainText('Trace outline');
+    await expect(dialog(page).locator('.vertex-row')).toHaveCount(8);
+    await expect(card(page).getByRole('button', { name: 'Auto-detect' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('opening the window waits on step 1 for Choose file…; chosen, Align axes; Change file… starts over', async ({ page }) => {
     await openWindow(page);
-    // The picker was dismissed: all five steps not done, step 1 open
+    // No picker yet: all five steps not done, step 1 open
     const cards = dialog(page).locator('.fi-card');
     await expect(cards).toHaveCount(5);
     await expect(dialog(page).locator('.fi-card.done')).toHaveCount(0);
@@ -374,21 +454,25 @@ test.describe('Floor plan import window', () => {
     // Choose file…
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), card(page).getByRole('button', { name: 'Choose file…' }).click()]);
     await chooser.setFiles(FIXTURE);
-    await expect(card(page)).toContainText('Check axes');
+    await expect(card(page)).toContainText('Align axes');
     await expect(cards.nth(0)).toHaveClass(/done/);
     await expect(cards.nth(0)).toContainText('floorplan-tilted.png');
-    // Some work, then Change file… on step 1: it asks, then starts over on Check axes
+    // Some work, then Change file… on step 1: no warning. The picker cancelled, the work stays;
+    // a file chosen, the window starts over on Align axes
     await dialog(page).getByRole('button', { name: 'Looks good' }).click();
     await clickImage(page, tilted([150, 450]));
     await expect(cards.nth(2)).toHaveClass(/done/);
     await cards.nth(0).locator('.fi-ch').click();
     await expect(card(page).getByRole('button', { name: 'Next', exact: true })).toBeVisible();
-    await card(page).getByRole('button', { name: 'Change file…' }).click();
-    const confirm = page.getByRole('dialog', { name: 'Start over with a new file?' });
-    await expect(confirm).toBeVisible();
-    const [chooser2] = await Promise.all([page.waitForEvent('filechooser'), confirm.getByRole('button', { name: 'Choose file' }).click()]);
+    const change = card(page).getByRole('button', { name: 'Change file…' });
+    const [cancelled] = await Promise.all([page.waitForEvent('filechooser'), change.click()]);
+    await cancelled.setFiles([]);
+    await expect(page.getByRole('dialog', { name: 'Start over with a new file?' })).toHaveCount(0);
+    await expect(cards.nth(2)).toHaveClass(/done/);
+    await expect(cards.nth(0)).toContainText('floorplan-tilted.png');
+    const [chooser2] = await Promise.all([page.waitForEvent('filechooser'), change.click()]);
     await chooser2.setFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
-    await expect(card(page)).toContainText('Check axes');
+    await expect(card(page)).toContainText('Align axes');
     await expect(dialog(page).locator('.fi-card.done')).toHaveCount(1);
     await expect(cards.nth(0)).toContainText('floorplan.png');
     await expect(card(page).getByRole('status')).toHaveText('Do the walls line up with the grid?');
@@ -469,7 +553,7 @@ test.describe('Floor plan import window', () => {
     await box2.getByRole('button', { name: 'Edit' }).click();
     await expect(dialog(page)).toBeVisible();
     await expect(dialog(page).locator('.fi-card').nth(0)).toHaveClass(/done/);
-    await expect(card(page)).toContainText('Check axes');
+    await expect(card(page)).toContainText('Align axes');
     await dialog(page).getByTitle('Close').click();
     await expect(dialog(page)).toHaveCount(0);
     // Remove asks first

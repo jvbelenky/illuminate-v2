@@ -2107,8 +2107,10 @@ export class PlanController {
     if (this.#toolGesture) this.endTool();
   };
 
-  handleUnitsChange = async (event: Event) => {
-    const next = (event.target as HTMLSelectElement).value as LengthUnit;
+  handleUnitsChange = (event: Event) => this.setUnits((event.target as HTMLSelectElement).value as LengthUnit);
+
+  /** Switch the project's units (the units selects; the floor plan import's scale units). */
+  setUnits = async (next: LengthUnit) => {
     const units = this.scene().units;
     if (next === units) return;
     const factor = lengthFactor(units, next);
