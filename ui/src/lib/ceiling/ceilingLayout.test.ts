@@ -242,6 +242,14 @@ describe('placementCeiling: the layout as lamp placement takes it', () => {
     expect(c.keep_out![1]).toEqual([[4, 2], [6, 2], [6, 4], [4, 4]]);
   });
 
+  it('stays within the request caps: 500 areas, 256 vertices an area', () => {
+    const many = Array.from({ length: 600 }, (_, i) => ({ ...smoke, id: `ceiling-${i + 10}` }));
+    const big = { ...keep, vertices: Array.from({ length: 300 }, (_, i) => [Math.cos(i / 48), Math.sin(i / 48)] as Vertex) };
+    const c = placementCeiling(layout({ items: [big, keep, ...many] }), rect, 'feet');
+    expect(c.keep_out).toHaveLength(500);
+    expect(c.keep_out![0]).toEqual(keep.vertices);
+  });
+
   it('without tiles a detector keeps 0.3 m to each side clear', () => {
     const c = placementCeiling(layout({ tileSize: 'none', items: [smoke] }), rect, 'meters');
     const xs = c.keep_out![0].map((v) => v[0]), ys = c.keep_out![0].map((v) => v[1]);

@@ -641,17 +641,19 @@ class PlacementCeiling(BaseModel):
     """The ceiling designer's layout (kept by the frontend), as far as lamp
     placement goes: the areas no lamp may be in (room units, x/y), and the tile
     grid downlights centre on (origin x, origin y, tile width, tile height)."""
-    keep_out: List[List[Tuple[float, float]]] = Field(default_factory=list, max_length=2000)
+    # Placement tests every candidate spot against every area, and checking an
+    # area's outline is quadratic in its vertices: the caps keep both small
+    keep_out: List[List[Tuple[float, float]]] = Field(default_factory=list, max_length=500)
     tile_grid: Optional[Tuple[float, float, float, float]] = None
 
     @field_validator("keep_out")
     @classmethod
     def _check_keep_out(cls, areas):
-        if sum(len(a) for a in areas) > 20000:
+        if sum(len(a) for a in areas) > 4000:
             raise ValueError("Too many keep-out vertices")
         for area in areas:
-            if not 3 <= len(area) <= 1000:
-                raise ValueError("A keep-out area has 3 to 1000 vertices")
+            if not 3 <= len(area) <= 256:
+                raise ValueError("A keep-out area has 3 to 256 vertices")
             if any(not math.isfinite(c) or abs(c) > 1e6 for v in area for c in v):
                 raise ValueError("Keep-out vertices must be finite")
         return areas

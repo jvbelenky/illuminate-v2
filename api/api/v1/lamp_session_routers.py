@@ -435,6 +435,9 @@ def _resolve_lamp_config(lamp) -> dict:
 
 
 
+MAX_TILES_PER_AXIS = 100
+
+
 def _placement_context(room, lamp_z: float, ceiling) -> dict:
     """What a lamp at height lamp_z keeps clear of: the structures standing
     there, and the ceiling layout's keep-out areas; and the tile grid
@@ -448,7 +451,14 @@ def _placement_context(room, lamp_z: float, ceiling) -> dict:
             except ValueError:
                 continue  # a self-crossing area keeps nothing out
         context["keep_out"] = keep_out
-        context["tile_grid"] = ceiling.tile_grid
+        # Tiles finer than a hundredth of the room are no ceiling grid (and a
+        # search over that many tile centres would be slow): the regular grid stands in
+        grid = ceiling.tile_grid
+        if grid is not None:
+            x_min, y_min, x_max, y_max = room.dim.polygon.bounding_box
+            if (x_max - x_min) / grid[2] > MAX_TILES_PER_AXIS or (y_max - y_min) / grid[3] > MAX_TILES_PER_AXIS:
+                grid = None
+        context["tile_grid"] = grid
     return context
 
 
