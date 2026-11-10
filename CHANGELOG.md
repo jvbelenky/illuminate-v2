@@ -7,6 +7,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Floor plan import: opening the window no longer opens the file picker by itself; Choose file… does. Change file… opens the picker without a warning: the alignment, origin, scale and outline are cleared only when a file is chosen, and kept when the picker is cancelled.
+- Floor plan import: step 2 is Align axes, and its button Straighten. The scale line snaps level or plumb when within 3° (Alt frees), and the units chosen for the scale distance become the project's units.
+- Floor plan import: Auto-detect is over the image from the first step on, before the origin and scale are set (the wall thickness drawn stands in for the scale); the outline found shows on the image and is carried to Trace outline.
+- Floor plan import: the image no longer jumps or zooms between Trace outline and the other steps. On Trace outline the wall lengths are the only labels (no vertex numbers), and + Add vertex is gone: vertices are added on the plan, as in the main 2D view.
+- 2D plan: Draw new outline comes before Edit vertices in the strip under the plan.
+- Confirmation windows: the confirm button of a plain choice is blue with the app's own text colour, not yellow with black text.
 - 2D plan: the dimension rulers (lines, ticks, numbers) and the XYZ marker are gone from the plan, and from its image export; Show Dimensions and Show XYZ Marker affect the 3D view only. The grid stays.
 - Empty lamp and floor plan file boxes (Upload floor plan file, spectrum and photometric files): a clearer, light dashed outline on a faint fill, brighter on hover.
 - 2D plan and floor plan import: drawn and dragged corners line up exactly with the other corners again. Within 10 px (5 px for zones) of the previous corner's or any other corner's x or y, a corner takes it, with a dashed guide, over the grid and the angle snap, so short walls a few pixels off square come out square and the last corner lines up with the first. This applies to Trace outline, Draw new outline, drawing structures, zones and ceiling items (along a room wall too) and Edit vertices drags. Alt still places freely

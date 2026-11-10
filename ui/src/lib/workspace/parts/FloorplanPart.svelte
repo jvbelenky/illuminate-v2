@@ -185,6 +185,7 @@
 			opacity={session.opacity}
 			onOpacityChange={ctl.setImportOpacity}
 			onUnitsChange={ctl.handleUnitsChange}
+			onSetUnits={ctl.setUnits}
 			onChooseFile={chooseFile}
 			decoding={ctl.decoding}
 			error={ctl.imageError}

@@ -296,10 +296,11 @@ test.describe('Polygon rooms', () => {
     const part = page.locator('.floorplan-part');
     await openGeometry(page);
 
-    // Upload: the import window opens and asks for the file
-    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), part.getByRole('button', { name: /Upload floor plan file/ }).click()]);
+    // Upload: the import window opens; Choose file… asks for the file
+    await part.getByRole('button', { name: /Upload floor plan file/ }).click();
     const win = page.getByRole('dialog', { name: 'Floor plan from file' });
     await expect(win).toBeVisible();
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), win.getByRole('button', { name: 'Choose file…' }).click()]);
     await chooser.setFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
     await expect(win.getByRole('button', { name: 'Looks good' })).toBeVisible();
     const clickImage = async (p: [number, number]) => {

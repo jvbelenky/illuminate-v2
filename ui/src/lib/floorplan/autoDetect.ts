@@ -703,13 +703,15 @@ const WALL_M_GUESSES = [0.07, 0.2];
  * sizes and the smallest room all follow the scale, so one that does not fit
  * the drawing (a distance typed in the wrong unit: 152 in read as 152 m or
  * 152 ft) finds nothing. The given scale is tried first when the walls it
- * implies are plausible; then scales read from the drawn wall thickness; then
- * none. The outline is in pixels either way.
+ * implies are plausible; then scales read from the drawn wall thickness (the
+ * first ones tried when no scale is given); then none. The outline is in
+ * pixels either way.
  */
 function scalesToTry(img: RasterImage, opts: DetectOptions): (number | null)[] {
   const given = opts.pxPerM && opts.pxPerM > 0 ? opts.pxPerM : null;
-  if (!given) return [null];
   const t = wallThicknessPx(img, opts.workSize ?? 1000);
+  // No scale yet (Auto-detect before Set scale): the drawn walls stand in for it
+  if (!given) return t ? [...WALL_M_GUESSES.map((m) => t / m), null] : [null];
   if (!t) return [given];
   const out: (number | null)[] = [];
   if (t / given >= WALL_M_MIN && t / given <= WALL_M_MAX) out.push(given);

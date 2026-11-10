@@ -73,6 +73,11 @@ describe('detect.worker: the import window\'s requests for the user\'s bedroom p
     });
   }
 
+  it('no scale yet (Auto-detect before Set scale): One room from every click, and Whole space', () => {
+    for (const seed of SEEDS) expectBedroom(run({ ...png, mode: { mode: 'room', seed }, opts: { pxPerM: null } }));
+    expectBedroom(run({ ...png, mode: { mode: 'floor' }, opts: {} }));
+  });
+
   it('turned 90°: the same room in the turned frame', () => {
     const t = turned();
     const faces = FACES.map(([x, y]) => [y, png.width - x] as Pt);
