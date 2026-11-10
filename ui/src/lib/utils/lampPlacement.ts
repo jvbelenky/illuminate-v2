@@ -5,7 +5,8 @@
  * grid/corner/edge behaviour exactly; polygon rooms generalise it:
  * - downlight: grid search over the bounding box restricted to points inside
  *   the outline, maximising distance to other lamps and to the walls
- * - corner: each polygon vertex, offset inward, aiming at the farthest floor vertex
+ * - corner: each polygon vertex, offset inward, aiming at the farthest floor
+ *   vertex in plain sight (never across a notch of an L, T or U room)
  * - edge: each edge midpoint, offset along the inward normal, aiming at the
  *   point where that normal leaves the room
  */
@@ -256,10 +257,10 @@ function findNextUnoccupied(
 }
 
 /** Farthest outline vertex from (x, y) — the natural "opposite corner". */
-function farthestVertex(vertices: Vertex[], x: number, y: number): Vertex {
-  let best = vertices[0];
+function farthestVertex(vertices: Vertex[], x: number, y: number, candidates: Vertex[] = vertices): Vertex {
+  let best = candidates[0] ?? vertices[0];
   let bestDistSq = -1;
-  for (const v of vertices) {
+  for (const v of candidates) {
     const dSq = (v[0] - x) ** 2 + (v[1] - y) ** 2;
     if (dSq > bestDistSq) {
       bestDistSq = dSq;
@@ -269,10 +270,31 @@ function farthestVertex(vertices: Vertex[], x: number, y: number): Vertex {
   return best;
 }
 
+/** True when `to` is in plain sight of `from`: the line between them stays in the room. */
+function inSight(vertices: Vertex[], from: Vertex, to: Vertex): boolean {
+  const SAMPLES = 32;
+  for (let i = 1; i < SAMPLES; i++) {
+    const t = i / SAMPLES;
+    if (!isInsideWithMargin(vertices, from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t, 0)) return false;
+  }
+  return true;
+}
+
+/**
+ * Where a corner lamp at (x, y) aims: the farthest vertex it can see (the
+ * opposite corner of a rectangle); with none in sight, where the corner's
+ * bisector meets the far wall.
+ */
+function cornerAim(vertices: Vertex[], x: number, y: number, bisector: Vertex): Vertex {
+  const seen = vertices.filter((v) => Math.hypot(v[0] - x, v[1] - y) > 1e-9 && inSight(vertices, [x, y], v));
+  if (seen.length) return farthestVertex(vertices, x, y, seen);
+  return rayToBoundary(vertices, [x, y], bisector) ?? farthestVertex(vertices, x, y);
+}
+
 /**
  * Corner positions (ceiling corners with offset), one per outline vertex in
  * CCW order — for a rectangle: (0,0), (max,0), (max,max), (0,max).
- * Each aims at the farthest floor vertex (the opposite corner of a rectangle).
+ * Each aims at the farthest floor vertex it can see (the opposite corner of a rectangle).
  */
 function getCornerPositions(room: RoomConfig, units: LengthUnit): PositionWithAim[] {
   const vertices = roomVertices(room);
@@ -280,6 +302,7 @@ function getCornerPositions(room: RoomConfig, units: LengthUnit): PositionWithAi
   const normals = edgeInwardNormals(vertices);
   const n = vertices.length;
   const z = room.z - offset;
+  const bisectors = vertexInwardDirections(vertices);
 
   return vertices.map(([vx, vy], i) => {
     // Move `offset` away from both adjacent walls. For a right angle this is
@@ -294,11 +317,11 @@ function getCornerPositions(room: RoomConfig, units: LengthUnit): PositionWithAi
     let y = vy + (n1[1] + n2[1]) * scale;
     if (!isInsideWithMargin(vertices, x, y, 0)) {
       // Very acute corner: fall back to a short step along the bisector
-      const [bx, by] = vertexInwardDirections(vertices)[i];
+      const [bx, by] = bisectors[i];
       x = vx + bx * offset;
       y = vy + by * offset;
     }
-    const [ax, ay] = farthestVertex(vertices, x, y);
+    const [ax, ay] = cornerAim(vertices, x, y, bisectors[i]);
     return { x, y, z, aimx: ax, aimy: ay, aimz: 0 };
   });
 }

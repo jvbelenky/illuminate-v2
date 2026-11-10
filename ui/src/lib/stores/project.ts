@@ -70,7 +70,7 @@ import { floorplanImage, setFloorPlanWarningHandler, type FloorPlanImage } from 
 import { createHistory, type History } from '$lib/stores/history';
 import {
   DEFAULT_CEILING_LAYOUT, CEILING_VIEW_KEYS, newItem as newCeilingItem, copyInside as copyCeilingItemInside, normalizeOffset, tileGrid,
-  ceilingContent, parseCeilingLayout, scaleCeilingLayout, withViewOf, normalizeYaw, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingLayout,
+  ceilingContent, parseCeilingLayout, placementCeiling, scaleCeilingLayout, withViewOf, normalizeYaw, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingLayout,
 } from '$lib/ceiling/ceilingLayout';
 import { parseLabels, withLabel } from '$lib/utils/labelSet';
 import { deepEqual, diffEntities, roomPartialFor, sameLabels, sceneEquals, userZones, orderLike, partialChanges, LAMP_RUNTIME_KEYS, ROOM_VIEW_KEYS, type SceneSnapshot } from '$lib/utils/sceneDiff';
@@ -3219,7 +3219,7 @@ function createProjectStore() {
           // /place reads the backend lamp as it is now; wait for the queued
           // definition update (axis, type, preset) to land first.
           await syncQueue.drained();
-          const r = await placeSessionLamp(lampId, 'horizontal');
+          const r = await this.placeLamp(lampId, 'horizontal');
           this.applyPlacement(lampId, 'horizontal', {
             x: r.x, y: r.y, z: r.z, aimx: r.aimx, aimy: r.aimy, aimz: r.aimz, angle: r.angle ?? 0,
           });
@@ -3497,6 +3497,17 @@ function createProjectStore() {
     // Echo application for objects (plain write, never re-syncs).
     updateObjectFromBackend(id: string, values: Partial<SceneObject>) {
       applyObjectServerValues(id, values);
+    },
+
+    /**
+     * Ask the backend where a lamp goes. It knows the room and its structures;
+     * the ceiling layout is kept here, so it rides along once one has been
+     * designed (keep-out areas, ceiling items and the tile grid).
+     */
+    placeLamp(lampId: string, mode?: PlacementMode, positionIndex?: number) {
+      const p = get({ subscribe });
+      const ceiling = p.ceilingLayout ? placementCeiling(p.ceilingLayout, roomVertices(p.room), get(userSettings).units) : undefined;
+      return placeSessionLamp(lampId, mode, positionIndex, ceiling);
     },
 
     /**

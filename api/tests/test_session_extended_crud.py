@@ -1,5 +1,7 @@
 """Extended CRUD tests for zones, lamps, and room mutations."""
 
+import json
+
 import pytest
 
 from tests.conftest import API
@@ -175,6 +177,80 @@ class TestLampPlace:
             headers=headers,
         )
         assert resp.status_code == 404
+
+
+class TestLampPlaceAroundStructuresAndCeiling:
+    """The 4 x 6 x 2.7 m room: structures that reach the lamp, and the ceiling layout."""
+
+    COLUMN = {"id": "column", "shape": "box", "width": 1.5, "length": 1.5, "height": 2.7, "x": 2.0, "y": 3.0, "z": 0.0}
+
+    @staticmethod
+    def _place(client, headers, **body):
+        lamp_id = client.get(f"{API}/session/status", headers=headers).json()["lamp_ids"][0]
+        resp = client.post(f"{API}/session/lamps/{lamp_id}/place", json=body, headers=headers)
+        assert resp.status_code == 200, resp.text
+        return resp.json()
+
+    @staticmethod
+    def _in_column(p):
+        return 1.25 <= p["x"] <= 2.75 and 2.25 <= p["y"] <= 3.75
+
+    def test_downlight_keeps_out_of_a_full_height_structure(self, initialized_session):
+        client, headers = initialized_session
+        assert self._in_column(self._place(client, headers, mode="downlight"))  # the room's centre
+        resp = client.post(f"{API}/session/objects", json=self.COLUMN, headers=headers)
+        assert resp.status_code == 200, resp.text
+        assert not self._in_column(self._place(client, headers, mode="downlight"))
+
+    def test_a_low_structure_changes_nothing(self, initialized_session):
+        client, headers = initialized_session
+        before = self._place(client, headers, mode="downlight")
+        resp = client.post(f"{API}/session/objects", json={**self.COLUMN, "height": 0.75}, headers=headers)
+        assert resp.status_code == 200, resp.text
+        after = self._place(client, headers, mode="downlight")
+        assert (after["x"], after["y"]) == (before["x"], before["y"])
+
+    def test_corner_lamps_do_not_aim_through_a_structure(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.post(f"{API}/session/objects", json=self.COLUMN, headers=headers)
+        assert resp.status_code == 200, resp.text
+        for i in range(4):
+            p = self._place(client, headers, mode="corner", position_index=i)
+            for k in range(1, 100):
+                t = k / 100
+                at = {"x": p["x"] + (p["aimx"] - p["x"]) * t, "y": p["y"] + (p["aimy"] - p["y"]) * t}
+                assert not (1.26 <= at["x"] <= 2.74 and 2.26 <= at["y"] <= 3.74), (i, p)
+
+    def test_downlight_keeps_out_of_a_ceiling_keep_out_area(self, initialized_session):
+        client, headers = initialized_session
+        ceiling = {"keep_out": [[[0, 0], [4, 0], [4, 3.5], [0, 3.5]]]}
+        assert self._place(client, headers, mode="downlight", ceiling=ceiling)["y"] > 3.5
+
+    def test_downlight_goes_to_a_ceiling_tile_centre(self, initialized_session):
+        client, headers = initialized_session
+        p = self._place(client, headers, mode="downlight", ceiling={"tile_grid": [0.1, 0.0, 0.6096, 0.6096]})
+        assert ((p["x"] - 0.1) / 0.6096) % 1 == pytest.approx(0.5, abs=1e-4)
+        assert (p["y"] / 0.6096) % 1 == pytest.approx(0.5, abs=1e-4)
+
+    def test_a_corner_in_a_keep_out_area_is_not_offered(self, initialized_session):
+        client, headers = initialized_session
+        ceiling = {"keep_out": [[[0, 0], [1, 0], [1, 1], [0, 1]]]}
+        first = self._place(client, headers, mode="corner", position_index=0, ceiling=ceiling)
+        assert first["position_count"] == 3
+        for i in range(3):
+            p = self._place(client, headers, mode="corner", position_index=i, ceiling=ceiling)
+            assert not (p["x"] < 1 and p["y"] < 1)
+
+    @pytest.mark.parametrize("ceiling", [
+        {"keep_out": [[[0, 0], [1, 0]]]},
+        {"tile_grid": [0, 0, 0, 0.6]},
+        {"tile_grid": [0, 0, 0.6, float("1e400")]},
+    ])
+    def test_a_malformed_ceiling_is_rejected(self, initialized_session, ceiling):
+        client, headers = initialized_session
+        lamp_id = client.get(f"{API}/session/status", headers=headers).json()["lamp_ids"][0]
+        resp = client.post(f"{API}/session/lamps/{lamp_id}/place", content=json.dumps({"mode": "downlight", "ceiling": ceiling}), headers={**headers, "Content-Type": "application/json"})
+        assert resp.status_code == 422
 
 
 class TestRoomExtendedPatch:

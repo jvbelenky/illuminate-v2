@@ -31,6 +31,7 @@ import type {
   SessionZoneInput as ContractSessionZoneInput,
   SessionZoneState as ContractSessionZoneState,
   SetUnitsZoneCoords as ContractSetUnitsZoneCoords,
+  PlacementCeiling,
 } from '$lib/api/contract';
 import {
   validateResponse,
@@ -1365,11 +1366,13 @@ export interface PlaceLampResponse {
 export async function placeSessionLamp(
   lampId: string,
   mode?: 'downlight' | 'corner' | 'edge' | 'horizontal',
-  positionIndex?: number
+  positionIndex?: number,
+  ceiling?: PlacementCeiling
 ): Promise<PlaceLampResponse> {
   const payload: Record<string, unknown> = {};
   if (mode) payload.mode = mode;
   if (positionIndex !== undefined) payload.position_index = positionIndex;
+  if (ceiling) payload.ceiling = ceiling;
   return request(`/session/lamps/${encodeURIComponent(lampId)}/place`, {
     method: 'POST',
     body: JSON.stringify(payload)

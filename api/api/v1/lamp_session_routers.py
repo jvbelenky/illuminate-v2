@@ -24,7 +24,8 @@ from guv_calcs.lamp.spectrum import Spectrum
 from guv_calcs.lamp import Lamp
 from guv_calcs.lamp.lamp_type import LampUnitType
 from guv_calcs.safety import PhotStandard
-from guv_calcs.lamp.lamp_placement import LampPlacer
+from guv_calcs.geometry import Polygon2D
+from guv_calcs.lamp.lamp_placement import LampPlacer, obstacle_footprints
 from guv_calcs.lamp.lamp_configs import resolve_keyword
 from guv_calcs.units import convert_length
 
@@ -434,6 +435,23 @@ def _resolve_lamp_config(lamp) -> dict:
 
 
 
+def _placement_context(room, lamp_z: float, ceiling) -> dict:
+    """What a lamp at height lamp_z keeps clear of: the structures standing
+    there, and the ceiling layout's keep-out areas; and the tile grid
+    downlights centre on."""
+    context = {"obstacles": obstacle_footprints(room.objects.values(), lamp_z)}
+    if ceiling is not None:
+        keep_out = []
+        for vertices in ceiling.keep_out:
+            try:
+                keep_out.append(Polygon2D(vertices=tuple(vertices)))
+            except ValueError:
+                continue  # a self-crossing area keeps nothing out
+        context["keep_out"] = keep_out
+        context["tile_grid"] = ceiling.tile_grid
+    return context
+
+
 @router.post("/lamps/{lamp_id}/place", response_model=PlaceLampResponse)
 def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: InitializedSessionDep):
     """Compute lamp placement with optional strict cycling.
@@ -477,7 +495,10 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
                 ceiling_offset = 0
                 wall_clearance = 0
 
-            placer = LampPlacer(room.dim.polygon, z=room_z)
+            placer = LampPlacer(
+                room.dim.polygon, z=room_z,
+                **_placement_context(room, room_z - ceiling_offset, body.ceiling),
+            )
             result = placer.get_placement(
                 lamp, mode=mode, position_index=body.position_index,
                 angle=fixture_angle, offset=ceiling_offset,
@@ -511,7 +532,10 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
             if fid != lamp_id and other_lamp.enabled:
                 other_positions.append((other_lamp.x, other_lamp.y))
 
-        placer = LampPlacer.for_dims(room.dim, existing=other_positions)
+        placer = LampPlacer.for_dims(
+            room.dim, existing=other_positions,
+            **_placement_context(room, room_z - ceiling_offset, body.ceiling),
+        )
         result = placer.get_placement(lamp, mode=mode, angle=fixture_angle)
         return PlaceLampResponse(
             x=round(result.x, 6), y=round(result.y, 6), z=round(result.z, 6),
@@ -554,8 +578,6 @@ def mass_place_lamps(body: MassPlaceRequest, session: InitializedSessionDep):
             if fid not in lamps_to_place and other_lamp.enabled:
                 other_positions.append((other_lamp.x, other_lamp.y))
 
-        placer = LampPlacer.for_dims(room.dim, existing=other_positions)
-
         # Build {mode: [lamp_objects]} and resolve configs
         lamps_by_mode = {}
         for mode, lamp_ids in body.lamps_by_mode.items():
@@ -563,6 +585,13 @@ def mass_place_lamps(body: MassPlaceRequest, session: InitializedSessionDep):
             for lid in lamp_ids:
                 lamp = _get_lamp_or_404(session, lid)
                 lamps_by_mode[mode].append(lamp)
+
+        # The lowest of the lamps decides which structures stand in their way
+        drops = [LampPlacer.ceiling_offset(lamp) for lamps in lamps_by_mode.values() for lamp in lamps]
+        placer = LampPlacer.for_dims(
+            room.dim, existing=other_positions,
+            **_placement_context(room, room_z - max(drops, default=0), body.ceiling),
+        )
 
         results = placer.get_layout(lamps_by_mode)
 

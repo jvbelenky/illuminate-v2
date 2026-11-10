@@ -362,3 +362,30 @@ describe('polygon rooms', () => {
     expect(e0.aimx).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe('corner lamps aim at a corner they can see', () => {
+  const SHAPES: Record<string, [number, number][]> = {
+    L: [[0, 0], [6, 0], [6, 3], [3, 3], [3, 6], [0, 6]],
+    U: [[0, 0], [9, 0], [9, 6], [6, 6], [6, 2], [3, 2], [3, 6], [0, 6]],
+    T: [[0, 0], [9, 0], [9, 3], [6, 3], [6, 7], [3, 7], [3, 3], [0, 3]],
+    Z: [[0, 0], [4, 0], [4, 4], [8, 4], [8, 8], [3, 8], [3, 3], [0, 3]],
+  };
+  for (const [name, vertices] of Object.entries(SHAPES)) {
+    it(`${name}-shaped room: every corner's aim line stays in the room`, () => {
+      const room = createPolygonRoom(vertices);
+      for (let i = 0; i < vertices.length; i++) {
+        const p = getCornerPlacement(room, [], i - 1);
+        for (let k = 1; k < 100; k++) {
+          const t = k / 100;
+          const x = p.x + (p.aimx - p.x) * t, y = p.y + (p.aimy - p.y) * t;
+          expect(pointInPolygon(vertices, x, y) || distanceToBoundary(vertices, x, y) < 1e-6, `${name} corner ${i} at ${t}`).toBe(true);
+        }
+      }
+    });
+  }
+
+  it('a rectangle still aims at the opposite corner', () => {
+    const p = getCornerPlacement(createRoom(6, 4, 3), [], -1);
+    expect([p.aimx, p.aimy]).toEqual([6, 4]);
+  });
+});

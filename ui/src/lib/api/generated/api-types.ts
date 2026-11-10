@@ -2800,6 +2800,7 @@ export interface components {
          * @description Request to compute placements for multiple lamps at once.
          */
         MassPlaceRequest: {
+            ceiling?: components["schemas"]["PlacementCeiling"] | null;
             /** Lamps By Mode */
             lamps_by_mode: {
                 [key: string]: string[];
@@ -3007,6 +3008,7 @@ export interface components {
          * @description Request to compute lamp placement
          */
         PlaceLampRequest: {
+            ceiling?: components["schemas"]["PlacementCeiling"] | null;
             /** Mode */
             mode?: ("downlight" | "corner" | "edge" | "horizontal") | null;
             /** Position Index */
@@ -3056,6 +3058,26 @@ export interface components {
             y: number;
             /** Z */
             z: number;
+        };
+        /**
+         * PlacementCeiling
+         * @description The ceiling designer's layout (kept by the frontend), as far as lamp
+         *     placement goes: the areas no lamp may be in (room units, x/y), and the tile
+         *     grid downlights centre on (origin x, origin y, tile width, tile height).
+         */
+        PlacementCeiling: {
+            /** Keep Out */
+            keep_out?: [
+                number,
+                number
+            ][][];
+            /** Tile Grid */
+            tile_grid?: [
+                number,
+                number,
+                number,
+                number
+            ] | null;
         };
         /**
          * PlotStyle

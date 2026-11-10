@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { project, lamps, fetchStateHashesDebounced, lampHasPhotometry } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
-	import { placeSessionLamp } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampType } from '$lib/types/project';
 	import type { CustomLampType } from '$lib/types/lampLibrary';
 	import { fixtureKeyOf, type FixtureOption } from '$lib/utils/lampFixture';
@@ -187,7 +186,7 @@
 			}
 			// downlight: no positionIndex → legacy best-available
 
-			const result = await placeSessionLamp(lamp.id, mode, positionIndex);
+			const result = await project.placeLamp(lamp.id, mode, positionIndex);
 			// Round placement coordinates to room precision so UI doesn't show long decimals
 			const p = room.precision;
 			const r = (v: number) => parseFloat(v.toFixed(p));

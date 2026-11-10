@@ -13,6 +13,7 @@ import {
   MAX_TILE_LINES,
   copyInside,
   normalizeOffset,
+  placementCeiling,
   polygonInRoom,
   keepOutEditAllowed,
   pointMoveAllowed,
@@ -216,5 +217,36 @@ describe('ceiling layout', () => {
     expect(parseCeilingLayout({ tileSize: 'huge' })).toBeNull();
     const ok = parseCeilingLayout({ ...DEFAULT_CEILING_LAYOUT, items: [{ id: 'ceiling-1', kind: 'smoke', name: 'A', x: 1, y: 2 }] });
     expect(ok?.items).toHaveLength(1);
+  });
+});
+
+describe('placementCeiling: the layout as lamp placement takes it', () => {
+  const keep = { id: 'ceiling-1', kind: 'keep' as const, name: 'Keep-out area 1', vertices: [[1, 1], [3, 1], [3, 2], [1, 2]] as Vertex[], yaw: 0 };
+  const smoke = { id: 'ceiling-2', kind: 'smoke' as const, name: 'Smoke detector 1', x: 4.5, y: 3.1 };
+
+  it('sends the tile grid (origin and tile size) in the project units', () => {
+    const c = placementCeiling(layout({ tileSize: '4x2', align: 'bl' }), rect, 'feet');
+    expect(c.tile_grid).toEqual([0, 0, 4, 2]);
+    expect(c.keep_out).toEqual([]);
+  });
+
+  it('without tiles there is no grid', () => {
+    expect(placementCeiling(layout({ tileSize: 'none' }), rect, 'meters').tile_grid).toBeNull();
+  });
+
+  it('a keep-out area goes as drawn; a detector keeps its whole tile clear', () => {
+    const c = placementCeiling(layout({ align: 'bl', items: [keep, smoke] }), rect, 'feet');
+    expect(c.keep_out).toHaveLength(2);
+    expect(c.keep_out![0]).toEqual(keep.vertices);
+    // 2 ft tiles from (0, 0): (4.5, 3.1) is in the tile from (4, 2) to (6, 4)
+    expect(c.keep_out![1]).toEqual([[4, 2], [6, 2], [6, 4], [4, 4]]);
+  });
+
+  it('without tiles a detector keeps 0.3 m to each side clear', () => {
+    const c = placementCeiling(layout({ tileSize: 'none', items: [smoke] }), rect, 'meters');
+    const xs = c.keep_out![0].map((v) => v[0]), ys = c.keep_out![0].map((v) => v[1]);
+    expect([Math.min(...xs), Math.max(...xs)]).toEqual([4.2, 4.8]);
+    expect(Math.min(...ys)).toBeCloseTo(2.8, 6);
+    expect(Math.max(...ys)).toBeCloseTo(3.4, 6);
   });
 });
