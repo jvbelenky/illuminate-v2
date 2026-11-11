@@ -446,7 +446,7 @@ woff = [
 [[package]]
 name = "guv-calcs"
 version = "0.10.0"
-source = { git = "https://github.com/jvbelenky/guv-calcs?rev=92d0790ad70e223597091d9f46c5741cd199b62c#92d0790ad70e223597091d9f46c5741cd199b62c" }
+source = { git = "https://github.com/jvbelenky/guv-calcs?rev=663a5ad6ccd6a1768b6b60d4f2b2ff6e4d2711b7#663a5ad6ccd6a1768b6b60d4f2b2ff6e4d2711b7" }
 dependencies = [
     { name = "kaleido" },
     { name = "matplotlib" },
@@ -566,7 +566,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0,<1.0.0" },
-    { name = "guv-calcs", git = "https://github.com/jvbelenky/guv-calcs?rev=92d0790ad70e223597091d9f46c5741cd199b62c" },
+    { name = "guv-calcs", git = "https://github.com/jvbelenky/guv-calcs?rev=663a5ad6ccd6a1768b6b60d4f2b2ff6e4d2711b7" },
     { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
     { name = "python-multipart", specifier = ">=0.0.6,<1.0.0" },

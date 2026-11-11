@@ -10,7 +10,7 @@ dependencies = [
     "pydantic>=2.0.0,<3.0.0",
     "python-multipart>=0.0.6,<1.0.0",
     # Pinned by commit; bump with `make bump-guv-calcs` (see scripts/guv-calcs.sh)
-    "guv-calcs @ git+https://github.com/jvbelenky/guv-calcs@92d0790ad70e223597091d9f46c5741cd199b62c",
+    "guv-calcs @ git+https://github.com/jvbelenky/guv-calcs@663a5ad6ccd6a1768b6b60d4f2b2ff6e4d2711b7",
     "jinja2>=3.1,<4",
     "weasyprint>=62,<70",
 ]
