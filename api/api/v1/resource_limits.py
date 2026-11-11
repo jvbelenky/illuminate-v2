@@ -24,9 +24,8 @@ logger = logging.getLogger(__name__)
 
 MAX_CONCURRENT_SESSIONS = 500
 # Two at once: the production host has about 4 GB free for this container and
-# each calculation may peak at MAX_PEAK_MEMORY_MB (measured peaks run ~20%
-# above the estimate). Four at 1.5 GB pushed the host into swap, which slows
-# every request for every user.
+# each calculation may peak at MAX_PEAK_MEMORY_MB. Four at 1.5 GB pushed the
+# host into swap, which slows every request for every user.
 MAX_CONCURRENT_CALCULATIONS = 2
 QUEUE_TIMEOUT_SECONDS = 30  # Wait for calculation slot
 CALCULATION_TIMEOUT_SECONDS = 600  # 10 minutes per calculation
@@ -35,6 +34,9 @@ MAX_CALC_TIME_SECONDS = CALCULATION_TIMEOUT_SECONDS * 0.7  # 420s, 30% headroom 
 # Peak memory limit per calculation (MB). The container is capped at 3 GB
 # (scripts/deploy.sh); MAX_CONCURRENT_CALCULATIONS calculations at this peak
 # plus the ~400 MB baseline and the results held by idle sessions must fit.
+# guv_calcs's estimate is fitted to the measured resident peak (0.95-1.3x of
+# it), so this is a real ceiling: the default room with reflectance at 25
+# surface points per axis estimates ~490 MB and is admitted; 30 is not.
 MAX_PEAK_MEMORY_MB = 600
 
 # A reflectance grid is built as soon as its resolution is set (before any
