@@ -20,6 +20,7 @@ import {
   type CeilingLayout,
 } from './ceilingLayout';
 import { pointInPolygon, polygonBoundingBox, type Vertex } from '$lib/utils/roomGeometry';
+import { METERS_PER_FOOT } from '$lib/utils/unitConversion';
 
 const rect: Vertex[] = [[0, 0], [10, 0], [10, 7], [0, 7]];
 const layout = (partial: Partial<CeilingLayout> = {}): CeilingLayout => ({ ...DEFAULT_CEILING_LAYOUT, ...partial });
@@ -103,7 +104,7 @@ describe('ceiling layout', () => {
     const ft = newItem('keep', rect, layout(), 'feet');
     if (ft.kind !== 'keep') throw new Error('expected a keep-out');
     const fb = polygonBoundingBox(ft.vertices);
-    expect(fb.xMax - fb.xMin).toBeCloseTo(1.2 / 0.3048, 6);
+    expect(fb.xMax - fb.xMin).toBeCloseTo(1.2 / METERS_PER_FOOT, 6);
     // Names count up per kind, ids never repeat
     const second = newItem('smoke', rect, layout({ align: 'bl', items: [det] }), 'feet');
     expect(second.name).toBe('Smoke detector 2');

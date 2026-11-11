@@ -7,6 +7,7 @@ import { get } from 'svelte/store';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import type { CustomLampDef } from '$lib/types/lampLibrary';
+import { METERS_PER_FOOT } from '$lib/utils/unitConversion';
 
 // Import store creation - we need to reset module state between tests
 
@@ -4789,7 +4790,7 @@ describe('wall planes keep their outline', () => {
     })));
     await project.changeUnits('feet');
     const z = get(project).zones.find((q) => q.id === id)!;
-    const f = 1 / 0.3048;
+    const f = 1 / METERS_PER_FOOT;
     expect(z.normal_offset).toBeCloseTo(f);
     expect(z.wall_vertices![2][1]).toBeCloseTo(2 * f);
     expect(z.vertices).toBeUndefined();
